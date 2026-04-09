@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0064)file:///C:/Users/18584/Downloads/Adrenaline_Scheduler%20(1).html -->
+<!-- saved from url=(0064)file:///C:/Users/18584/Downloads/Adrenaline_Scheduler%20(2).html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -243,14 +243,13 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     Clicking anywhere on the label natively opens the file picker -- no JavaScript click() needed.
     This bypasses Netlify CSP restrictions on inp.click() entirely.
   -->
-  <input type="file" id="file-inp" accept=".xlsx,.xls,.csv" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;z-index:-1">
-  <label for="file-inp" id="upload-label" style="display:block;cursor:pointer">
-    <div class="upload-zone" id="upload-drop-zone" style="pointer-events:none">
-      <div id="dz-icon" style="font-size:26px;margin-bottom:6px">📂</div>
-      <h3 id="dz-title">Click here to choose your file -- or drag and drop</h3>
-      <p id="dz-sub" style="color:var(--dark-gray)">Accepts the Adrenaline template (.csv or .xlsx)</p>
-    </div>
-  </label>
+  <div class="upload-zone" id="upload-drop-zone" style="padding:28px 20px">
+    <div style="font-size:26px;margin-bottom:10px">📂</div>
+    <h3 id="dz-title" style="margin-bottom:8px">Choose your completed template</h3>
+    <p id="dz-sub" style="color:var(--dark-gray);margin-bottom:16px;font-size:13px">Fill in the CSV template downloaded above, then select it here</p>
+    <input type="file" id="file-inp" accept=".csv,.xlsx,.xls" style="display:block;width:auto;margin:0 auto;font-size:13px;cursor:pointer;color:var(--navy)">
+    <p style="font-size:11px;color:var(--dark-gray);margin-top:10px">Click "Choose File" or "Browse" above</p>
+  </div>
 
   <div id="col-map-area" style="display:none;margin-top:14px">
     <div class="sec-label">Confirm column mapping</div>
