@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0064)file:///C:/Users/18584/Downloads/Adrenaline_Scheduler%20(2).html -->
+<!-- saved from url=(0064)file:///C:/Users/18584/Downloads/Adrenaline_Scheduler%20(3).html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -247,7 +247,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="font-size:26px;margin-bottom:10px">📂</div>
     <h3 id="dz-title" style="margin-bottom:8px">Choose your completed template</h3>
     <p id="dz-sub" style="color:var(--dark-gray);margin-bottom:16px;font-size:13px">Fill in the CSV template downloaded above, then select it here</p>
-    <input type="file" id="file-inp" accept=".csv,.xlsx,.xls" style="display:block;width:auto;margin:0 auto;font-size:13px;cursor:pointer;color:var(--navy)">
+    <input type="file" id="file-inp" accept=".csv,.xlsx,.xls" style="display:block;width:auto;margin:0 auto;font-size:13px;cursor:pointer;color:var(--navy)" onchange="if(this.files&amp;&amp;this.files[0])processFile(this.files[0])">
     <p style="font-size:11px;color:var(--dark-gray);margin-top:10px">Click "Choose File" or "Browse" above</p>
   </div>
 
