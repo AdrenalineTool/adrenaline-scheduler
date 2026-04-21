@@ -1158,7 +1158,7 @@ function renderGrid(sched,containerId,isD1){
       if(isN){t+=`<td><div class="g-tlunch">Team lunch</div></td>`;return;}
       const g=sched[slot]&&sched[slot][f.id];
       if(g){
-        const cls=g.type==='champ'?'g-champ':g.type==='bracket'?'g-bracket':(g.type==='consolation'||g.type==='nonbracket')?(g.fallback?'g-warn':'g-con'):g.rec?'g-rec':'g-pool';
+        const ck=slot+':'+f.id;const hasConflict=window._cset&&window._cset.has(ck);const cls=hasConflict?'g-conflict':(g.type==='champ'?'g-champ':g.type==='bracket'?'g-bracket':(g.type==='consolation'||g.type==='nonbracket')?(g.fallback?'g-warn':'g-con'):g.rec?'g-rec':'g-pool');
         t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'${isD1?'d1':'d2'}');this.classList.remove('drop-cell')">
           <div class="game ${cls}" draggable="true" ondragstart="dgSrc={slot:'${slot}',fid:${f.id},day:'${isD1?'d1':'d2'}'};this.classList.add('dragging')" ondragend="this.classList.remove('dragging')">
             ${g.t1n}<br>vs ${g.t2n}<br>
@@ -1264,6 +1264,22 @@ function checkConflicts(sched){
   return c;
 }
 function updateConflicts(){
+  window._cset=new Set();
+  function markC(sched){
+    const tm={};
+    Object.entries(sched).forEach(([slot,row])=>{
+      Object.entries(row).forEach(([fid,g])=>{
+        if(!g)return;
+        [g.t1,g.t2].forEach(tid=>{
+          if(!tm[tid])tm[tid]=[];
+          tm[tid].forEach(prev=>{if(prev.slot===slot){window._cset.add(slot+':'+fid);window._cset.add(slot+':'+prev.fid);}});
+          tm[tid].push({slot,fid});
+        });
+      });
+    });
+  }
+  markC(sched1);markC(sched2);
+
   const c=checkConflicts(sched1)+checkConflicts(sched2);
   const el=document.getElementById('conflict-ct'),btn=document.getElementById('regen-btn');
   el.textContent=c===0?'✓ No conflicts':`${c} conflict(s) detected`;
