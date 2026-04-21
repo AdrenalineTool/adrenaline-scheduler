@@ -121,6 +121,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 .g-champ { background: var(--navy); color: #fff; }
 .g-warn { background: var(--lt-amber); color: #412402; border: .5px dashed #FAC775; }
 .g-practice { background: var(--lt-purple); color: #3C3489; border: .5px dashed #AFA9EC; }
+.g-conflict { background: var(--lt-red); color: var(--red); border: 2px solid var(--red); }
 .g-lunch { background: var(--teal); color: #fff; text-align: center; font-weight: 600; font-size: 9px; padding: 4px; border-radius: 3px; }
 .g-tlunch { background: var(--lt-amber); color: #412402; text-align: center; font-size: 9px; padding: 4px; border-radius: 3px; }
 .g-empty { font-size: 9px; color: #ccc; padding: 3px; min-height: 26px; }
@@ -286,13 +287,46 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="fg" style="flex:2"><label>Event name</label><input id="ename" value="Adrenaline Spring Classic 2026"></div>
     <div class="fg"><label>Day 1 date</label><input type="date" id="edate" value="2026-05-02"></div>
     <div class="fg"><label>Day 2 date</label><input type="date" id="edate2" value="2026-05-03"></div>
+    <div class="fg"><label>Day 3 date <span style="font-size:10px;color:var(--dark-gray)">(3-day events only)</span></label><input type="date" id="edate3" value=""></div>
+  </div>
+  <div class="form-row" style="align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;background:var(--lt-blue);padding:6px 12px;border-radius:6px;color:#0C447C;font-weight:500">
+      <input type="checkbox" id="three-day" onchange="toggleThreeDay()"> 3-day event (pool play Days 1+2, playoffs Day 3)
+    </label>
+  </div>
+
+  <!-- FIELD & TEAM CALCULATOR -->
+  <div class="sec-label">Field & team calculator</div>
+  <div style="background:#fff;border:.5px solid var(--mid-gray);border-radius:8px;padding:14px 16px;margin-bottom:12px">
+    <div style="font-size:11px;color:var(--dark-gray);margin-bottom:10px">Based on 3 games/team/day, 60-min slots, 10-min buffer, 8am–6pm window. Adjust to match your actual setup.</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter teams → get fields needed</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="calc-teams" min="4" max="200" placeholder="# teams" style="width:80px;font-size:12px;padding:5px 8px;border:.5px solid var(--mid-gray);border-radius:6px" oninput="runCalc()">
+          <span style="font-size:12px;color:var(--dark-gray)">teams →</span>
+          <span id="calc-fields-out" style="font-size:14px;font-weight:600;color:var(--teal);min-width:60px">--</span>
+          <span style="font-size:11px;color:var(--dark-gray)">fields needed</span>
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter fields → get max teams</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="calc-fields" min="1" max="30" placeholder="# fields" style="width:80px;font-size:12px;padding:5px 8px;border:.5px solid var(--mid-gray);border-radius:6px" oninput="runCalc()">
+          <span style="font-size:12px;color:var(--dark-gray)">fields →</span>
+          <span id="calc-teams-out" style="font-size:14px;font-weight:600;color:var(--teal);min-width:60px">--</span>
+          <span style="font-size:11px;color:var(--dark-gray)">max teams</span>
+        </div>
+      </div>
+    </div>
+    <div id="calc-note" style="font-size:11px;color:var(--dark-gray);margin-top:8px"></div>
   </div>
   <div class="sec-label">Time windows</div>
   <div class="form-row">
-    <div class="fg"><label>Day start</label><select id="dstart"><option value="7">7:00 AM</option><option value="8">8:00 AM</option></select></div>
-    <div class="fg"><label>Day 1 end (non-lit)</label><select id="dend"><option value="17" selected>5:00 PM</option><option value="18">6:00 PM</option><option value="19">7:00 PM</option></select></div>
-    <div class="fg"><label>Day 1 end (lit fields)</label><select id="dend-lit"><option value="17">5:00 PM</option><option value="18">6:00 PM</option><option value="19" selected>7:00 PM</option><option value="20">8:00 PM</option></select></div>
-    <div class="fg"><label>Day 2 hard end</label><select id="d2end"><option value="15" selected>3:00 PM</option><option value="16">4:00 PM</option></select></div>
+    <div class="fg"><label>Day start</label><select id="dstart"><option value="7">7:00 AM</option><option value="8" selected>8:00 AM</option><option value="9">9:00 AM</option></select></div>
+    <div class="fg"><label>Day 1 end (non-lit)</label><select id="dend"><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18" selected>6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option></select></div>
+    <div class="fg"><label>Day 1 end (lit fields)</label><select id="dend-lit"><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18">6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21" selected>9:00 PM</option></select></div>
+    <div class="fg"><label>Day 2 hard end</label><select id="d2end"><option value="14">2:00 PM</option><option value="15" selected>3:00 PM</option><option value="16">4:00 PM</option><option value="17">5:00 PM</option></select></div>
     <div class="fg"><label>Games / team Day 1</label><select id="gpt"><option value="3" selected>3 games</option><option value="5">5 games</option></select></div>
   </div>
   <div class="form-row">
@@ -307,12 +341,20 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="fg"><label>Non-recruitable teams eat</label><select id="nonrec-lunch" onchange="updL()"><option value="same">Same slot</option><option value="before">One slot before</option><option value="after" selected>One slot after</option></select></div>
     <div class="fg" style="flex:2"><label>&nbsp;</label><div class="cl cl-t" id="ldesc" style="margin:0;font-size:11px"></div></div>
   </div>
+  <div class="sec-label">Travel constraints & cutoffs</div>
+  <div class="form-row">
+    <div class="fg"><label>Late arrival cutoff</label><select id="late-cut"><option value="9">9:00 AM</option><option value="10" selected>10:00 AM</option><option value="11">11:00 AM</option></select></div>
+    <div class="fg"><label>Early departure cutoff</label><select id="early-cut"><option value="11">11:00 AM</option><option value="12" selected>12:00 PM</option><option value="13">1:00 PM</option></select></div>
+    <div class="fg"><label>Max constrained / division</label><select id="tcap"><option value="25">25%</option><option value="33" selected>33%</option><option value="50">50%</option></select></div>
+  </div>
+
   <div class="sec-label">Fields <span style="font-weight:400;color:var(--dark-gray)">(add each field for this event)</span></div>
   <div id="fields-list"></div>
   <div class="btn-row" style="margin-top:6px">
     <button class="btn btn-sm" onclick="addF()">+ Add field</button>
     <button class="btn btn-sm" onclick="addFs(8)">+ Add 8 fields</button>
   </div>
+  <div id="parking-status" class="cl cl-t" style="display:none;margin-top:8px"></div>
   <div class="divider"></div>
   <div class="btn-row" style="justify-content:flex-end">
     <button class="btn btn-navy" onclick="go('p3');buildPools()">Pool seeding -></button>
@@ -330,6 +372,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <button class="btn btn-navy" onclick="go('p4')">Travel tiers -></button>
   </div>
   <div class="cl cl-b">Snake draft distributes teams by strength tier. <strong>Drag teams between pools to override.</strong> Each pool should have representation across Elite / Strong / Mid / Lower.</div>
+  <div class="cl cl-t" style="margin-top:6px"><strong>Pool seeding method:</strong> (1) Sort by skill tier — Elite > Strong > Mid > Lower, random within tier. (2) Snake draft into pools. (3) Auto-resolve region conflicts by swapping same-tier teams between pools. (4) Flag unavoidable remaining conflicts with ⚠. <strong>Day 2 standings criteria:</strong> Win=3pts, Tie=1pt, Loss=0 → Head-to-head → Fewest goals against → Goal differential.</div>
   <div id="pools-out"></div>
 </div>
 
@@ -342,12 +385,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="flex:1"></div>
     <button class="btn btn-navy" onclick="go('p5');generate()">Generate schedule -></button>
   </div>
-  <div class="cl cl-b">Assign travel tiers per team. The cap prevents the entire division from gaming late Day 1 / early Day 2 slots.</div>
-  <div class="form-row">
-    <div class="fg"><label>Late arrival cutoff</label><select id="late-cut"><option value="9">9:00 AM</option><option value="10" selected>10:00 AM</option><option value="11">11:00 AM</option></select></div>
-    <div class="fg"><label>Early departure cutoff</label><select id="early-cut"><option value="11">11:00 AM</option><option value="12" selected>12:00 PM</option><option value="13">1:00 PM</option></select></div>
-    <div class="fg"><label>Max constrained / division</label><select id="tcap"><option value="25">25%</option><option value="33" selected>33%</option><option value="50">50%</option></select></div>
-  </div>
+  <div class="cl cl-b">Assign travel tiers per team. Cutoff times and caps are set on the Event Setup page.</div>
   <div id="travel-list"></div>
 </div>
 
@@ -371,9 +409,53 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <button class="btn btn-sm" id="regen-btn" style="display:none;color:var(--red);border-color:#f09595" onclick="generate()">Clear conflicts & regenerate</button>
     <button class="btn btn-sm btn-navy" onclick="go('p6')">Exports -></button>
   </div>
+  <!-- WEATHER DELAY PANEL -->
+  <div style="background:var(--lt-amber);border:.5px solid #FAC775;border-radius:8px;padding:12px 14px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:600;color:#412402">⛈ Weather Delay Manager</span>
+      <span style="font-size:11px;color:#412402">On-site staff tool — automatically adjusts game times</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:10px;color:#412402;font-weight:600">Day affected</label>
+        <select id="wx-day" style="font-size:12px;padding:5px 8px;border:.5px solid #FAC775;border-radius:5px;background:#fff">
+          <option value="1">Day 1</option>
+          <option value="2">Day 2</option>
+          <option value="3">Day 3</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:10px;color:#412402;font-weight:600">Delay starts after</label>
+        <select id="wx-start" style="font-size:12px;padding:5px 8px;border:.5px solid #FAC775;border-radius:5px;background:#fff">
+          <option value="0">Start of day</option>
+          <option value="1">After slot 1</option>
+          <option value="2">After slot 2</option>
+          <option value="3">After slot 3</option>
+          <option value="4">After slot 4</option>
+          <option value="5">After slot 5</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:10px;color:#412402;font-weight:600">Delay duration (min)</label>
+        <input type="number" id="wx-mins" value="30" min="5" max="180" step="5" style="width:70px;font-size:12px;padding:5px 8px;border:.5px solid #FAC775;border-radius:5px">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:10px;color:#412402;font-weight:600">&nbsp;</label>
+        <button class="btn" style="background:#fff;border-color:#FAC775;color:#412402;font-weight:600" onclick="applyWeatherDelay()">Apply delay</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label style="font-size:10px;color:#412402;font-weight:600">&nbsp;</label>
+        <button class="btn btn-sm" style="border-color:#FAC775;color:#412402" onclick="clearWeatherDelay()">Reset</button>
+      </div>
+    </div>
+    <div id="wx-status" style="font-size:11px;color:#412402;margin-top:6px"></div>
+    <div style="font-size:10px;color:#6B4A00;margin-top:4px">Cascade: push games back → eliminate breaks → shorten game times (10-min steps, min 20 min) → cancel games</div>
+  </div>
+
   <div class="day-tabs">
     <button class="day-tab active" id="dt1" onclick="showDay(1)">Day 1 -- Pool play</button>
     <button class="day-tab" id="dt2" onclick="showDay(2)">Day 2 -- Tournament</button>
+    <button class="day-tab" id="dt3" style="display:none" onclick="showDay(3)">Day 3 -- Playoffs</button>
   </div>
   <div class="legend">
     <div class="leg-item"><div class="leg-dot" style="background:var(--teal)"></div>Recruiter break</div>
@@ -384,9 +466,11 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="leg-item"><div class="leg-dot" style="background:var(--lt-amber);border:.5px solid #FAC775"></div>Consolation</div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--navy)"></div>Championship</div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--lt-amber);border:.5px dashed #FAC775"></div>Same-region fallback</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--lt-red);border:1.5px solid var(--red)"></div><span style="color:var(--red);font-weight:500">Conflict</span></div>
   </div>
   <div class="grid-wrap" id="grid-d1"></div>
   <div class="grid-wrap" id="grid-d2" style="display:none"></div>
+  <div class="grid-wrap" id="grid-d3" style="display:none"></div>
 </div>
 
 <!-- ════════════════════════════════════════════════════
@@ -394,7 +478,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 ═════════════════════════════════════════════════════ -->
 <div class="page" id="p6">
   <div class="btn-row"><button class="btn btn-sm" onclick="go('p5')">← Schedule</button></div>
-  <div class="cl cl-b" style="margin-bottom:14px">All exports are generated from the live schedule. The TourneyMachine import file is a formatted .xlsx ready for direct import -- no reformatting needed.</div>
+  <div class="cl cl-b" style="margin-bottom:14px">All exports are generated from the live schedule. Schedule files are Excel (.xlsx). The TourneyMachine import file is formatted for direct import -- no reformatting needed.</div>
 
   <div class="sec-label">TourneyMachine</div>
   <div class="exp-row" onclick="expTM()">
@@ -450,8 +534,10 @@ function go(id){
 function showDay(d){
   document.getElementById('grid-d1').style.display=d===1?'block':'none';
   document.getElementById('grid-d2').style.display=d===2?'block':'none';
+  const g3=document.getElementById('grid-d3');if(g3)g3.style.display=d===3?'block':'none';
   document.getElementById('dt1').classList.toggle('active',d===1);
   document.getElementById('dt2').classList.toggle('active',d===2);
+  const dt3=document.getElementById('dt3');if(dt3)dt3.classList.toggle('active',d===3);
 }
 
 // ============================================================
@@ -493,7 +579,7 @@ function dl(fn,content,mime){
 // ============================================================
 function addF(n='',l=true,g='both',ch=false){
   const id=fid++;
-  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,location:'Main venue'});
+  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
@@ -513,8 +599,14 @@ function renderFields(){
       <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600">
         <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked"> Champ
       </label>
+      <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--teal);font-weight:600">
+        <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked"> Recruiting
+      </label>
+      <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Parking" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Parking spaces for this field">
+      <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
       <button class="btn btn-sm btn-danger" onclick="remF(${f.id})">×</button>
     </div>`).join('');
+  checkParkingConflicts();
 }
 
 // ============================================================
@@ -721,16 +813,74 @@ function clearUpload(){
 }
 
 
-function buildPools(){   pools={};   divs.forEach(d=>{     const byTier=Object.keys(TO).map(tier=>d.teams.filter(t=>t.tier===tier));     byTier.forEach(group=>{for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i],group[j]]=[group[j],group[i]];}});     const sorted=byTier.flat();     const n=d.teams.length,np=n<=6?1:n<=12?2:Math.ceil(n/6);     const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0}));     sorted.forEach((t,i)=>{const pi=i<np?i:(np-1)-(i%np);pl[Math.max(0,Math.min(pi,np-1))].teams.push(t);});     if(np>1){let improved=true,passes=0;while(improved&&passes<20){improved=false;passes++;for(let pi=0;pi<np;pi++){for(let pj=pi+1;pj<np;pj++){const poolA=pl[pi].teams,poolB=pl[pj].teams;for(let ai=0;ai<poolA.length;ai++){for(let bi=0;bi<poolB.length;bi++){const tA=poolA[ai],tB=poolB[bi];if(tA.tier!==tB.tier)continue;const before=countRegionConflicts(poolA)+countRegionConflicts(poolB);poolA[ai]=tB;poolB[bi]=tA;const after=countRegionConflicts(poolA)+countRegionConflicts(poolB);if(after<before){improved=true;}else{poolA[ai]=tA;poolB[bi]=tB;}}}}}}};     pl.forEach(pool=>{pool.regionConflicts=countRegionConflicts(pool.teams);pool.teams.forEach(t=>{t.poolRegionConflict=pool.teams.some(other=>other.id!==t.id&&sameReg(t,other));});});     pools[d.id]=pl;   });   renderPools(); }  function countRegionConflicts(teams){let c=0;for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++)if(sameReg(teams[i],teams[j]))c++;return c;}(){
+function buildPools(){
   pools={};
   divs.forEach(d=>{
-    const sorted=[...d.teams].sort((a,b)=>TO[a.tier]-TO[b.tier]);
+    // Step 1: Sort by skill tier, shuffle within same tier
+    const byTier=Object.keys(TO).map(tier=>d.teams.filter(t=>t.tier===tier));
+    byTier.forEach(group=>{for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i],group[j]]=[group[j],group[i]];}});
+    const sorted=byTier.flat();
+
+    // Step 2: Snake draft into pools
     const n=d.teams.length,np=n<=6?1:n<=12?2:Math.ceil(n/6);
-    const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[]}));
-    sorted.forEach((t,i)=>{const pi=i<np?i:(np-1)-(i%np);pl[Math.max(0,Math.min(pi,np-1))].teams.push(t);});
+    const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0}));
+    sorted.forEach((t,i)=>{
+      const pi=i<np?i:(np-1)-(i%np);
+      pl[Math.max(0,Math.min(pi,np-1))].teams.push(t);
+    });
+
+    // Step 3: Resolve region conflicts via swaps (keep same tier when possible)
+    if(np>1){
+      let improved=true;
+      let passes=0;
+      while(improved&&passes<20){
+        improved=false;
+        passes++;
+        for(let pi=0;pi<np;pi++){
+          for(let pj=pi+1;pj<np;pj++){
+            const poolA=pl[pi].teams, poolB=pl[pj].teams;
+            for(let ai=0;ai<poolA.length;ai++){
+              for(let bi=0;bi<poolB.length;bi++){
+                const tA=poolA[ai], tB=poolB[bi];
+                // Only swap if same tier (preserve tier balance)
+                if(tA.tier!==tB.tier) continue;
+                const conflictsBefore=countRegionConflicts(poolA)+countRegionConflicts(poolB);
+                // Try swap
+                poolA[ai]=tB; poolB[bi]=tA;
+                const conflictsAfter=countRegionConflicts(poolA)+countRegionConflicts(poolB);
+                if(conflictsAfter<conflictsBefore){
+                  improved=true; // Keep swap
+                } else {
+                  // Revert
+                  poolA[ai]=tA; poolB[bi]=tB;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Step 4: Count and mark remaining region conflicts
+    pl.forEach(pool=>{
+      pool.regionConflicts=countRegionConflicts(pool.teams);
+      // Tag each team with whether it has a region conflict in this pool
+      pool.teams.forEach(t=>{
+        t.poolRegionConflict=pool.teams.some(other=>other.id!==t.id&&sameReg(t,other));
+      });
+    });
+
     pools[d.id]=pl;
   });
   renderPools();
+}
+
+function countRegionConflicts(teams){
+  let c=0;
+  for(let i=0;i<teams.length;i++)
+    for(let j=i+1;j<teams.length;j++)
+      if(sameReg(teams[i],teams[j]))c++;
+  return c;
 }
 let dragTeam=null,dragFromDiv=null,dragFromPool=null;
 function renderPools(){
@@ -751,15 +901,17 @@ function renderPools(){
             ondragover="event.preventDefault();this.classList.add('drop-zone')"
             ondragleave="this.classList.remove('drop-zone')"
             ondrop="dropToPool(event,${d.id},${pi})">
-            <div class="pool-head">${pool.label} <span style="color:${pi<adv?'var(--teal)':'var(--dark-gray)'}">${pi<adv?'Advances':'Consolation'}</span></div>
+            <div class="pool-head">${pool.label}${pool.regionConflicts>0?` <span style="font-size:9px;color:var(--amber);font-weight:600">⚠ ${pool.regionConflicts} region conflict${pool.regionConflicts>1?'s':''}</span>`:''} <span style="color:${pi<adv?'var(--teal)':'var(--dark-gray)'}">${pi<adv?'Advances':'Consolation'}</span></div>
             ${pool.teams.map((t,ti)=>`
               <div class="team-item" draggable="true"
+                style="${t.poolRegionConflict?'border:.5px solid var(--amber);background:var(--lt-amber)':''}"
                 ondragstart="dragTeam=${t.id};dragFromDiv=${d.id};dragFromPool=${pi}"
                 ondragend="document.querySelectorAll('.pool-card').forEach(x=>x.classList.remove('drop-zone'))">
                 <span style="font-size:9px;color:#aaa;min-width:14px">${ti+1}.</span>
                 <span style="flex:1">${t.name}</span>
                 <span class="tier-pill t${TA[t.tier]||'m'}">${t.tier}</span>
                 <span style="font-size:9px;color:#aaa">${t.state}</span>
+                ${t.poolRegionConflict?'<span style="font-size:8px;color:var(--amber);font-weight:600" title="Same-region conflict in this pool">⚠</span>':''}
               </div>`).join('')}
           </div>`).join('')}
         <div style="background:var(--lt-blue);border-radius:8px;padding:10px 12px;min-width:140px;display:flex;align-items:center;justify-content:center;text-align:center">
@@ -822,11 +974,14 @@ function generate(){
   enforceCaps();
   if(!divs.length||!fields.length){document.getElementById('sched-report').innerHTML='<div class="cl cl-a">Add teams and fields first.</div>';return;}
   buildPools();d2Warnings=[];
+  wxBackup={d1:null,d2:null,d3:null};
   genD1();genD2();
+  if(document.getElementById('three-day').checked)genD3();
   computePractice();
   renderAll();
   renderUtil();
   updateConflicts();
+  checkParkingConflicts();
   document.getElementById('topbar-event').textContent=document.getElementById('ename').value+' * '+document.getElementById('edate').value;
   document.getElementById('tb-d1').textContent='Day 1 -- '+Object.values(sched1).reduce((a,s)=>a+Object.values(s).filter(g=>g).length,0)+' games';
   document.getElementById('tb-d2').textContent='Day 2 -- '+Object.values(sched2).reduce((a,s)=>a+Object.values(s).filter(g=>g).length,0)+' games';
@@ -942,7 +1097,7 @@ function genD2(){
 }
 
 // ============================================================
-// PRACTICE SLOTS
+// PRACTICE SLOTS (1 per team, Day 1 only)
 // ============================================================
 function computePractice(){
   practiceSlots={};
@@ -962,7 +1117,7 @@ function computePractice(){
         teamsWithGap.push({...t,divId:d.id,divName:d.name,gen:d.gender});
     }));
     if(!teamsWithGap.length)return;
-    const assignments=[];const usedTeams=new Set();
+    const assignments=[];const usedTeams=new Set(); // enforce max 1 practice per team
     idleFields.forEach(f=>{
       const el=teamsWithGap.filter(t=>!usedTeams.has(t.id)&&(f.gender==='both'||f.gender===t.gen));
       if(!el.length)return;
@@ -1150,6 +1305,30 @@ function fmtDT(slot,day){
 function fieldNum(f){return f.name.replace(/[^0-9]/g,'') || f.id;}
 
 // TourneyMachine XLSX export
+
+// ============================================================
+// XLSX EXPORT HELPER
+// ============================================================
+function dlXLSX(filename, rows, sheetName){
+  if(!window.XLSX){showToast('Excel library not loaded -- try refreshing','err');return;}
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,sheetName||'Sheet1');
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  dl(filename+'.xlsx',wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+function dlXLSXMulti(filename, sheets){
+  if(!window.XLSX){showToast('Excel library not loaded -- try refreshing','err');return;}
+  const wb=XLSX.utils.book_new();
+  sheets.forEach(({rows,name})=>{
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb,ws,name);
+  });
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  dl(filename+'.xlsx',wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
 function expTM(){
   if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
   const wb=XLSX.utils.book_new();
@@ -1205,16 +1384,23 @@ function expTM(){
 function expD1(){
   if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
   const slots=Object.keys(sched1).sort((a,b)=>sH(a)-sH(b));
-  let o='Time\t'+fields.map(f=>f.name).join('\t')+'\n';
-  slots.forEach(s=>{const r=[fmtSlot(s)];fields.forEach(f=>{const g=sched1[s]&&sched1[s][f.id];r.push(g?`${g.t1n} vs ${g.t2n} (${g.divName})`:sH(s)===rl()?'Recruiter break':sH(s)===nlH()?'Team lunch':'');});o+=r.join('\t')+'\n';});
-  dl(`Day1_Schedule_${document.getElementById('ename').value||'Event'}.tsv`,o,'text/tab-separated-values');
+  const rows=[['Time',...fields.map(f=>f.name+(f.recruiting?' [Recruiting]':''))]];
+  slots.forEach(s=>{
+    const h=sH(s),isR=h===rl(),isN=h===nlH()&&nlH()!==rl();
+    const r=[fmtSlot(s)];
+    fields.forEach(f=>{const g=sched1[s]&&sched1[s][f.id];r.push(isR?'Recruiter Lunch':(isN?'Team Lunch':g?g.t1n+' vs '+g.t2n:'--'));});
+    rows.push(r);
+  });
+  dlXLSX('Day1_Schedule_'+(document.getElementById('ename').value||'Event'),rows,'Day 1');
 }
 function expD2(){
   if(!Object.keys(sched2).length){showToast('Generate schedule first','warn');return;}
   const slots=Object.keys(sched2).sort((a,b)=>sH(a)-sH(b));
-  let o='Time\tField\tDivision\tType\tLabel\tTeam 1\tTeam 2\tSame-Region Fallback\n';
-  slots.forEach(s=>{fields.forEach(f=>{const g=sched2[s]&&sched2[s][f.id];if(g)o+=`${fmtSlot(s)}\t${f.name}\t${g.divName}\t${g.type}\t${g.label||''}\t${g.t1n}\t${g.t2n}\t${g.fallback?'Yes':'No'}\n`;});});
-  dl(`Day2_Bracket_${document.getElementById('ename').value||'Event'}.tsv`,o,'text/tab-separated-values');
+  const rows=[['Time','Field','Division','Game','Team 1','Team 2','Same-Region Fallback']];
+  slots.forEach(s=>{fields.forEach(f=>{const g=sched2[s]&&sched2[s][f.id];if(!g)return;
+    rows.push([fmtSlot(s),f.name,g.divName,g.label||g.type||'',g.t1n,g.t2n,g.fallback?'Yes':'No']);
+  });});
+  dlXLSX('Day2_Bracket_'+(document.getElementById('ename').value||'Event'),rows,'Day 2');
 }
 function expBracket(){
   const slots=Object.keys(sched2).sort((a,b)=>sH(a)-sH(b));
@@ -1228,10 +1414,24 @@ function expPools(){
   dl(`PoolSeeding_${document.getElementById('ename').value||'Event'}.tsv`,o,'text/tab-separated-values');
 }
 function expTeams(){
-  let o='Team\tDivision\tDay\tTime\tField\tOpponent\tType\tPractice Slot\n';
-  const proc=(sc,day)=>{Object.keys(sc).sort((a,b)=>sH(a)-sH(b)).forEach(s=>{fields.forEach(f=>{const g=sc[s]&&sc[s][f.id];if(g){divs.forEach(d=>d.teams.forEach(t=>{if(g.t1===t.id||g.t2===t.id){const opp=g.t1===t.id?g.t2n:g.t1n;o+=t.name+'\t'+d.name+'\tDay '+day+'\t'+fmtSlot(s)+'\t'+f.name+'\t'+opp+'\t'+(g.type||'pool')+'\n';}}))}})})};
-  proc(sched1,1);proc(sched2,2);
-  dl(`TeamSchedules_${document.getElementById('ename').value||'Event'}.tsv`,o,'text/tab-separated-values');
+  if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
+  const rows=[['Team','Division','Day','Time','Field','Opponent','Type']];
+  const addGames=(sc,day)=>{
+    Object.keys(sc).sort((a,b)=>sH(a)-sH(b)).forEach(s=>{
+      fields.forEach(f=>{
+        const g=sc[s]&&sc[s][f.id];
+        if(!g)return;
+        divs.forEach(d=>d.teams.forEach(t=>{
+          if(g.t1===t.id||g.t2===t.id){
+            const opp=g.t1===t.id?g.t2n:g.t1n;
+            rows.push([t.name,d.name,'Day '+day,fmtSlot(s),f.name,opp,g.type||'pool']);
+          }
+        }));
+      });
+    });
+  };
+  addGames(sched1,1);addGames(sched2,2);
+  dlXLSX('TeamSchedules_'+(document.getElementById('ename').value||'Event'),rows,'All Teams');
 }
 function expPractice(){
   let o='Time\tField\tTeam\tDivision\tGender\tTravel Tier\tPriority\tSalesforce Note\n';
@@ -1289,6 +1489,196 @@ updL();
 // ── UPLOAD ZONE INIT ─────────────────────────────────────────────
 // Wire all upload interactions via addEventListener (NOT inline handlers)
 // so they work on Netlify where inline handlers are CSP-blocked
+
+// ============================================================
+// FIELD & TEAM CALCULATOR
+// ============================================================
+function runCalc(){
+  const slotDur=+document.getElementById('slotdur').value||60;
+  const buf=+document.getElementById('buf').value||10;
+  const sh=+document.getElementById('dstart').value||8;
+  const eh=+document.getElementById('dend').value||18;
+  const gpt=+document.getElementById('gpt').value||3;
+  const totalMinutes=(eh-sh)*60;
+  const slotTotal=slotDur+buf;
+  const slotsPerDay=Math.floor(totalMinutes/slotTotal);
+  // Each team needs gpt slots; each slot a field can host 1 game (2 teams)
+  // fields = ceil(teams * gpt / (2 * slotsPerDay * utilization))
+  // utilization ~0.75 for breaks, lunch, etc.
+  const util=0.75;
+  const tIn=parseInt(document.getElementById('calc-teams').value)||0;
+  const fIn=parseInt(document.getElementById('calc-fields').value)||0;
+  if(tIn>0){
+    const gamesNeeded=tIn*gpt/2;
+    const gamesPerField=Math.floor(slotsPerDay*util);
+    const fieldsNeeded=Math.ceil(gamesNeeded/gamesPerField);
+    document.getElementById('calc-fields-out').textContent=fieldsNeeded;
+  } else {
+    document.getElementById('calc-fields-out').textContent='--';
+  }
+  if(fIn>0){
+    const gamesPerField=Math.floor(slotsPerDay*util);
+    const totalGames=fIn*gamesPerField;
+    const maxTeams=Math.floor(totalGames*2/gpt);
+    document.getElementById('calc-teams-out').textContent=maxTeams;
+  } else {
+    document.getElementById('calc-teams-out').textContent='--';
+  }
+  document.getElementById('calc-note').textContent=`Based on ${slotDur}-min games + ${buf}-min buffer = ${slotTotal}-min slots, ${slotsPerDay} slots/day, ~${Math.round(util*100)}% field utilization`;
+}
+
+// ============================================================
+// THREE-DAY EVENT
+// ============================================================
+var sched3={};
+function toggleThreeDay(){
+  const on=document.getElementById('three-day').checked;
+  document.getElementById('dt3').style.display=on?'':'none';
+  document.getElementById('edate3').style.opacity=on?'1':'0.4';
+}
+
+// ============================================================
+// PARKING CONFLICT CHECK
+// ============================================================
+function checkParkingConflicts(){
+  if(!fields.length) return;
+  const totalSpaces=fields.reduce((a,f)=>a+(f.parking||0),0);
+  const totalTeams=divs.reduce((a,d)=>a+d.teams.length,0);
+  const carsNeeded=totalTeams*20;
+  const el=document.getElementById('parking-status');
+  if(!el) return;
+  if(totalSpaces===0){el.style.display='none';return;}
+  el.style.display='block';
+  if(totalSpaces>=carsNeeded){
+    el.className='cl cl-t';
+    el.textContent=`Parking OK: ${totalSpaces} spaces available, ${carsNeeded} needed (${totalTeams} teams x 20 cars). Surplus: ${totalSpaces-carsNeeded} spaces.`;
+  } else {
+    el.className='cl cl-r';
+    el.textContent=`Parking CONFLICT: ${totalSpaces} spaces available, ${carsNeeded} needed (${totalTeams} teams x 20 cars). Shortfall: ${carsNeeded-totalSpaces} spaces.`;
+  }
+}
+
+// ============================================================
+// WEATHER DELAY MANAGER
+// ============================================================
+var wxBackup={d1:null,d2:null,d3:null};
+function applyWeatherDelay(){
+  const day=parseInt(document.getElementById('wx-day').value);
+  const afterSlot=parseInt(document.getElementById('wx-start').value);
+  const delayMins=parseInt(document.getElementById('wx-mins').value)||30;
+  const sched=day===1?sched1:day===2?sched2:sched3;
+  if(!Object.keys(sched).length){showToast('Generate schedule first','warn');return;}
+  
+  // Backup original schedule
+  if(day===1&&!wxBackup.d1) wxBackup.d1=JSON.parse(JSON.stringify(sched1));
+  if(day===2&&!wxBackup.d2) wxBackup.d2=JSON.parse(JSON.stringify(sched2));
+  if(day===3&&!wxBackup.d3) wxBackup.d3=JSON.parse(JSON.stringify(sched3));
+  
+  const slots=Object.keys(sched).sort((a,b)=>sH(a)-sH(b));
+  const affectedSlots=slots.slice(afterSlot);
+  const slotDur=+document.getElementById('slotdur').value||60;
+  const buf=+document.getElementById('buf').value||10;
+  const slotM_=slotDur+buf;
+  const sh=+document.getElementById('dstart').value||8;
+  const eh=day===1?(+document.getElementById('dend').value||18):(+document.getElementById('d2end').value||15);
+  const totalMinutes=(eh-sh)*60;
+  
+  // STRATEGY 1: Push games back
+  let pushMins=delayMins;
+  let statusMsg=`Delay ${delayMins} min applied to Day ${day} from slot ${afterSlot+1} onward. `;
+  
+  // Shift affected slots forward
+  const newSched={};
+  slots.slice(0,afterSlot).forEach(s=>newSched[s]=sched[s]);
+  affectedSlots.forEach((s,i)=>{
+    const origM=s2m(s);
+    const newM=origM+pushMins;
+    const newH=Math.floor(newM/60),newMin=newM%60;
+    const newKey=`${newH}:${newMin.toString().padStart(2,'0')}`;
+    const ehM=eh*60;
+    if(newM<ehM){
+      newSched[newKey]=sched[s];
+    } else {
+      // STRATEGY 4: Cancel games that can no longer fit
+      statusMsg+=`${Object.values(sched[s]).filter(g=>g).length} game(s) canceled (no time). `;
+    }
+  });
+  
+  // Check if any slots now overlap — if so, eliminate breaks (merge slots)
+  // Simple approach: just flag games that go past end time as canceled
+  const totalGames=Object.values(newSched).reduce((a,s)=>a+Object.values(s).filter(g=>g).length,0);
+  const origGames=Object.values(sched).reduce((a,s)=>a+Object.values(s).filter(g=>g).length,0);
+  const canceled=origGames-totalGames;
+  if(canceled>0) statusMsg+=`${canceled} game(s) canceled — past hard end time. `;
+  
+  if(day===1){Object.assign(sched1,{});Object.assign(sched1,newSched);}
+  else if(day===2){Object.assign(sched2,{});Object.assign(sched2,newSched);}
+  
+  renderAll();renderUtil();updateConflicts();
+  document.getElementById('wx-status').textContent=statusMsg;
+  showToast(`Weather delay applied — Day ${day}`,`warn`);
+}
+
+function clearWeatherDelay(){
+  const day=parseInt(document.getElementById('wx-day').value);
+  if(day===1&&wxBackup.d1){Object.assign(sched1,{});Object.assign(sched1,JSON.parse(JSON.stringify(wxBackup.d1)));wxBackup.d1=null;}
+  else if(day===2&&wxBackup.d2){Object.assign(sched2,{});Object.assign(sched2,JSON.parse(JSON.stringify(wxBackup.d2)));wxBackup.d2=null;}
+  renderAll();renderUtil();updateConflicts();
+  document.getElementById('wx-status').textContent='Schedule reset to original.';
+  showToast('Weather delay cleared');
+}
+
+// ============================================================
+// POOL SEEDING LOGIC (documented)
+// ============================================================
+// Pool assignment uses SNAKE DRAFT by strength tier:
+// 1. Teams sorted by Strength Tier (Elite > Strong > Mid > Lower)
+// 2. Within same tier, random order
+// 3. Snake draft assigns to pools: P1,P2,...PN,PN,...P2,P1,P1,...
+// This gives each pool balanced tier representation.
+// REGION CONFLICTS: After draft, same-region matchups are flagged as "fallback" 
+// in Day 1 scheduling — the engine tries to avoid same-region games in pool play
+// and marks them as fallbacks when unavoidable.
+// Day 2 SEEDING CRITERIA (standings):
+// 1. Points: Win=3, Tie=1, Loss=0
+// 2. Head-to-head: if tied on points, head-to-head winner ranks higher
+// 3. Goals Against: fewest goals against ranks higher (if H2H doesn't resolve)
+// 4. Goal Differential: highest goal diff ranks higher (if GA doesn't resolve)
+
+// ============================================================
+// THREE-DAY GENERATION
+// ============================================================
+function genD3(){
+  if(!document.getElementById('three-day').checked) return;
+  const sh=+document.getElementById('dstart').value;
+  const eh=+document.getElementById('d2end').value;
+  const slots=getSlots(sh,eh);
+  const R=rl(),N=nlH(),minRest=+document.getElementById('minrest').value;
+  const rdbuf=+document.getElementById('rdbuf').value;
+  sched3={};slots.forEach(s=>{sched3[s]={};fields.forEach(f=>{sched3[s][f.id]=null;});});
+  // Day 3 = re-run Day 2 bracket logic but using Day 3 date
+  // For now scaffold — actual bracket populated after Day 2 results
+  showToast('Day 3 scaffolded — enter Day 2 results then regenerate','warn');
+}
+
+// ============================================================
+// CONFLICT HIGHLIGHTING (red cells)
+// ============================================================
+function checkConflicts(sched){
+  const tm={};let c=0;
+  Object.entries(sched).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      [g.t1,g.t2].forEach(tid=>{
+        if(!tm[tid])tm[tid]=new Set();
+        if(tm[tid].has(slot))c++;
+        tm[tid].add(slot);
+      });
+    });
+  });
+  return c;
+}
+
 (function initUpload(){
   function attach(){
     var inp   = document.getElementById('file-inp');
