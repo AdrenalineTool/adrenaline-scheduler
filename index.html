@@ -1515,32 +1515,39 @@ function runCalc(){
   const sh=+document.getElementById('dstart').value||8;
   const eh=+document.getElementById('dend').value||18;
   const gpt=+document.getElementById('gpt').value||3;
-  const totalMinutes=(eh-sh)*60;
   const slotTotal=slotDur+buf;
-  const slotsPerDay=Math.floor(totalMinutes/slotTotal);
-  // Each team needs gpt slots; each slot a field can host 1 game (2 teams)
-  // fields = ceil(teams * gpt / (2 * slotsPerDay * utilization))
-  // utilization ~0.75 for breaks, lunch, etc.
-  const util=0.75;
+  const totalMinutes=(eh-sh)*60;
+  // Reserve 1 slot for recruiter lunch and 1 slot for team lunch
+  const slotsPerDay=Math.floor(totalMinutes/slotTotal)-2;
+  // Each game uses 1 field slot and involves 2 teams
+  // Day 1: teams * gpt pool games / 2 = total games needed
+  // Fields needed = ceil(total games / slots per day)
+  // Max teams from fields = floor(fields * slots * 2 / gpt)
   const tIn=parseInt(document.getElementById('calc-teams').value)||0;
   const fIn=parseInt(document.getElementById('calc-fields').value)||0;
   if(tIn>0){
-    const gamesNeeded=tIn*gpt/2;
-    const gamesPerField=Math.floor(slotsPerDay*util);
-    const fieldsNeeded=Math.ceil(gamesNeeded/gamesPerField);
+    const gamesNeeded=Math.ceil(tIn*gpt/2);
+    const fieldsNeeded=Math.ceil(gamesNeeded/slotsPerDay);
     document.getElementById('calc-fields-out').textContent=fieldsNeeded;
+    const util=Math.round(gamesNeeded/(fieldsNeeded*slotsPerDay)*100);
+    document.getElementById('calc-note').textContent=
+      `${tIn} teams x ${gpt} games = ${gamesNeeded} games needed. `+
+      `${slotsPerDay} usable slots/day (${slotTotal}-min slots, 8am-${eh}pm minus 2 break slots). `+
+      `Field utilization: ~${util}%. `+
+      `Note: actual utilization varies by division size — odd-sized pools leave some fields idle.`;
+  } else if(fIn>0){
+    const maxGames=fIn*slotsPerDay;
+    const maxTeams=Math.floor(maxGames*2/gpt);
+    document.getElementById('calc-teams-out').textContent=maxTeams;
+    document.getElementById('calc-note').textContent=
+      `${fIn} fields x ${slotsPerDay} usable slots = ${maxGames} game slots. `+
+      `At ${gpt} games/team: max ${maxTeams} teams. `+
+      `Actual capacity is slightly lower due to division rounding — plan for ${Math.floor(maxTeams*0.9)} teams to keep utilization clean.`;
   } else {
     document.getElementById('calc-fields-out').textContent='--';
-  }
-  if(fIn>0){
-    const gamesPerField=Math.floor(slotsPerDay*util);
-    const totalGames=fIn*gamesPerField;
-    const maxTeams=Math.floor(totalGames*2/gpt);
-    document.getElementById('calc-teams-out').textContent=maxTeams;
-  } else {
     document.getElementById('calc-teams-out').textContent='--';
+    document.getElementById('calc-note').textContent='';
   }
-  document.getElementById('calc-note').textContent=`Based on ${slotDur}-min games + ${buf}-min buffer = ${slotTotal}-min slots, ${slotsPerDay} slots/day, ~${Math.round(util*100)}% field utilization`;
 }
 
 // ============================================================
