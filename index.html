@@ -500,6 +500,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div class="exp-row" onclick="expPractice()"><div><div class="exp-name">Practice slot availability</div><div class="exp-sub">Idle field assignments * Salesforce case notes pre-written</div></div><span class="exp-badge eb-jr">JR</span></div>
 
   <div class="sec-label">Staff files</div>
+  <div class="exp-row" onclick="expParkingPasses()">
+    <div><div class="exp-name">Parking passes -- per team</div><div class="exp-sub">Team name * Division * Pass color * Lot name * Primary field -- one row per team</div></div>
+    <span class="exp-badge eb-eric">Eric / Ops</span>
+  </div>
   <div class="exp-row" onclick="expRefs()"><div><div class="exp-name">Referee assignment sheet -- both days</div><div class="exp-sub">Game ID * field * time * division * gender * recruitable flag</div></div><span class="exp-badge eb-jr">Assignors</span></div>
   <div class="exp-row" onclick="expEric()"><div><div class="exp-name">Field-view schedule (Eric)</div><div class="exp-sub">Per-field timeline both days * practice assignments included</div></div><span class="exp-badge eb-eric">Eric</span></div>
   <div class="exp-row" onclick="expAidan()"><div><div class="exp-name">Recruiter window report (Aidan)</div><div class="exp-sub">All recruitable games both days * lunch protection confirmed</div></div><span class="exp-badge eb-aidan">Aidan</span></div>
@@ -518,6 +522,8 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 let fields=[], divs=[], pools={}, sched1={}, sched2={}, practiceSlots={};
 let fid=1, did=1, tid=1, rawRows=[], detCols={}, dgSrc=null, d2Warnings=[];
 const TO={Elite:0,Strong:1,Mid:2,Lower:3};
+const parkingPassColors={'Red':'#fee2e2','Blue':'#dbeafe','Green':'#dcfce7','Yellow':'#fef9c3','Orange':'#ffedd5','Purple':'#f3e8ff','White':'#f8fafc'};
+const parkingPassBorder={'Red':'#ef4444','Blue':'#3b82f6','Green':'#22c55e','Yellow':'#eab308','Orange':'#f97316','Purple':'#a855f7','White':'#cbd5e1'};
 const TA={Elite:'E',Strong:'S',Mid:'M',Lower:'L'};
 
 // ============================================================
@@ -582,7 +588,7 @@ function dl(fn,content,mime){
 // ============================================================
 function addF(n='',l=true,g='both',ch=false){
   const id=fid++;
-  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,location:'Main venue'});
+  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
@@ -607,6 +613,17 @@ function renderFields(){
       </label>
       <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Parking" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Parking spaces for this field">
       <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
+      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:${f.parkingPass?parkingPassColors[f.parkingPass]||'#fff':'#fff'}" title="Parking pass color for teams at this field" onchange="fields.find(x=>x.id===${f.id}).parkingPass=this.value;renderFields()">
+        <option value="">No pass</option>
+        <option value="Red" ${f.parkingPass==='Red'?'selected':''} style="background:#fee2e2">🔴 Red</option>
+        <option value="Blue" ${f.parkingPass==='Blue'?'selected':''} style="background:#dbeafe">🔵 Blue</option>
+        <option value="Green" ${f.parkingPass==='Green'?'selected':''} style="background:#dcfce7">🟢 Green</option>
+        <option value="Yellow" ${f.parkingPass==='Yellow'?'selected':''} style="background:#fef9c3">🟡 Yellow</option>
+        <option value="Orange" ${f.parkingPass==='Orange'?'selected':''} style="background:#ffedd5">🟠 Orange</option>
+        <option value="Purple" ${f.parkingPass==='Purple'?'selected':''} style="background:#f3e8ff">🟣 Purple</option>
+        <option value="White" ${f.parkingPass==='White'?'selected':''} style="background:#f8fafc">⚪ White</option>
+      </select>
+      <input style="width:100px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Lot name" value="${f.parkingLot||''}" onchange="fields.find(x=>x.id===${f.id}).parkingLot=this.value" title="Parking lot name/description">
       <button class="btn btn-sm btn-danger" onclick="remF(${f.id})">×</button>
     </div>`).join('');
   checkParkingConflicts();
@@ -1001,8 +1018,28 @@ function genD1(){
   sched1={};slots.forEach(s=>{sched1[s]={};fields.forEach(f=>{sched1[s][f.id]=null;});});
   const tG={},tS={},played=new Set();
   divs.forEach(d=>d.teams.forEach(t=>{tG[t.id]=0;tS[t.id]=[];}));
+
+  // STAGGERED POD ASSIGNMENT:
+  // Sort divisions by size descending so large divisions get first pick of fields.
+  // Each division claims a pod of fields. When a division finishes its last game 
+  // on those fields, the next waiting division can claim the same pod.
+  // Pod size = enough fields to run the division concurrently (ceil(teams/2)).
+  const sortedDivs=[...divs].sort((a,b)=>b.teams.length-a.teams.length);
+  
+  // Track which slot each field is next available from (for pod handoff)
+  const fieldFreeFromSlot={};
+  fields.forEach(f=>{fieldFreeFromSlot[f.id]=0;});
+
+  // Assign pod to each division dynamically
   const dpod={};
-  const pod=d=>{if(dpod[d.id])return dpod[d.id];const c=fields.filter(f=>f.gender==='both'||f.gender===d.gender);dpod[d.id]=c.slice(0,Math.max(1,Math.ceil(d.teams.length/2)));return dpod[d.id];};
+  sortedDivs.forEach(d=>{
+    const podSize=Math.max(1,Math.ceil(d.teams.length/2));
+    const genderFields=fields.filter(f=>f.gender==='both'||f.gender===d.gender);
+    // Pick the fields that will be free earliest
+    const sorted=[...genderFields].sort((a,b)=>fieldFreeFromSlot[a.id]-fieldFreeFromSlot[b.id]);
+    dpod[d.id]=sorted.slice(0,podSize);
+  });
+
   let gc=0;
   divs.forEach(d=>{
     (pools[d.id]||[]).forEach(pool=>{
@@ -1012,7 +1049,12 @@ function genD1(){
         if(tG[t1.id]>=gpt||tG[t2.id]>=gpt)return;
         for(let si=0;si<slots.length;si++){
           const s=slots[si],h=sH(s);
-          if(d.recruitable&&h===R)continue;if(!d.recruitable&&h===N)continue;
+          // Lunch break: only skip this slot if this division started BEFORE lunch.
+          // Divisions that start their first game after lunch skip the lunch break.
+          const divFirstGame=tS[t1.id].length>0?sH(tS[t1.id][0]):null;
+          const divStartedBeforeLunch=divFirstGame!==null&&divFirstGame<R;
+          if(divStartedBeforeLunch&&d.recruitable&&h===R)continue;
+          if(divStartedBeforeLunch&&!d.recruitable&&h===N)continue;
           const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
           if((te1==='in'||te1==='both')&&h<lc)continue;if((te2==='in'||te2==='both')&&h<lc)continue;
           if((te1==='out'||te1==='both')&&h>ec)continue;if((te2==='out'||te2==='both')&&h>ec)continue;
@@ -1021,14 +1063,19 @@ function genD1(){
           if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-          const av=pod(d).filter(f=>!sched1[s][f.id]);if(!av.length)continue;
+          // Use this division's pod — but also allow fields freed up from finished divisions
+          const podFields=dpod[d.id]||[];
+          const av=podFields.filter(f=>!sched1[s][f.id]&&(fieldFreeFromSlot[f.id]<=si));
+          if(!av.length)continue;
           sched1[s][av[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,type:'pool'};
+          // Update field availability — this field is in use through this slot
+          fieldFreeFromSlot[av[0].id]=si+1;
           tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;played.add(pk(t1.id,t2.id));break;
         }
       });
     });
   });
-  window._played=played;window._tS=tS;
+  window._played=played;window._tS=tS;window._dpod=dpod;
 }
 
 function genD2(){
@@ -1041,8 +1088,17 @@ function genD2(){
   let gc=0;
   const schedG=(t1,t2,type,label,prefChamp,minSlotM,isFallback)=>{
     const gen=t1.gen||'boys';
-    const fp=prefChamp?fields.filter(f=>f.champ&&(f.gender==='both'||f.gender===gen)):fields.filter(f=>f.gender==='both'||f.gender===gen);
-    const pool=fp.length?fp:fields;
+    // Championship games -> champ fields. All other Day 2 games -> same pod as Day 1.
+    let pool;
+    if(prefChamp){
+      const champF=fields.filter(f=>f.champ&&(f.gender==='both'||f.gender===gen));
+      pool=champF.length?champF:fields.filter(f=>f.gender==='both'||f.gender===gen);
+    } else {
+      // Use the division's Day 1 pod for continuity (families/coaches know the location)
+      const divId=t1.divId||0;
+      const d1pod=window._dpod&&window._dpod[divId];
+      pool=d1pod&&d1pod.length?d1pod:fields.filter(f=>f.gender==='both'||f.gender===gen);
+    }
     for(let si=0;si<slots.length;si++){
       const s=slots[si],h=sH(s);
       if(minSlotM&&s2m(s)<minSlotM)continue;
@@ -1372,6 +1428,48 @@ function fmtDT(slot,day){
 function fieldNum(f){return f.name.replace(/[^0-9]/g,'') || f.id;}
 
 // TourneyMachine XLSX export
+
+// ============================================================
+// PARKING PASS EXPORT
+// ============================================================
+function expParkingPasses(){
+  if(!divs.length){showToast('Load teams first','warn');return;}
+  // Build team -> field -> parking pass mapping from Day 1 schedule
+  const teamPass={};
+  Object.entries(sched1).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      const f=fields.find(x=>x.id===+fid);
+      if(!f||!f.parkingPass)return;
+      // Assign pass to both teams based on their primary field cluster
+      if(!teamPass[g.t1n]||teamPass[g.t1n].pass===''){ teamPass[g.t1n]={pass:f.parkingPass,lot:f.parkingLot,field:f.name,div:g.divName}; }
+      if(!teamPass[g.t2n]||teamPass[g.t2n].pass===''){ teamPass[g.t2n]={pass:f.parkingPass,lot:f.parkingLot,field:f.name,div:g.divName}; }
+    });
+  });
+
+  if(!Object.keys(teamPass).length){
+    showToast('Generate schedule first, then assign parking pass colors to fields','warn');
+    return;
+  }
+
+  const rows=[['Team','Division','Parking Pass Color','Parking Lot','Primary Field','Notes']];
+  // Sort by pass color then team name
+  const sorted=Object.entries(teamPass).sort((a,b)=>a[1].pass.localeCompare(b[1].pass)||a[0].localeCompare(b[0]));
+  sorted.forEach(([team,info])=>{
+    rows.push([team,info.div,info.pass,info.lot||'',info.field,'Display pass on dashboard']);
+  });
+
+  // Also add any teams with no pass assigned
+  divs.forEach(d=>d.teams.forEach(t=>{
+    if(!teamPass[t.name]){
+      rows.push([t.name,d.name,'Not assigned','','','Check field assignment']);
+    }
+  }));
+
+  dlXLSX('ParkingPasses_'+(document.getElementById('ename').value||'Event'),rows,'Parking Passes');
+  showToast('Parking passes exported');
+}
+
 
 // ============================================================
 // XLSX EXPORT HELPER
