@@ -223,7 +223,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   </div>
   <div style="background:#fff;border:.5px solid var(--mid-gray);border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <div style="flex:1;min-width:200px">
-      <div style="font-size:12px;color:var(--dark-gray);line-height:1.6;margin-bottom:10px">Opens in Excel. Four columns: Team Name, Division, State/Region, Strength Tier. Fill in your teams -- one row per team. Delete the example rows. Save it and upload below.</div>
+      <div style="font-size:12px;color:var(--dark-gray);line-height:1.6;margin-bottom:10px">Opens in Excel. Five columns: Team Name, Division, State/Region, Strength Tier, Practice Requested (Yes/No). Fill in your teams -- one row per team. Delete the example rows. Save it and upload below.</div>
       <a href="data:text/csv;base64,VGVhbSBOYW1lLERpdmlzaW9uLFN0YXRlL1JlZ2lvbixTdHJlbmd0aCBUaWVyCkhhd2tzIE1ELDIwMjggQm95cyBFbGl0ZSxNRCxFbGl0ZQpXb2x2ZXMgVkEsMjAyOCBCb3lzIEVsaXRlLFZBLFN0cm9uZwpFYWdsZXMgUEEsMjAyOCBCb3lzIEVsaXRlLFBBLE1pZApMaW9ucyBOWSwyMDI4IEJveXMgRWxpdGUsTlksTG93ZXIKUmVpZ24gTUQsMjAyOCBHaXJscyBFbGl0ZSxNRCxFbGl0ZQpCbGF6ZSBWQSwyMDI4IEdpcmxzIEVsaXRlLFZBLFN0cm9uZwosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCiwsLAosLCwKLCwsCg==" download="Adrenaline_Team_Template.csv" class="btn btn-navy" style="font-size:12px;text-decoration:none;display:inline-block">⬇ Download Adrenaline_Team_Template.csv</a>
     </div>
     <div style="background:var(--lt-blue);border-radius:6px;padding:10px 14px;font-size:11px;color:#0C447C;line-height:1.8;flex-shrink:0">
@@ -231,6 +231,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
       <div><strong>Division</strong> -- 2028 Boys Elite</div>
       <div><strong>State/Region</strong> -- MD &nbsp;*&nbsp; CA-N &nbsp;*&nbsp; CA-S</div>
       <div><strong>Strength Tier</strong> -- Elite / Strong / Mid / Lower</div>
+      <div><strong>Practice Requested</strong> -- Yes / No</div>
     </div>
   </div>
 
@@ -301,26 +302,27 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="font-size:11px;color:var(--dark-gray);margin-bottom:10px">Full event calculator — pool play (Day 1) + playoffs (Day 2/3). Adjust slot duration and buffer above to match your setup.</div>
     <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px">
       <div style="flex:1;min-width:200px">
-        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter teams → fields needed per day</div>
+        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter teams &rarr; fields needed</div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="number" id="calc-teams" min="4" max="200" placeholder="# teams" style="width:80px;font-size:12px;padding:5px 8px;border:.5px solid var(--mid-gray);border-radius:6px" oninput="runCalc()">
           <span style="font-size:12px;color:var(--dark-gray)">teams</span>
         </div>
+        <div id="calc-teams-result" style="margin-top:8px;font-size:12px;display:none"></div>
       </div>
       <div style="flex:1;min-width:200px">
-        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter fields → max teams</div>
+        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter fields &rarr; max teams</div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="number" id="calc-fields" min="1" max="30" placeholder="# fields" style="width:80px;font-size:12px;padding:5px 8px;border:.5px solid var(--mid-gray);border-radius:6px" oninput="runCalc()">
           <span style="font-size:12px;color:var(--dark-gray)">fields</span>
         </div>
+        <div id="calc-fields-result" style="margin-top:8px;font-size:12px;display:none"></div>
       </div>
     </div>
-    <div id="calc-result" style="display:none;background:var(--lt-blue);border-radius:8px;padding:12px 14px;font-size:12px;color:#0C447C">
-      <div id="calc-result-text"></div>
-    </div>
-    <div id="calc-note" style="font-size:11px;color:var(--dark-gray);margin-top:8px"></div>
+    <div id="calc-note" style="font-size:11px;color:var(--dark-gray);margin-top:4px"></div>
     <input type="hidden" id="calc-fields-out">
     <input type="hidden" id="calc-teams-out">
+    <input type="hidden" id="calc-result">
+    <input type="hidden" id="calc-result-text">
   </div>
   <div class="sec-label">Time windows</div>
   <div class="form-row">
@@ -619,7 +621,7 @@ function renderFields(){
 
 function dlTemplate(){
   var a=document.createElement('a');
-  a.href='data:text/csv;base64,VGVhbSBOYW1lLERpdmlzaW9uLFN0YXRlL1JlZ2lvbixTdHJlbmd0aCBUaWVyDQpIYXdrcyBNRCwyMDI4IEJveXMgRWxpdGUsTUQsRWxpdGUNCldvbHZlcyBWQSwyMDI4IEJveXMgRWxpdGUsVkEsU3Ryb25nDQpFYWdsZXMgUEEsMjAyOCBCb3lzIEVsaXRlLFBBLE1pZA0KTGlvbnMgTlksMjAyOCBCb3lzIEVsaXRlLE5ZLExvd2VyDQpSZWlnbiBNRCwyMDI4IEdpcmxzIEVsaXRlLE1ELEVsaXRlDQpCbGF6ZSBWQSwyMDI4IEdpcmxzIEVsaXRlLFZBLFN0cm9uZw0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCiwsLA0KLCwsDQosLCwNCg==';
+  a.href='data:text/csv;base64,VGVhbSBOYW1lLERpdmlzaW9uLFN0YXRlL1JlZ2lvbixTdHJlbmd0aCBUaWVyLFByYWN0aWNlIFJlcXVlc3RlZA0KSGF3a3MgTUQsMjAyOCBCb3lzIEVsaXRlLE1ELEVsaXRlLFllcw0KV29sdmVzIFZBLDIwMjggQm95cyBFbGl0ZSxWQSxTdHJvbmcsWWVzDQpFYWdsZXMgUEEsMjAyOCBCb3lzIEVsaXRlLFBBLE1pZCxObw0KTGlvbnMgTlksMjAyOCBCb3lzIEVsaXRlLE5ZLExvd2VyLE5vDQpSZWlnbiBNRCwyMDI4IEdpcmxzIEVsaXRlLE1ELEVsaXRlLFllcw0KQmxhemUgVkEsMjAyOCBHaXJscyBFbGl0ZSxWQSxTdHJvbmcsTm8NCiwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLCwsLA0KLA==';
   a.download='Adrenaline_Team_Template.csv';
   document.body.appendChild(a);
   a.click();
@@ -701,7 +703,8 @@ function parseAndImport(data,filename){
     name:     find(['team name'],['team','name','club']),
     division: find(['division'],['division','div','age','grad']),
     state:    find(['state/region','state','region'],['state','region','home']),
-    tier:     find(['strength tier','tier'],['tier','strength','level','rating'])
+    tier:     find(['strength tier','tier'],['tier','strength','level','rating']),
+    practice: find(['practice requested','practice'],['practice','prac'])
   };
   if(colMap.name<0||colMap.division<0){
     showManualMapping(data[0].map(function(h){return String(h||'').trim();}),colMap,data.slice(1));
@@ -720,6 +723,8 @@ function importRows(rows,colMap,filename){
     var st=colMap.state>=0?String(row[colMap.state]||'').trim():'';
     var trRaw=colMap.tier>=0?String(row[colMap.tier]||'Mid').trim():'Mid';
     var tier=Object.keys(TO).find(function(t){return t.toLowerCase()===trRaw.toLowerCase();})||'Mid';
+    var pracRaw=colMap.practice>=0?String(row[colMap.practice]||'').trim().toLowerCase():'';
+    var wantsPractice=pracRaw==='yes'||pracRaw==='y'||pracRaw==='1'||pracRaw==='true';
     if(!dm[dn]){
       var id=did++;
       var gen=dn.toLowerCase().indexOf('girl')>=0?'girls':'boys';
@@ -727,7 +732,7 @@ function importRows(rows,colMap,filename){
       dm[dn]={id:id,name:dn,recruitable:rec,gender:gen,teams:[]};
       divs.push(dm[dn]);
     }
-    dm[dn].teams.push({id:tid++,name:name,state:st,tier:tier,travelTier:'local',travelWaitlist:false});
+    dm[dn].teams.push({id:tid++,name:name,state:st,tier:tier,travelTier:'local',travelWaitlist:false,wantsPractice:wantsPractice});
   });
   var total=divs.reduce(function(a,d){return a+d.teams.length;},0);
   if(total===0){ showUploadError('No valid teams found. Check Team Name and Division columns have data.'); return; }
@@ -1106,26 +1111,66 @@ function computePractice(){
   const slots=getSlots(sh,eh);const R=rl(),N=nlH();
   const teamSlotIdx={};
   divs.forEach(d=>d.teams.forEach(t=>{teamSlotIdx[t.id]=[];}));
-  slots.forEach((s,si)=>{Object.values(sched1[s]||{}).forEach(g=>{if(g&&g.t1>0)teamSlotIdx[g.t1].push(si);if(g&&g.t2>0)teamSlotIdx[g.t2].push(si);});});
+  slots.forEach((s,si)=>{Object.entries(sched1[s]||{}).forEach(([fid,g])=>{
+    if(!g)return;
+    if(teamSlotIdx[g.t1])teamSlotIdx[g.t1].push(si);
+    if(teamSlotIdx[g.t2])teamSlotIdx[g.t2].push(si);
+  });});
+
   slots.forEach((s,si)=>{
     const h=sH(s);if(h===R||h===N)return;
+    // Find idle fields this slot
     const occupied=new Set(Object.entries(sched1[s]||{}).filter(([,g])=>g).map(([fid])=>+fid));
-    const idleFields=fields.filter(f=>!occupied.has(f.id));if(!idleFields.length)return;
+    const idleFields=fields.filter(f=>!occupied.has(f.id));
+    if(!idleFields.length)return;
+
+    // Find teams that (a) want practice, (b) have no game this slot,
+    // (c) have a gap (adjacent slot with a game), (d) haven't had a practice yet
+    const practiced=new Set(Object.values(practiceSlots).flatMap(ps=>ps.assignments.map(a=>a.team.id)));
     const teamsWithGap=[];
     divs.forEach(d=>d.teams.forEach(t=>{
+      if(!t.wantsPractice)return; // only teams that requested practice
+      if(practiced.has(t.id))return; // already got one practice
       const my=teamSlotIdx[t.id]||[];
-      if(!my.includes(si)&&!my.some(ms=>Math.abs(ms-si)===1)&&my.length>0)
-        teamsWithGap.push({...t,divId:d.id,divName:d.name,gen:d.gender});
+      if(my.includes(si))return; // playing this slot
+      if(my.length===0)return; // no games yet — no gap to fill
+      // Must have an adjacent slot with a game (gap between games)
+      const hasGap=my.some(ms=>Math.abs(ms-si)===1);
+      if(!hasGap)return;
+      teamsWithGap.push({...t,divId:d.id,divName:d.name,gen:d.gender});
     }));
+
     if(!teamsWithGap.length)return;
-    const assignments=[];const usedTeams=new Set(); // enforce max 1 practice per team
+
+    // Pair 2 teams per field — sort by travel tier (traveling teams get priority)
+    teamsWithGap.sort((a,b)=>(a.travelTier==='local'?1:0)-(b.travelTier==='local'?1:0));
+
+    const usedTeams=new Set();
+    const assignments=[];
     idleFields.forEach(f=>{
-      const el=teamsWithGap.filter(t=>!usedTeams.has(t.id)&&(f.gender==='both'||f.gender===t.gen));
-      if(!el.length)return;
-      el.sort((a,b)=>(a.travelTier==='in'?0:a.travelTier==='both'?1:2)-(b.travelTier==='in'?0:b.travelTier==='both'?1:2));
-      usedTeams.add(el[0].id);assignments.push({field:f,team:el[0]});
+      // Assign up to 2 teams per field
+      const eligible=teamsWithGap.filter(t=>
+        !usedTeams.has(t.id)&&
+        (f.gender==='both'||f.gender===t.gen)
+      );
+      if(!eligible.length)return;
+      // Take first team
+      usedTeams.add(eligible[0].id);
+      const pair=[eligible[0]];
+      // Take second team if available (different division preferred)
+      const second=eligible.find((t,i)=>i>0&&t.divId!==eligible[0].divId)||eligible[1];
+      if(second){usedTeams.add(second.id);pair.push(second);}
+      assignments.push({field:f,teams:pair});
     });
-    if(assignments.length)practiceSlots[s]={idleFields:idleFields.length,assignedCount:assignments.length,assignments,teamsWithGap:teamsWithGap.length,remainingIdle:idleFields.length-assignments.length};
+
+    if(assignments.length){
+      practiceSlots[s]={
+        assignments,
+        assignedCount:assignments.reduce((a,x)=>a+x.teams.length,0),
+        teamsWithGap:teamsWithGap.length,
+        remainingIdle:idleFields.length-assignments.length
+      };
+    }
   });
 }
 
@@ -1169,9 +1214,12 @@ function renderGrid(sched,containerId,isD1){
       } else {
         const pa=isD1&&practiceSlots[slot]&&practiceSlots[slot].assignments.find(a=>a.field.id===f.id);
         if(pa){
+          const pTeams=pa.teams||[pa.team];
           t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'d1');this.classList.remove('drop-cell')">
-            <div class="game g-practice">Practice<br>${pa.team.name}<br><span style="opacity:.6;font-size:8px">${pa.team.divName}</span></div></td>`;
-        } else {
+            <div class="game g-practice">
+              <div style="font-weight:600;font-size:8px;color:#3C3489;margin-bottom:2px">Practice</div>
+              ${pTeams.map(t2=>`<div style="font-size:8px">${t2.name}<br><span style="opacity:.7">${t2.divName}</span></div>`).join('<div style="font-size:7px;color:#AFA9EC;text-align:center">+</div>')}
+            </div></td>`;} else {
           t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'${isD1?'d1':'d2'}');this.classList.remove('drop-cell')">
             <div class="g-empty">--</div></td>`;
         }
@@ -1242,7 +1290,9 @@ function renderUtil(){
         <span style="font-size:10px;color:var(--dark-gray)">${ps.teamsWithGap} teams with gap</span>
         <span style="font-size:10px;color:var(--dark-gray)">${ctx}</span>
       </div>`;
-      ps.assignments.slice(0,2).forEach(a=>{html+=`<div style="padding:2px 8px 2px 16px;font-size:10px;color:var(--dark-gray)">${a.field.name} -> ${a.team.name} (${a.team.divName})</div>`;});
+      ps.assignments.slice(0,3).forEach(a=>{
+        const teamLabels=(a.teams||[a.team]).map(t2=>t2.name+'<span style="opacity:.6"> ('+t2.divName+')</span>').join(' + ');
+        html+=`<div style="font-size:10px;padding:2px 6px;color:var(--dark-gray)">${a.field.name}: ${teamLabels}</div>`;});
       if(ps.assignments.length>2)html+=`<div style="padding:1px 8px 3px 16px;font-size:10px;color:#aaa">+${ps.assignments.length-2} more</div>`;
     });
   }
@@ -1511,51 +1561,64 @@ updL();
 // FIELD & TEAM CALCULATOR
 // ============================================================
 function runCalc(){
-  const slotDur=+document.getElementById('slotdur').value||60;
+  const slotDur=+document.getElementById('slotdur').value||50;
   const buf=+document.getElementById('buf').value||10;
   const sh=+document.getElementById('dstart').value||8;
   const eh=+document.getElementById('dend').value||18;
   const gpt=+document.getElementById('gpt').value||3;
   const slotTotal=slotDur+buf;
   const totalMinutes=(eh-sh)*60;
-  const slotsPerDay=Math.floor(totalMinutes/slotTotal)-2; // minus 2 for lunch breaks
-  const resultEl=document.getElementById('calc-result');
-  const resultText=document.getElementById('calc-result-text');
+  const slotsPerDay=Math.floor(totalMinutes/slotTotal)-2;
+  const note=slotTotal+'-min slots ('+slotDur+' min play + '+buf+' min buffer), '+slotsPerDay+' usable slots/day (minus 2 for lunch breaks). Practice slots fill idle fields automatically -- no extra fields needed.';
+  document.getElementById('calc-note').textContent=note;
+
+  // TEAMS -> FIELDS
   const tIn=parseInt(document.getElementById('calc-teams').value)||0;
-  const fIn=parseInt(document.getElementById('calc-fields').value)||0;
-  if(!tIn&&!fIn){resultEl.style.display='none';document.getElementById('calc-note').textContent='';return;}
-  resultEl.style.display='block';
+  const trEl=document.getElementById('calc-teams-result');
   if(tIn>0){
-    // POOL PLAY DAY: 3 games per team
     const poolGames=Math.ceil(tIn*gpt/2);
     const fieldsD1=Math.ceil(poolGames/slotsPerDay);
     const utilD1=Math.round(poolGames/(fieldsD1*slotsPerDay)*100);
-    // PLAYOFF DAY: advancing teams play 3 games, non-advancing play 2
-    // Assume ~50% of teams advance to bracket, 50% go to consolation
     const bracketTeams=Math.ceil(tIn*0.5);
     const consolTeams=Math.floor(tIn*0.5);
     const playoffGames=Math.ceil(bracketTeams*3/2)+Math.ceil(consolTeams*2/2);
     const fieldsD2=Math.ceil(playoffGames/slotsPerDay);
-    resultText.innerHTML=
-      '<strong>Pool play day (Day 1):</strong> '+tIn+' teams x '+gpt+' games = '+poolGames+' games &rarr; <strong>'+fieldsD1+' fields needed</strong> (~'+utilD1+'% utilization)<br>'+
-      '<strong>Playoff day (Day 2/3):</strong> ~'+playoffGames+' games ('+bracketTeams+' bracket teams x3, '+consolTeams+' consolation teams x2) &rarr; <strong>'+fieldsD2+' fields needed</strong><br>'+
-      '<span style="color:#085041">Plan for <strong>'+fieldsD1+' fields</strong> total — playoff day needs fewer and you can idle some.</span>';
-    document.getElementById('calc-note').textContent=slotTotal+'-min slots ('+slotDur+' min play + '+buf+' min buffer), '+slotsPerDay+' usable slots/day';
-  } else if(fIn>0){
-    // From fields: max teams for pool play day
+    trEl.style.display='block';
+    trEl.style.background='var(--lt-blue)';
+    trEl.style.borderRadius='6px';
+    trEl.style.padding='8px 10px';
+    trEl.style.color='#0C447C';
+    trEl.innerHTML=
+      '<strong>Pool play day:</strong> '+poolGames+' games &rarr; <strong style="color:var(--teal)">'+fieldsD1+' fields</strong> (~'+utilD1+'% util)<br>'+
+      '<strong>Playoff day:</strong> ~'+playoffGames+' games &rarr; <strong style="color:var(--teal)">'+fieldsD2+' fields</strong><br>'+
+      '<strong>Plan for '+fieldsD1+' fields total</strong> — idle '+Math.max(0,fieldsD1-fieldsD2)+' on playoff day';
+  } else {
+    trEl.style.display='none';
+  }
+
+  // FIELDS -> TEAMS
+  const fIn=parseInt(document.getElementById('calc-fields').value)||0;
+  const frEl=document.getElementById('calc-fields-result');
+  if(fIn>0){
     const maxGames=fIn*slotsPerDay;
     const maxTeams=Math.floor(maxGames*2/gpt);
-    const recommended=Math.floor(maxTeams*0.85); // 85% for division rounding headroom
-    // Playoff day capacity check
-    const bracketTeams=Math.ceil(recommended*0.5);
-    const consolTeams=Math.floor(recommended*0.5);
-    const playoffGames=Math.ceil(bracketTeams*3/2)+Math.ceil(consolTeams*2/2);
-    const fieldsD2=Math.ceil(playoffGames/slotsPerDay);
-    resultText.innerHTML=
-      '<strong>'+fIn+' fields, pool play day:</strong> '+fIn+' x '+slotsPerDay+' slots x 2 &divide; '+gpt+' games = <strong>'+maxTeams+' max teams</strong><br>'+
-      '<strong>Recommended:</strong> <strong>'+recommended+' teams</strong> (85% of max — leaves headroom for division rounding)<br>'+
-      '<strong>Playoff day check:</strong> '+recommended+' teams &rarr; ~'+playoffGames+' playoff games &rarr; needs <strong>'+fieldsD2+' fields</strong> (you have '+fIn+', '+(fIn>=fieldsD2?'<span style="color:#085041">sufficient</span>':'<span style="color:var(--red)">may be short</span>')+')';
-    document.getElementById('calc-note').textContent=slotTotal+'-min slots ('+slotDur+' min play + '+buf+' min buffer), '+slotsPerDay+' usable slots/day';
+    const recommended=Math.floor(maxTeams*0.85);
+    const bracketTeams2=Math.ceil(recommended*0.5);
+    const consolTeams2=Math.floor(recommended*0.5);
+    const playoffGames2=Math.ceil(bracketTeams2*3/2)+Math.ceil(consolTeams2*2/2);
+    const fieldsD2b=Math.ceil(playoffGames2/slotsPerDay);
+    const d2ok=fIn>=fieldsD2b;
+    frEl.style.display='block';
+    frEl.style.background='var(--lt-teal)';
+    frEl.style.borderRadius='6px';
+    frEl.style.padding='8px 10px';
+    frEl.style.color='#085041';
+    frEl.innerHTML=
+      '<strong>Max teams:</strong> <strong style="color:var(--teal)">'+maxTeams+' teams</strong> (theoretical)<br>'+
+      '<strong>Recommended:</strong> <strong style="color:var(--teal)">'+recommended+' teams</strong> (85% — accounts for division rounding)<br>'+
+      '<strong>Playoff day check:</strong> '+recommended+' teams needs '+fieldsD2b+' fields — '+(d2ok?'<strong>your '+fIn+' fields are sufficient</strong>':'<strong style="color:var(--red)">may be short (needs '+fieldsD2b+')</strong>');
+  } else {
+    frEl.style.display='none';
   }
 }
 
