@@ -721,7 +721,7 @@ function clearUpload(){
 }
 
 
-function buildPools(){
+function buildPools(){   pools={};   divs.forEach(d=>{     const byTier=Object.keys(TO).map(tier=>d.teams.filter(t=>t.tier===tier));     byTier.forEach(group=>{for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i],group[j]]=[group[j],group[i]];}});     const sorted=byTier.flat();     const n=d.teams.length,np=n<=6?1:n<=12?2:Math.ceil(n/6);     const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0}));     sorted.forEach((t,i)=>{const pi=i<np?i:(np-1)-(i%np);pl[Math.max(0,Math.min(pi,np-1))].teams.push(t);});     if(np>1){let improved=true,passes=0;while(improved&&passes<20){improved=false;passes++;for(let pi=0;pi<np;pi++){for(let pj=pi+1;pj<np;pj++){const poolA=pl[pi].teams,poolB=pl[pj].teams;for(let ai=0;ai<poolA.length;ai++){for(let bi=0;bi<poolB.length;bi++){const tA=poolA[ai],tB=poolB[bi];if(tA.tier!==tB.tier)continue;const before=countRegionConflicts(poolA)+countRegionConflicts(poolB);poolA[ai]=tB;poolB[bi]=tA;const after=countRegionConflicts(poolA)+countRegionConflicts(poolB);if(after<before){improved=true;}else{poolA[ai]=tA;poolB[bi]=tB;}}}}}}};     pl.forEach(pool=>{pool.regionConflicts=countRegionConflicts(pool.teams);pool.teams.forEach(t=>{t.poolRegionConflict=pool.teams.some(other=>other.id!==t.id&&sameReg(t,other));});});     pools[d.id]=pl;   });   renderPools(); }  function countRegionConflicts(teams){let c=0;for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++)if(sameReg(teams[i],teams[j]))c++;return c;}(){
   pools={};
   divs.forEach(d=>{
     const sorted=[...d.teams].sort((a,b)=>TO[a.tier]-TO[b.tier]);
