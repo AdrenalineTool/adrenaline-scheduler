@@ -298,28 +298,29 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <!-- FIELD & TEAM CALCULATOR -->
   <div class="sec-label">Field & team calculator</div>
   <div style="background:#fff;border:.5px solid var(--mid-gray);border-radius:8px;padding:14px 16px;margin-bottom:12px">
-    <div style="font-size:11px;color:var(--dark-gray);margin-bottom:10px">Based on 3 games/team/day, 60-min slots, 10-min buffer, 8am–6pm window. Adjust to match your actual setup.</div>
-    <div style="display:flex;gap:20px;flex-wrap:wrap">
+    <div style="font-size:11px;color:var(--dark-gray);margin-bottom:10px">Full event calculator — pool play (Day 1) + playoffs (Day 2/3). Adjust slot duration and buffer above to match your setup.</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px">
       <div style="flex:1;min-width:200px">
-        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter teams → get fields needed</div>
+        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter teams → fields needed per day</div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="number" id="calc-teams" min="4" max="200" placeholder="# teams" style="width:80px;font-size:12px;padding:5px 8px;border:.5px solid var(--mid-gray);border-radius:6px" oninput="runCalc()">
-          <span style="font-size:12px;color:var(--dark-gray)">teams →</span>
-          <span id="calc-fields-out" style="font-size:14px;font-weight:600;color:var(--teal);min-width:60px">--</span>
-          <span style="font-size:11px;color:var(--dark-gray)">fields needed</span>
+          <span style="font-size:12px;color:var(--dark-gray)">teams</span>
         </div>
       </div>
       <div style="flex:1;min-width:200px">
-        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter fields → get max teams</div>
+        <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">Enter fields → max teams</div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="number" id="calc-fields" min="1" max="30" placeholder="# fields" style="width:80px;font-size:12px;padding:5px 8px;border:.5px solid var(--mid-gray);border-radius:6px" oninput="runCalc()">
-          <span style="font-size:12px;color:var(--dark-gray)">fields →</span>
-          <span id="calc-teams-out" style="font-size:14px;font-weight:600;color:var(--teal);min-width:60px">--</span>
-          <span style="font-size:11px;color:var(--dark-gray)">max teams</span>
+          <span style="font-size:12px;color:var(--dark-gray)">fields</span>
         </div>
       </div>
     </div>
+    <div id="calc-result" style="display:none;background:var(--lt-blue);border-radius:8px;padding:12px 14px;font-size:12px;color:#0C447C">
+      <div id="calc-result-text"></div>
+    </div>
     <div id="calc-note" style="font-size:11px;color:var(--dark-gray);margin-top:8px"></div>
+    <input type="hidden" id="calc-fields-out">
+    <input type="hidden" id="calc-teams-out">
   </div>
   <div class="sec-label">Time windows</div>
   <div class="form-row">
@@ -330,7 +331,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="fg"><label>Games / team Day 1</label><select id="gpt"><option value="3" selected>3 games</option><option value="5">5 games</option></select></div>
   </div>
   <div class="form-row">
-    <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="60" min="45" max="90" step="15"></div>
+    <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="50" min="30" max="90" step="5"></div>
     <div class="fg"><label>Buffer per game (min)</label><input type="number" id="buf" value="10" min="0" max="20" step="5"></div>
     <div class="fg"><label>Round buffer Day 2 (min)</label><input type="number" id="rdbuf" value="30" min="0" max="60" step="15"></div>
     <div class="fg"><label>Min rest between games</label><select id="minrest"><option value="1" selected>1 slot</option><option value="2">2 slots</option></select></div>
@@ -1517,36 +1518,44 @@ function runCalc(){
   const gpt=+document.getElementById('gpt').value||3;
   const slotTotal=slotDur+buf;
   const totalMinutes=(eh-sh)*60;
-  // Reserve 1 slot for recruiter lunch and 1 slot for team lunch
-  const slotsPerDay=Math.floor(totalMinutes/slotTotal)-2;
-  // Each game uses 1 field slot and involves 2 teams
-  // Day 1: teams * gpt pool games / 2 = total games needed
-  // Fields needed = ceil(total games / slots per day)
-  // Max teams from fields = floor(fields * slots * 2 / gpt)
+  const slotsPerDay=Math.floor(totalMinutes/slotTotal)-2; // minus 2 for lunch breaks
+  const resultEl=document.getElementById('calc-result');
+  const resultText=document.getElementById('calc-result-text');
   const tIn=parseInt(document.getElementById('calc-teams').value)||0;
   const fIn=parseInt(document.getElementById('calc-fields').value)||0;
+  if(!tIn&&!fIn){resultEl.style.display='none';document.getElementById('calc-note').textContent='';return;}
+  resultEl.style.display='block';
   if(tIn>0){
-    const gamesNeeded=Math.ceil(tIn*gpt/2);
-    const fieldsNeeded=Math.ceil(gamesNeeded/slotsPerDay);
-    document.getElementById('calc-fields-out').textContent=fieldsNeeded;
-    const util=Math.round(gamesNeeded/(fieldsNeeded*slotsPerDay)*100);
-    document.getElementById('calc-note').textContent=
-      `${tIn} teams x ${gpt} games = ${gamesNeeded} games needed. `+
-      `${slotsPerDay} usable slots/day (${slotTotal}-min slots, 8am-${eh}pm minus 2 break slots). `+
-      `Field utilization: ~${util}%. `+
-      `Note: actual utilization varies by division size — odd-sized pools leave some fields idle.`;
+    // POOL PLAY DAY: 3 games per team
+    const poolGames=Math.ceil(tIn*gpt/2);
+    const fieldsD1=Math.ceil(poolGames/slotsPerDay);
+    const utilD1=Math.round(poolGames/(fieldsD1*slotsPerDay)*100);
+    // PLAYOFF DAY: advancing teams play 3 games, non-advancing play 2
+    // Assume ~50% of teams advance to bracket, 50% go to consolation
+    const bracketTeams=Math.ceil(tIn*0.5);
+    const consolTeams=Math.floor(tIn*0.5);
+    const playoffGames=Math.ceil(bracketTeams*3/2)+Math.ceil(consolTeams*2/2);
+    const fieldsD2=Math.ceil(playoffGames/slotsPerDay);
+    resultText.innerHTML=
+      '<strong>Pool play day (Day 1):</strong> '+tIn+' teams x '+gpt+' games = '+poolGames+' games &rarr; <strong>'+fieldsD1+' fields needed</strong> (~'+utilD1+'% utilization)<br>'+
+      '<strong>Playoff day (Day 2/3):</strong> ~'+playoffGames+' games ('+bracketTeams+' bracket teams x3, '+consolTeams+' consolation teams x2) &rarr; <strong>'+fieldsD2+' fields needed</strong><br>'+
+      '<span style="color:#085041">Plan for <strong>'+fieldsD1+' fields</strong> total — playoff day needs fewer and you can idle some.</span>';
+    document.getElementById('calc-note').textContent=slotTotal+'-min slots ('+slotDur+' min play + '+buf+' min buffer), '+slotsPerDay+' usable slots/day';
   } else if(fIn>0){
+    // From fields: max teams for pool play day
     const maxGames=fIn*slotsPerDay;
     const maxTeams=Math.floor(maxGames*2/gpt);
-    document.getElementById('calc-teams-out').textContent=maxTeams;
-    document.getElementById('calc-note').textContent=
-      `${fIn} fields x ${slotsPerDay} usable slots = ${maxGames} game slots. `+
-      `At ${gpt} games/team: max ${maxTeams} teams. `+
-      `Actual capacity is slightly lower due to division rounding — plan for ${Math.floor(maxTeams*0.9)} teams to keep utilization clean.`;
-  } else {
-    document.getElementById('calc-fields-out').textContent='--';
-    document.getElementById('calc-teams-out').textContent='--';
-    document.getElementById('calc-note').textContent='';
+    const recommended=Math.floor(maxTeams*0.85); // 85% for division rounding headroom
+    // Playoff day capacity check
+    const bracketTeams=Math.ceil(recommended*0.5);
+    const consolTeams=Math.floor(recommended*0.5);
+    const playoffGames=Math.ceil(bracketTeams*3/2)+Math.ceil(consolTeams*2/2);
+    const fieldsD2=Math.ceil(playoffGames/slotsPerDay);
+    resultText.innerHTML=
+      '<strong>'+fIn+' fields, pool play day:</strong> '+fIn+' x '+slotsPerDay+' slots x 2 &divide; '+gpt+' games = <strong>'+maxTeams+' max teams</strong><br>'+
+      '<strong>Recommended:</strong> <strong>'+recommended+' teams</strong> (85% of max — leaves headroom for division rounding)<br>'+
+      '<strong>Playoff day check:</strong> '+recommended+' teams &rarr; ~'+playoffGames+' playoff games &rarr; needs <strong>'+fieldsD2+' fields</strong> (you have '+fIn+', '+(fIn>=fieldsD2?'<span style="color:#085041">sufficient</span>':'<span style="color:var(--red)">may be short</span>')+')';
+    document.getElementById('calc-note').textContent=slotTotal+'-min slots ('+slotDur+' min play + '+buf+' min buffer), '+slotsPerDay+' usable slots/day';
   }
 }
 
