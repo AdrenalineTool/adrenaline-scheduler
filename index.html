@@ -333,15 +333,15 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="fg"><label>Games / team Day 1</label><select id="gpt" onchange="runCalc()"><option value="3" selected>3 games</option><option value="5">5 games</option></select></div>
   </div>
   <div class="form-row">
-    <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="50" min="30" max="90" step="5" oninput="runCalc();updateRecFieldRecommendation()"></div>
-    <div class="fg"><label>Buffer per game (min)</label><input type="number" id="buf" onchange="runCalc()" value="10" min="0" max="20" step="5"></div>
+    <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="45" min="30" max="90" step="5" oninput="runCalc();updateRecFieldRecommendation()"></div>
+    <div class="fg"><label>Changeover / warmup (min)</label><input type="number" id="buf" onchange="runCalc()" value="10" min="0" max="20" step="5"></div>
     <div class="fg"><label>Round buffer Day 2 (min)</label><input type="number" id="rdbuf" value="30" min="0" max="60" step="15"></div>
     <div class="fg"><label>Min rest between games</label><select id="minrest"><option value="1" selected>1 slot</option><option value="2">2 slots</option></select></div>
   </div>
   <div class="sec-label">Recruiter lunch</div>
   <div class="form-row">
     <div class="fg"><label>Recruiter lunch hour</label><select id="rec-lunch" onchange="updL()"><option value="11">11:00 AM</option><option value="12" selected>12:00 PM</option><option value="13">1:00 PM</option></select></div>
-    <div class="fg"><label>Non-recruitable teams eat</label><select id="nonrec-lunch" onchange="updL()"><option value="same">Same slot</option><option value="before">One slot before</option><option value="after" selected>One slot after</option></select></div>
+    <!-- Non-rec lunch removed: non-recruiting fields run all day, teams eat in game gaps -->
     <div class="fg" style="flex:2"><label>&nbsp;</label><div class="cl cl-t" id="ldesc" style="margin:0;font-size:11px"></div></div>
   </div>
   <div class="sec-label">Travel constraints & cutoffs</div>
@@ -563,7 +563,7 @@ function fmtSlot(s){const h=sH(s),hh=Math.floor(h),mm=Math.round((h-hh)*60),ap=h
 function getSlots(sh,eh){const sm=slotM(),sl=[];for(let m=sh*60;m+sm<=eh*60;m+=sm){const h=Math.floor(m/60),mm=m%60;sl.push(`${h}:${mm.toString().padStart(2,'0')}`);}return sl;}
 function sameReg(a,b){if(!a.state||!b.state)return false;if(a.state.includes('CA')||b.state.includes('CA'))return a.state===b.state;return a.state===b.state;}
 function pk(a,b){return Math.min(a,b)+'-'+Math.max(a,b);}
-function updL(){const r=rl(),n=nlH();document.getElementById('ldesc').textContent=`Recruiter break ${fmt12(r)} -- non-recruitable teams eat ${fmt12(n)}${n===r?' (same)':''}. Both enforced automatically.`;}
+function updL(){document.getElementById('ldesc').textContent=`Recruiting fields go dark at ${fmt12(rl())} (recruiter lunch). Non-recruiting fields run all day -- teams eat in natural game gaps.`;}
 function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast-'+type;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3000);}
 function dl(fn,content,mime){
   try{
@@ -1097,12 +1097,9 @@ function genD1(){
         for(let si=0;si<slots.length;si++){
           const s=slots[si],h=sH(s);
           // Lunch break rules:
-          // Recruiting divisions: ALWAYS skip recruiter lunch slot (wall-to-wall except lunch)
-          // Non-recruiting divisions: only skip if they started before lunch
-          const divFirstGame=tS[t1.id].length>0?sH(tS[t1.id][0]):(tS[t2.id].length>0?sH(tS[t2.id][0]):null);
-          const startedBeforeLunch=divFirstGame!==null&&divFirstGame<R;
-          if(d.recruitable&&h===R)continue; // recruiting fields always dark at lunch
-          if(!d.recruitable&&startedBeforeLunch&&h===N)continue; // non-rec only if started before lunch
+          // Recruiting divisions: ALWAYS skip recruiter lunch slot — fields go dark
+          // Non-recruiting divisions: NO protected lunch slot — teams eat in natural game gaps
+          if(d.recruitable&&h===R)continue;
           const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
           if((te1==='in'||te1==='both')&&h<lc)continue;
           if((te2==='in'||te2==='both')&&h<lc)continue;
@@ -1150,7 +1147,7 @@ function genD2(){
     for(let si=0;si<slots.length;si++){
       const s=slots[si],h=sH(s);
       if(minSlotM&&s2m(s)<minSlotM)continue;
-      if(h===R||h===N)continue;
+      if(h===R)continue; // only recruiter lunch protected on Day 2
       const te1=t1.travelWaitlist?'local':(t1.travelTier||'local');
       const te2=t2.travelWaitlist?'local':(t2.travelTier||'local');
       if((te1==='out'||te1==='both')&&h>ec)continue;if((te2==='out'||te2==='both')&&h>ec)continue;
