@@ -326,15 +326,15 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   </div>
   <div class="sec-label">Time windows</div>
   <div class="form-row">
-    <div class="fg"><label>Day start</label><select id="dstart"><option value="7">7:00 AM</option><option value="8" selected>8:00 AM</option><option value="9">9:00 AM</option></select></div>
-    <div class="fg"><label>Day 1 end (non-lit)</label><select id="dend"><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18" selected>6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option></select></div>
-    <div class="fg"><label>Day 1 end (lit fields)</label><select id="dend-lit"><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18">6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21" selected>9:00 PM</option></select></div>
-    <div class="fg"><label>Day 2 hard end</label><select id="d2end"><option value="14">2:00 PM</option><option value="15" selected>3:00 PM</option><option value="16">4:00 PM</option><option value="17">5:00 PM</option></select></div>
-    <div class="fg"><label>Games / team Day 1</label><select id="gpt"><option value="3" selected>3 games</option><option value="5">5 games</option></select></div>
+    <div class="fg"><label>Day start</label><select id="dstart" onchange="runCalc()"><option value="7">7:00 AM</option><option value="8" selected>8:00 AM</option><option value="9">9:00 AM</option></select></div>
+    <div class="fg"><label>Day 1 end (non-lit)</label><select id="dend" onchange="runCalc()"><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18" selected>6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21">9:00 PM</option><option value="22">10:00 PM</option></select></div>
+    <div class="fg"><label>Day 1 end (lit fields)</label><select id="dend-lit" onchange="runCalc()"><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18">6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21" selected>9:00 PM</option><option value="22">10:00 PM</option></select></div>
+    <div class="fg"><label>Day 2 hard end</label><select id="d2end"><option value="14">2:00 PM</option><option value="15" selected>3:00 PM</option><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18">6:00 PM</option></select></div>
+    <div class="fg"><label>Games / team Day 1</label><select id="gpt" onchange="runCalc()"><option value="3" selected>3 games</option><option value="5">5 games</option></select></div>
   </div>
   <div class="form-row">
-    <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="50" min="30" max="90" step="5"></div>
-    <div class="fg"><label>Buffer per game (min)</label><input type="number" id="buf" value="10" min="0" max="20" step="5"></div>
+    <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="50" min="30" max="90" step="5" oninput="runCalc();updateRecFieldRecommendation()"></div>
+    <div class="fg"><label>Buffer per game (min)</label><input type="number" id="buf" onchange="runCalc()" value="10" min="0" max="20" step="5"></div>
     <div class="fg"><label>Round buffer Day 2 (min)</label><input type="number" id="rdbuf" value="30" min="0" max="60" step="15"></div>
     <div class="fg"><label>Min rest between games</label><select id="minrest"><option value="1" selected>1 slot</option><option value="2">2 slots</option></select></div>
   </div>
@@ -358,6 +358,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <button class="btn btn-sm" onclick="addFs(8)">+ Add 8 fields</button>
   </div>
   <div id="parking-status" class="cl cl-t" style="display:none;margin-top:8px"></div>
+  <div id="rec-field-rec" style="display:none;margin-top:8px"></div>
   <div class="divider"></div>
   <div class="btn-row" style="justify-content:flex-end">
     <button class="btn btn-navy" onclick="go('p3');buildPools()">Pool seeding -></button>
@@ -559,7 +560,7 @@ function sH(s){const[h,m]=s.split(':').map(Number);return h+m/60;}
 function s2m(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
 function fmt12(h){const ap=h<12?'am':'pm';return`${h>12?h-12:h===0?12:h}:00${ap}`;}
 function fmtSlot(s){const h=sH(s),hh=Math.floor(h),mm=Math.round((h-hh)*60),ap=h<12?'am':'pm';return`${hh>12?hh-12:hh===0?12:hh}:${mm.toString().padStart(2,'0')}${ap}`;}
-function getSlots(sh,eh){const sm=slotM(),sl=[];for(let m=sh*60;m<eh*60;m+=sm){const h=Math.floor(m/60),mm=m%60;sl.push(`${h}:${mm.toString().padStart(2,'0')}`);}return sl;}
+function getSlots(sh,eh){const sm=slotM(),sl=[];for(let m=sh*60;m+sm<=eh*60;m+=sm){const h=Math.floor(m/60),mm=m%60;sl.push(`${h}:${mm.toString().padStart(2,'0')}`);}return sl;}
 function sameReg(a,b){if(!a.state||!b.state)return false;if(a.state.includes('CA')||b.state.includes('CA'))return a.state===b.state;return a.state===b.state;}
 function pk(a,b){return Math.min(a,b)+'-'+Math.max(a,b);}
 function updL(){const r=rl(),n=nlH();document.getElementById('ldesc').textContent=`Recruiter break ${fmt12(r)} -- non-recruitable teams eat ${fmt12(n)}${n===r?' (same)':''}. Both enforced automatically.`;}
@@ -587,12 +588,13 @@ function dl(fn,content,mime){
 // FIELDS
 // ============================================================
 function addF(n='',l=true,g='both',ch=false){
+  setTimeout(runCalc,50);
   const id=fid++;
   fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
-function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();}
+function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();runCalc();}
 function renderFields(){
   document.getElementById('fields-list').innerHTML=fields.map(f=>`
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 9px;background:var(--lt-gray);border-radius:5px;margin-bottom:4px">
@@ -603,13 +605,13 @@ function renderFields(){
         <option value="girls" ${f.gender==='girls'?'selected':''}>Girls</option>
       </select>
       <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer">
-        <input type="checkbox" ${f.lights?'checked':''} onchange="fields.find(x=>x.id===${f.id}).lights=this.checked"> Lights
+        <input type="checkbox" ${f.lights?'checked':''} onchange="fields.find(x=>x.id===${f.id}).lights=this.checked;runCalc()"> Lights
       </label>
       <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600">
         <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked"> Champ
       </label>
       <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--teal);font-weight:600">
-        <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked"> Recruiting
+        <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked;updateRecFieldRecommendation()"> Recruiting
       </label>
       <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Parking" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Parking spaces for this field">
       <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
@@ -767,6 +769,8 @@ function importRows(rows,colMap,filename){
   tbl+='</tbody></table>';
   document.getElementById('preview-tbl').innerHTML=tbl;
   document.getElementById('preview-area').style.display='block';
+  updateRecFieldRecommendation();
+  runCalc();
 }
 
 function applyMap(){
@@ -1019,57 +1023,101 @@ function genD1(){
   const tG={},tS={},played=new Set();
   divs.forEach(d=>d.teams.forEach(t=>{tG[t.id]=0;tS[t.id]=[];}));
 
-  // STAGGERED POD ASSIGNMENT:
-  // Sort divisions by size descending so large divisions get first pick of fields.
-  // Each division claims a pod of fields. When a division finishes its last game 
-  // on those fields, the next waiting division can claim the same pod.
-  // Pod size = enough fields to run the division concurrently (ceil(teams/2)).
-  const sortedDivs=[...divs].sort((a,b)=>b.teams.length-a.teams.length);
-  
-  // Track which slot each field is next available from (for pod handoff)
-  const fieldFreeFromSlot={};
-  fields.forEach(f=>{fieldFreeFromSlot[f.id]=0;});
+  // ── POD ASSIGNMENT ────────────────────────────────────────────────────────
+  // GOAL: Fill recruiting fields wall-to-wall both days with recruiting games.
+  // Recruiting fields = fields with Recruiting checkbox checked.
+  // ALL recruiting divisions share ONLY those fields — no idle slots on rec fields.
+  // Non-recruiting divisions get all remaining fields.
+  // Recruiting divisions scheduled first to lock down their fields.
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Assign pod to each division dynamically
+  const recFieldsBoys=fields.filter(f=>f.recruiting&&(f.gender==='boys'||f.gender==='both'));
+  const recFieldsGirls=fields.filter(f=>f.recruiting&&(f.gender==='girls'||f.gender==='both'));
+  const boysFields=fields.filter(f=>f.gender==='boys'||f.gender==='both');
+  const girlsFields=fields.filter(f=>f.gender==='girls'||f.gender==='both');
+
+  // Calculate minimum rec fields from team counts if none are manually flagged
+  const slotDurG=+document.getElementById('slotdur').value||50;
+  const bufG=+document.getElementById('buf').value||10;
+  const shG=+document.getElementById('dstart').value||8;
+  const ehG=+document.getElementById('dend').value||18;
+  const gptG=+document.getElementById('gpt').value||3;
+  const usableSlotsG=Math.floor(((ehG-shG)*60)/(slotDurG+bufG))-1; // minus lunch
+  const boysRecTeamsG=divs.filter(d=>d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
+  const girlsRecTeamsG=divs.filter(d=>d.recruitable&&d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
+  const autoBoysFields=boysRecTeamsG>0?Math.max(1,Math.ceil(boysRecTeamsG*gptG/2/usableSlotsG)):0;
+  const autoGirlsFields=girlsRecTeamsG>0?Math.max(1,Math.ceil(girlsRecTeamsG*gptG/2/usableSlotsG)):0;
+
+  // Use flagged fields if available, otherwise auto-assign minimum from gender pool
+  const recBoysPool=recFieldsBoys.length?recFieldsBoys:boysFields.slice(0,autoBoysFields);
+  const recGirlsPool=recFieldsGirls.length?recFieldsGirls:girlsFields.slice(autoBoysFields,autoBoysFields+autoGirlsFields);
+
+  // Non-rec fields = everything not claimed by rec pools
+  const recIds=new Set([...recBoysPool,...recGirlsPool].map(f=>f.id));
+  const nonRecBoys=boysFields.filter(f=>!recIds.has(f.id));
+  const nonRecGirls=girlsFields.filter(f=>!recIds.has(f.id));
+
+  // Calculate minimum non-rec fields needed (same wall-to-wall logic as rec)
+  const nonRecBoysTeams=divs.filter(d=>!d.recruitable&&(d.gender==='boys'||d.gender==='both')).reduce((a,d)=>a+d.teams.length,0);
+  const nonRecGirlsTeams=divs.filter(d=>!d.recruitable&&(d.gender==='girls'||d.gender==='both')).reduce((a,d)=>a+d.teams.length,0);
+  const autoNonRecBoysFields=nonRecBoysTeams>0?Math.max(1,Math.ceil(nonRecBoysTeams*gptG/2/usableSlotsG)):0;
+  const autoNonRecGirlsFields=nonRecGirlsTeams>0?Math.max(1,Math.ceil(nonRecGirlsTeams*gptG/2/usableSlotsG)):0;
+
+  // Non-rec shared pool: all non-rec divisions of same gender share the same fields
+  // Same wall-to-wall + stagger logic as recruiting fields — just on different fields
+  const nonRecBoysPool=nonRecBoys.slice(0,autoNonRecBoysFields).length?
+    nonRecBoys.slice(0,autoNonRecBoysFields):
+    boysFields.filter(f=>!recIds.has(f.id)).slice(0,autoNonRecBoysFields);
+  const nonRecGirlsPool=nonRecGirls.slice(0,autoNonRecGirlsFields).length?
+    nonRecGirls.slice(0,autoNonRecGirlsFields):
+    girlsFields.filter(f=>!recIds.has(f.id)).slice(0,autoNonRecGirlsFields);
+
   const dpod={};
-  sortedDivs.forEach(d=>{
-    const podSize=Math.max(1,Math.ceil(d.teams.length/2));
-    const genderFields=fields.filter(f=>f.gender==='both'||f.gender===d.gender);
-    // Pick the fields that will be free earliest
-    const sorted=[...genderFields].sort((a,b)=>fieldFreeFromSlot[a.id]-fieldFreeFromSlot[b.id]);
-    dpod[d.id]=sorted.slice(0,podSize);
+  // Recruiting divisions → shared rec pool
+  divs.filter(d=>d.recruitable).forEach(d=>{
+    dpod[d.id]=d.gender==='boys'?recBoysPool:recGirlsPool;
+  });
+  // Non-recruiting divisions → shared non-rec pool (all same gender share same fields)
+  divs.filter(d=>!d.recruitable).forEach(d=>{
+    dpod[d.id]=(d.gender==='boys'||d.gender==='both')?nonRecBoysPool:nonRecGirlsPool;
   });
 
+  // Schedule recruiting divisions FIRST so they fill their fields wall-to-wall
+  const schedOrder=[...divs.filter(d=>d.recruitable),...divs.filter(d=>!d.recruitable)];
+
   let gc=0;
-  divs.forEach(d=>{
+  schedOrder.forEach(d=>{
     (pools[d.id]||[]).forEach(pool=>{
-      const ms=[];for(let i=0;i<pool.teams.length;i++)for(let j=i+1;j<pool.teams.length;j++)ms.push([pool.teams[i],pool.teams[j]]);
+      const ms=[];
+      for(let i=0;i<pool.teams.length;i++)
+        for(let j=i+1;j<pool.teams.length;j++)ms.push([pool.teams[i],pool.teams[j]]);
       for(let i=ms.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ms[i],ms[j]]=[ms[j],ms[i]];}
       ms.forEach(([t1,t2])=>{
         if(tG[t1.id]>=gpt||tG[t2.id]>=gpt)return;
         for(let si=0;si<slots.length;si++){
           const s=slots[si],h=sH(s);
-          // Lunch break: only skip this slot if this division started BEFORE lunch.
-          // Divisions that start their first game after lunch skip the lunch break.
-          const divFirstGame=tS[t1.id].length>0?sH(tS[t1.id][0]):null;
-          const divStartedBeforeLunch=divFirstGame!==null&&divFirstGame<R;
-          if(divStartedBeforeLunch&&d.recruitable&&h===R)continue;
-          if(divStartedBeforeLunch&&!d.recruitable&&h===N)continue;
+          // Lunch break rules:
+          // Recruiting divisions: ALWAYS skip recruiter lunch slot (wall-to-wall except lunch)
+          // Non-recruiting divisions: only skip if they started before lunch
+          const divFirstGame=tS[t1.id].length>0?sH(tS[t1.id][0]):(tS[t2.id].length>0?sH(tS[t2.id][0]):null);
+          const startedBeforeLunch=divFirstGame!==null&&divFirstGame<R;
+          if(d.recruitable&&h===R)continue; // recruiting fields always dark at lunch
+          if(!d.recruitable&&startedBeforeLunch&&h===N)continue; // non-rec only if started before lunch
           const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
-          if((te1==='in'||te1==='both')&&h<lc)continue;if((te2==='in'||te2==='both')&&h<lc)continue;
-          if((te1==='out'||te1==='both')&&h>ec)continue;if((te2==='out'||te2==='both')&&h>ec)continue;
+          if((te1==='in'||te1==='both')&&h<lc)continue;
+          if((te2==='in'||te2==='both')&&h<lc)continue;
+          if((te1==='out'||te1==='both')&&h>ec)continue;
+          if((te2==='out'||te2==='both')&&h>ec)continue;
           const s1=tS[t1.id],s2=tS[t2.id];
           if(!(s1.length===0||si-slots.indexOf(s1[s1.length-1])>minRest))continue;
           if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-          // Use this division's pod — but also allow fields freed up from finished divisions
           const podFields=dpod[d.id]||[];
-          const av=podFields.filter(f=>!sched1[s][f.id]&&(fieldFreeFromSlot[f.id]<=si));
+          const av=podFields.filter(f=>!sched1[s][f.id]);
           if(!av.length)continue;
-          sched1[s][av[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,type:'pool'};
-          // Update field availability — this field is in use through this slot
-          fieldFreeFromSlot[av[0].id]=si+1;
+          sched1[s][av[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,type:'pool'};
           tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;played.add(pk(t1.id,t2.id));break;
         }
       });
@@ -1077,7 +1125,6 @@ function genD1(){
   });
   window._played=played;window._tS=tS;window._dpod=dpod;
 }
-
 function genD2(){
   const sh=+document.getElementById('dstart').value,eh=+document.getElementById('d2end').value;
   const slots=getSlots(sh,eh);const R=rl(),N=nlH(),minRest=+document.getElementById('minrest').value;
@@ -1088,13 +1135,14 @@ function genD2(){
   let gc=0;
   const schedG=(t1,t2,type,label,prefChamp,minSlotM,isFallback)=>{
     const gen=t1.gen||'boys';
-    // Championship games -> champ fields. All other Day 2 games -> same pod as Day 1.
+    // Championship games -> champ fields.
+    // All other games -> same pod as Day 1 for location continuity.
+    // Recruiting division games stay on rec fields wall-to-wall.
     let pool;
     if(prefChamp){
       const champF=fields.filter(f=>f.champ&&(f.gender==='both'||f.gender===gen));
       pool=champF.length?champF:fields.filter(f=>f.gender==='both'||f.gender===gen);
     } else {
-      // Use the division's Day 1 pod for continuity (families/coaches know the location)
       const divId=t1.divId||0;
       const d1pod=window._dpod&&window._dpod[divId];
       pool=d1pod&&d1pod.length?d1pod:fields.filter(f=>f.gender==='both'||f.gender===gen);
@@ -1659,37 +1707,56 @@ updL();
 // FIELD & TEAM CALCULATOR
 // ============================================================
 function runCalc(){
+  // Read live from event setup fields
   const slotDur=+document.getElementById('slotdur').value||50;
   const buf=+document.getElementById('buf').value||10;
   const sh=+document.getElementById('dstart').value||8;
-  const eh=+document.getElementById('dend').value||18;
+  const ehNonLit=+document.getElementById('dend').value||18;
+  const ehLit=+document.getElementById('dend-lit').value||21;
   const gpt=+document.getElementById('gpt').value||3;
   const slotTotal=slotDur+buf;
-  const totalMinutes=(eh-sh)*60;
-  const slotsPerDay=Math.floor(totalMinutes/slotTotal)-2;
-  const note=slotTotal+'-min slots ('+slotDur+' min play + '+buf+' min buffer), '+slotsPerDay+' usable slots/day (minus 2 for lunch breaks). Practice slots fill idle fields automatically -- no extra fields needed.';
-  document.getElementById('calc-note').textContent=note;
+
+  // End time = last game ENDING time, so subtract one slot
+  // slots = floor((end - start) * 60 / slotTotal) gives slots that finish by end
+  const slotsNonLit=Math.floor((ehNonLit-sh)*60/slotTotal);
+  const slotsLit=Math.floor((ehLit-sh)*60/slotTotal);
+  const usableNonLit=Math.max(1,slotsNonLit-1); // minus lunch
+  const usableLit=Math.max(1,slotsLit-1);
+
+  const tpfNonLit=Math.floor(usableNonLit*2/gpt);
+  const tpfLit=Math.floor(usableLit*2/gpt);
+
+  // Count lit vs non-lit fields currently configured
+  const litCount=fields.filter(f=>f.lights).length;
+  const nonLitCount=fields.filter(f=>!f.lights).length;
+  const totalConfigured=fields.length;
+
+  document.getElementById('calc-note').innerHTML=
+    '<strong>Non-lit fields:</strong> '+sh+'am&ndash;'+fmt12(ehNonLit)+' end &rarr; '+slotsNonLit+' slots, '+usableNonLit+' usable &rarr; <strong>'+tpfNonLit+' teams/field</strong> &nbsp;|&nbsp; '+
+    '<strong>Lit fields:</strong> '+sh+'am&ndash;'+fmt12(ehLit)+' end &rarr; '+slotsLit+' slots, '+usableLit+' usable &rarr; <strong>'+tpfLit+' teams/field</strong><br>'+
+    '<span style="font-size:10px;color:var(--dark-gray)">End time = last game finishes by that time &nbsp;&middot;&nbsp; Minus 1 slot for recruiter lunch &nbsp;&middot;&nbsp; Practice fills idle slots automatically</span>';
 
   // TEAMS -> FIELDS
   const tIn=parseInt(document.getElementById('calc-teams').value)||0;
   const trEl=document.getElementById('calc-teams-result');
   if(tIn>0){
-    const poolGames=Math.ceil(tIn*gpt/2);
-    const fieldsD1=Math.ceil(poolGames/slotsPerDay);
-    const utilD1=Math.round(poolGames/(fieldsD1*slotsPerDay)*100);
-    const bracketTeams=Math.ceil(tIn*0.5);
-    const consolTeams=Math.floor(tIn*0.5);
-    const playoffGames=Math.ceil(bracketTeams*3/2)+Math.ceil(consolTeams*2/2);
-    const fieldsD2=Math.ceil(playoffGames/slotsPerDay);
+    // Use lit tpf if lit fields exist, else non-lit
+    const tpf=litCount>0?tpfLit:tpfNonLit;
+    const fieldsNeeded=Math.ceil(tIn/tpf);
+    const advTeams=Math.ceil(tIn*0.5),consolTeams=Math.floor(tIn*0.5);
+    const playoffGames=Math.ceil(advTeams*3/2)+Math.ceil(consolTeams*2/2);
+    const usableD2=usableNonLit; // playoffs typically end earlier
+    const fieldsD2=Math.ceil(playoffGames/usableD2);
     trEl.style.display='block';
     trEl.style.background='var(--lt-blue)';
     trEl.style.borderRadius='6px';
     trEl.style.padding='8px 10px';
     trEl.style.color='#0C447C';
     trEl.innerHTML=
-      '<strong>Pool play day:</strong> '+poolGames+' games &rarr; <strong style="color:var(--teal)">'+fieldsD1+' fields</strong> (~'+utilD1+'% util)<br>'+
-      '<strong>Playoff day:</strong> ~'+playoffGames+' games &rarr; <strong style="color:var(--teal)">'+fieldsD2+' fields</strong><br>'+
-      '<strong>Plan for '+fieldsD1+' fields total</strong> — idle '+Math.max(0,fieldsD1-fieldsD2)+' on playoff day';
+      '<strong>'+tIn+' teams &divide; '+tpfLit+' teams/field (lit) = <span style="font-size:14px;color:var(--teal)">'+Math.ceil(tIn/tpfLit)+' lit fields</span></strong>'+
+      ' &nbsp;or&nbsp; <strong>'+tIn+' &divide; '+tpfNonLit+' = <span style="font-size:14px;color:var(--teal)">'+Math.ceil(tIn/tpfNonLit)+' non-lit fields</span></strong><br>'+
+      (litCount>0&&nonLitCount>0?'<strong>Your mix ('+litCount+' lit + '+nonLitCount+' non-lit):</strong> '+(litCount*tpfLit+nonLitCount*tpfNonLit)+' teams max<br>':'')+
+      '<strong>Playoff day:</strong> ~'+playoffGames+' games &rarr; '+fieldsD2+' fields needed'+(fieldsD2<fieldsNeeded?' (can idle '+(fieldsNeeded-fieldsD2)+')':'');
   } else {
     trEl.style.display='none';
   }
@@ -1698,13 +1765,11 @@ function runCalc(){
   const fIn=parseInt(document.getElementById('calc-fields').value)||0;
   const frEl=document.getElementById('calc-fields-result');
   if(fIn>0){
-    const maxGames=fIn*slotsPerDay;
-    const maxTeams=Math.floor(maxGames*2/gpt);
-    const recommended=Math.floor(maxTeams*0.85);
-    const bracketTeams2=Math.ceil(recommended*0.5);
-    const consolTeams2=Math.floor(recommended*0.5);
-    const playoffGames2=Math.ceil(bracketTeams2*3/2)+Math.ceil(consolTeams2*2/2);
-    const fieldsD2b=Math.ceil(playoffGames2/slotsPerDay);
+    const maxLit=fIn*tpfLit;
+    const maxNonLit=fIn*tpfNonLit;
+    const advTeams2=Math.ceil(maxLit*0.5),consolTeams2=Math.floor(maxLit*0.5);
+    const playoffGames2=Math.ceil(advTeams2*3/2)+Math.ceil(consolTeams2*2/2);
+    const fieldsD2b=Math.ceil(playoffGames2/usableNonLit);
     const d2ok=fIn>=fieldsD2b;
     frEl.style.display='block';
     frEl.style.background='var(--lt-teal)';
@@ -1712,9 +1777,10 @@ function runCalc(){
     frEl.style.padding='8px 10px';
     frEl.style.color='#085041';
     frEl.innerHTML=
-      '<strong>Max teams:</strong> <strong style="color:var(--teal)">'+maxTeams+' teams</strong> (theoretical)<br>'+
-      '<strong>Recommended:</strong> <strong style="color:var(--teal)">'+recommended+' teams</strong> (85% — accounts for division rounding)<br>'+
-      '<strong>Playoff day check:</strong> '+recommended+' teams needs '+fieldsD2b+' fields — '+(d2ok?'<strong>your '+fIn+' fields are sufficient</strong>':'<strong style="color:var(--red)">may be short (needs '+fieldsD2b+')</strong>');
+      '<strong>If lit:</strong> '+fIn+' &times; '+tpfLit+' = <strong style="font-size:14px;color:var(--teal)">'+maxLit+' teams max</strong> &nbsp;|&nbsp; '+
+      '<strong>If non-lit:</strong> '+fIn+' &times; '+tpfNonLit+' = <strong style="font-size:14px;color:var(--teal)">'+maxNonLit+' teams max</strong><br>'+
+      (litCount>0&&nonLitCount>0?'<strong>Your mix ('+litCount+' lit + '+nonLitCount+' non-lit):</strong> '+(litCount*tpfLit+nonLitCount*tpfNonLit)+' teams max<br>':'')+
+      '<strong>Playoff day check:</strong> '+(d2ok?fIn+' fields sufficient ✓':'needs '+fieldsD2b+' fields — add '+(fieldsD2b-fIn));
   } else {
     frEl.style.display='none';
   }
@@ -1872,49 +1938,74 @@ function checkConflicts(sched){
   return c;
 }
 
-(function initUpload(){
-  function attach(){
-    var inp   = document.getElementById('file-inp');
-    var label = document.getElementById('upload-label');
-    var dz    = document.getElementById('upload-drop-zone');
-    if(!inp || !label){
-      setTimeout(attach, 100);
-      return;
-    }
 
-    // File chosen via native label->input association (no inp.click() needed)
-    inp.addEventListener('change', function(){
-      if(inp.files && inp.files[0]) processFile(inp.files[0]);
-    });
+// ============================================================
+// RECRUITING FIELD RECOMMENDATION
+// ============================================================
+function updateRecFieldRecommendation(){
+  const el=document.getElementById('rec-field-rec');
+  if(!el)return;
+  if(!divs.length){el.style.display='none';return;}
 
-    // Drag and drop -- attach to the label (pointer-events:none on inner div)
-    label.addEventListener('dragover', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      if(dz){ dz.style.background='#fff'; dz.style.borderColor='var(--teal)'; }
-    });
+  const slotDur=+document.getElementById('slotdur').value||50;
+  const buf=+document.getElementById('buf').value||10;
+  const sh=+document.getElementById('dstart').value||8;
+  const eh=+document.getElementById('dend').value||18;
+  const gpt=+document.getElementById('gpt').value||3;
+  const slotTotal=slotDur+buf;
+  const slotsPerDay=Math.floor(((eh-sh)*60)/slotTotal);
+  const usableRecSlots=slotsPerDay-1; // minus recruiter lunch
 
-    label.addEventListener('dragleave', function(e){
-      e.stopPropagation();
-      if(dz){ dz.style.background=''; dz.style.borderColor=''; }
-    });
+  const boysRecTeams=divs.filter(d=>d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
+  const girlsRecTeams=divs.filter(d=>d.recruitable&&d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
+  const recTeams=boysRecTeams+girlsRecTeams;
+  const recDivCount=divs.filter(d=>d.recruitable).length;
 
-    label.addEventListener('drop', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      if(dz){ dz.style.background=''; dz.style.borderColor=''; }
-      // IMPORTANT: prevent the label from also triggering file dialog on drop
-      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if(file) processFile(file);
-    });
-  }
+  if(recTeams===0){el.style.display='none';return;}
 
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', attach);
+  // Pure minimum: ceil(total rec games / usable slots per day)
+  const boysRecGames=Math.ceil(boysRecTeams*gpt/2);
+  const girlsRecGames=Math.ceil(girlsRecTeams*gpt/2);
+  const minBoysFields=boysRecTeams>0?Math.max(1,Math.ceil(boysRecGames/usableRecSlots)):0;
+  const minGirlsFields=girlsRecTeams>0?Math.max(1,Math.ceil(girlsRecGames/usableRecSlots)):0;
+  const totalMinRecFields=minBoysFields+minGirlsFields;
+
+  // Concurrent games at minimum field count (informational only)
+  const boysConcurrent=boysRecTeams>0?Math.ceil(boysRecGames/(minBoysFields*usableRecSlots)):0;
+  const girlsConcurrent=girlsRecTeams>0?Math.ceil(girlsRecGames/(minGirlsFields*usableRecSlots)):0;
+
+  // Check current config
+  const currentRecBoys=fields.filter(f=>f.recruiting&&(f.gender==='boys'||f.gender==='both')).length;
+  const currentRecGirls=fields.filter(f=>f.recruiting&&(f.gender==='girls'||f.gender==='both')).length;
+  const boysOk=boysRecTeams===0||currentRecBoys>=minBoysFields;
+  const girlsOk=girlsRecTeams===0||currentRecGirls>=minGirlsFields;
+
+  if(boysOk&&girlsOk&&(currentRecBoys+currentRecGirls)>0){
+    el.innerHTML=`<div class="cl cl-t">
+      <strong>✓ Recruiting fields look good.</strong>
+      ${recTeams} recruiting-age teams across ${recDivCount} divisions need a minimum of <strong>${totalMinRecFields} recruiting fields</strong>
+      (${boysRecTeams>0?minBoysFields+' boys':''}${boysRecTeams>0&&girlsRecTeams>0?' + ':''}${girlsRecTeams>0?minGirlsFields+' girls':''}).
+      You have <strong>${currentRecBoys+currentRecGirls} recruiting fields assigned</strong>
+      — Recruiting fields run wall-to-wall — every slot filled with a recruiting game both days.
+      Recruiter lunch at ${fmt12(rl())} is a protected slot — no recruiting games that hour.
+    </div>`;
   } else {
-    attach();
+    const boysLine=boysRecTeams>0
+      ?`${boysRecTeams} boys rec teams × ${gpt} games = ${boysRecGames} games → <strong>${minBoysFields} boys recruiting field${minBoysFields>1?'s':''} minimum</strong> (currently: ${currentRecBoys})`:'';
+    const girlsLine=girlsRecTeams>0
+      ?`${girlsRecTeams} girls rec teams × ${gpt} games = ${girlsRecGames} games → <strong>${minGirlsFields} girls recruiting field${minGirlsFields>1?'s':''} minimum</strong> (currently: ${currentRecGirls})`:'';
+    el.innerHTML=`<div class="cl cl-a">
+      <strong>Recruiting field setup needed.</strong>
+      You have <strong>${recTeams} recruiting-age teams</strong> across ${recDivCount} divisions.
+      Check the <strong>Recruiting</strong> checkbox on the fields above.<br><br>
+      ${boysLine?'• '+boysLine+'<br>':''}
+      ${girlsLine?'• '+girlsLine+'<br>':''}
+      <br>
+      This fills recruiting fields wall-to-wall both days — every slot on every recruiting field has a recruiting game. Maximum recruiter visibility from one spot with no idle time.
+      At minimum field count, up to ${Math.max(boysConcurrent,girlsConcurrent)} game${Math.max(boysConcurrent,girlsConcurrent)>1?'s':''} run simultaneously during peak slots.
+      Recruiter lunch at ${fmt12(rl())} is always protected.
+    </div>`;
   }
-})();
-</script>
-</body>
-</html>
+  el.style.display='block';
+}
+
