@@ -726,7 +726,7 @@ function parseAndImport(data,filename){
     division: find(['division'],['division','div','age','grad']),
     state:    find(['state/region','state','region'],['state','region','home']),
     tier:     find(['strength tier','tier'],['tier','strength','level','rating']),
-    practice: find(['practice requested','practice'],['practice','prac'])
+    practice: find(['practice requested','practice requested (yes/no)','practice'],['practice','prac'])
   };
   if(colMap.name<0||colMap.division<0){
     showManualMapping(data[0].map(function(h){return String(h||'').trim();}),colMap,data.slice(1));
@@ -745,8 +745,8 @@ function importRows(rows,colMap,filename){
     var st=colMap.state>=0?String(row[colMap.state]||'').trim():'';
     var trRaw=colMap.tier>=0?String(row[colMap.tier]||'Mid').trim():'Mid';
     var trNorm=trRaw.toLowerCase().trim();var tier=trNorm==='low'?'Lower':(Object.keys(TO).find(function(t){return t.toLowerCase()===trNorm;})||'Mid');
-    var pracRaw=colMap.practice>=0?String(row[colMap.practice]||'').trim().toLowerCase():'';
-    var wantsPractice=pracRaw==='yes'||pracRaw==='y'||pracRaw==='1'||pracRaw==='true';
+    var pracIdx=typeof colMap.practice!=='undefined'?colMap.practice:-1;var pracRaw=pracIdx>=0&&row[pracIdx]!==undefined?String(row[pracIdx]||'').trim().toLowerCase():'';
+    var wantsPractice=pracRaw==='yes'||pracRaw==='y'||pracRaw==='1'||pracRaw==='true'||pracRaw==='yes '||pracRaw===' yes'||pracRaw.startsWith('y');
     if(!dm[dn]){
       var id=did++;
       var gen=dn.toLowerCase().indexOf('girl')>=0?'girls':'boys';
@@ -1247,7 +1247,7 @@ function computePractice(){
 
     // Find teams that (a) want practice, (b) have no game this slot,
     // (c) have a gap (adjacent slot with a game), (d) haven't had a practice yet
-    const practiced=new Set(Object.values(practiceSlots).flatMap(ps=>ps.assignments.map(a=>a.team.id)));
+    const practiced=new Set(Object.values(practiceSlots).flatMap(ps=>ps.assignments.flatMap(a=>(a.teams||[a.team]).filter(Boolean).map(t=>t.id))));
     const teamsWithGap=[];
     divs.forEach(d=>d.teams.forEach(t=>{
       if(!t.wantsPractice)return; // only teams that requested practice
@@ -2121,7 +2121,27 @@ function updateFieldGenderRecommendation(){
   }
   h2+=`<tr style="border-top:1px solid rgba(0,0,0,.15);font-weight:600"><td style="padding:5px 8px">Total</td><td style="padding:5px 8px;text-align:center">${boysTotal+girlsTotal}</td><td style="padding:5px 8px;text-align:center">${minTotal} fields</td><td style="padding:5px 8px;text-align:center">${totalRecFields} rec fields assigned</td><td></td></tr>`;
   h2+='</tbody></table>';
-  h2+='<div style="font-size:10px;margin-top:6px;opacity:.8">Set each field gender using Boys / Girls / Both dropdown. Check <strong>Recruiting</strong> on fields for recruiting-age divisions. Girls and boys fields are lined differently.</div>';
+  h2+='<div style="font-size:10px;margin-top:6px;opacity:.8">Set each field gender using Boys / Girls / Both dropdown. Check <strong>Recruiting</strong> on fields for recruiting-age divisions. Check <strong>Champ</strong> on the field(s) where championship games will be played. Girls and boys fields are lined differently.</div>';
+  // Add champ field status
+  const champF=fields.filter(f=>f.champ).length;
+  const champBoysF=fields.filter(f=>f.champ&&(f.gender==='boys'||f.gender==='both')).length;
+  const champGirlsF=fields.filter(f=>f.champ&&(f.gender==='girls'||f.gender==='both')).length;
+  const needBC=divs.some(d=>d.gender==='boys');
+  const needGC=divs.some(d=>d.gender==='girls');
+  let champStatus='';
+  if(champF===0){
+    champStatus='<div class="cl cl-r" style="margin-top:6px;font-size:11px"><strong>Championship field required.</strong> Check the <strong>Champ</strong> box on the field where championship games will be played. Minimum: '+(needBC&&needGC?'1 boys + 1 girls champ field':needBC?'1 boys champ field':'1 girls champ field')+'.</div>';
+  } else {
+    const missing=[];
+    if(needBC&&!champBoysF) missing.push('boys champ field');
+    if(needGC&&!champGirlsF) missing.push('girls champ field');
+    if(missing.length){
+      champStatus='<div class="cl cl-a" style="margin-top:6px;font-size:11px"><strong>Add '+missing.join(' and ')+'.</strong> Check Champ on a field with the correct gender designation.</div>';
+    } else {
+      champStatus='<div style="font-size:11px;color:#085041;margin-top:4px">✓ Championship field'+(champF>1?'s':'')+' designated ('+champF+' field'+(champF>1?'s':'')+').</div>';
+    }
+  }
+  h2+=champStatus;
   h2+='</div>';
   el.innerHTML=h2;
   el.style.display='block';
@@ -2172,10 +2192,18 @@ function validateAndProceed(){
       warnings.push('You have '+recTeams+' recruiting-age teams but no fields marked as Recruiting. Check the Recruiting box on the fields designated for recruiting-age divisions.');
     }
 
-    // Check champ field exists if there are recruitable divisions
+    // Championship field is required
     const champFields=fields.filter(f=>f.champ).length;
+    // Need 1 champ field per gender that has a bracket
+    const needBoysChamp=divs.some(d=>d.gender==='boys'&&d.recruitable);
+    const needGirlsChamp=divs.some(d=>d.gender==='girls'&&d.recruitable);
+    const hasBoysChamp=fields.some(f=>f.champ&&(f.gender==='boys'||f.gender==='both'));
+    const hasGirlsChamp=fields.some(f=>f.champ&&(f.gender==='girls'||f.gender==='both'));
     if(champFields===0){
-      warnings.push('No Championship field designated. Check Champ on the field where championship games will be played.');
+      errors.push('No Championship field designated. Check the Champ box on the field where championship games will be played.');
+    } else {
+      if(needBoysChamp&&!hasBoysChamp) errors.push('Boys divisions need a Championship field. Check Champ on a Boys or Both field.');
+      if(needGirlsChamp&&!hasGirlsChamp) errors.push('Girls divisions need a Championship field. Check Champ on a Girls or Both field.');
     }
   }
 
