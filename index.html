@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Adrenaline Lacrosse -- Tournament Scheduler</title> 
+<title>Adrenaline Lacrosse -- Tournament Scheduler</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -554,7 +554,7 @@ function showDay(d){
 // HELPERS
 // ============================================================
 function rl(){return parseInt(document.getElementById('rec-lunch').value);}
-function nlH(){const r=rl(),v=document.getElementById('nonrec-lunch').value;return v==='before'?r-1:v==='after'?r+1:r;}
+function nlH(){return rl()+1;} // non-rec lunch removed -- returns slot after recruiter lunch (unused)
 function slotM(){return+document.getElementById('slotdur').value+(+document.getElementById('buf').value);}
 function sH(s){const[h,m]=s.split(':').map(Number);return h+m/60;}
 function s2m(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
