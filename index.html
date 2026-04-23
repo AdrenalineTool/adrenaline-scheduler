@@ -2067,6 +2067,66 @@ function updateRecFieldRecommendation(){
   el.style.display='none';
 }
 
+
+// ============================================================
+// FIELD GENDER & RECRUITING RECOMMENDATION
+// ============================================================
+function updateFieldGenderRecommendation(){
+  const el=document.getElementById('field-gender-rec');
+  if(!el)return;
+  if(!divs.length||!fields.length){el.style.display='none';return;}
+  const slotDur=+document.getElementById('slotdur').value||45;
+  const buf=+document.getElementById('buf').value||5;
+  const sh=+document.getElementById('dstart').value||8;
+  const eh=+document.getElementById('dend').value||18;
+  const gpt=+document.getElementById('gpt').value||3;
+  const usable=Math.floor(((eh-sh)*60)/(slotDur+buf))-1;
+  const boysRecTeams=divs.filter(d=>d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
+  const girlsRecTeams=divs.filter(d=>d.recruitable&&d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
+  const boysNonRecTeams=divs.filter(d=>!d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
+  const girlsNonRecTeams=divs.filter(d=>!d.recruitable&&d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
+  const boysTotal=boysRecTeams+boysNonRecTeams;
+  const girlsTotal=girlsRecTeams+girlsNonRecTeams;
+  const minBoysRec=boysRecTeams>0?Math.max(1,Math.ceil(boysRecTeams*gpt/2/usable)):0;
+  const minGirlsRec=girlsRecTeams>0?Math.max(1,Math.ceil(girlsRecTeams*gpt/2/usable)):0;
+  const minBoysNonRec=boysNonRecTeams>0?Math.max(1,Math.ceil(boysNonRecTeams*gpt/2/usable)):0;
+  const minGirlsNonRec=girlsNonRecTeams>0?Math.max(1,Math.ceil(girlsNonRecTeams*gpt/2/usable)):0;
+  const minBoysTotal=minBoysRec+minBoysNonRec;
+  const minGirlsTotal=minGirlsRec+minGirlsNonRec;
+  const minTotal=minBoysTotal+minGirlsTotal;
+  const configuredBoys=fields.filter(f=>f.gender==='boys').length;
+  const configuredGirls=fields.filter(f=>f.gender==='girls').length;
+  const configuredBoth=fields.filter(f=>f.gender==='both').length;
+  const configuredBoysRec=fields.filter(f=>f.recruiting&&(f.gender==='boys'||f.gender==='both')).length;
+  const configuredGirlsRec=fields.filter(f=>f.recruiting&&(f.gender==='girls'||f.gender==='both')).length;
+  const totalRecFields=fields.filter(f=>f.recruiting).length;
+  const boysFieldsOk=boysTotal===0||(configuredBoys+configuredBoth)>=minBoysTotal;
+  const girlsFieldsOk=girlsTotal===0||(configuredGirls+configuredBoth)>=minGirlsTotal;
+  const boysRecOk=boysRecTeams===0||configuredBoysRec>=minBoysRec;
+  const girlsRecOk=girlsRecTeams===0||configuredGirlsRec>=minGirlsRec;
+  const allOk=boysFieldsOk&&girlsFieldsOk&&boysRecOk&&girlsRecOk;
+  let h2='<div class="cl '+(allOk?'cl-t':'cl-a')+'">';
+  h2+='<strong>'+(allOk?'✓ Field configuration looks good.':'Field configuration needed.')+'</strong> ';
+  h2+='<span style="font-size:11px;opacity:.8">'+usable+' usable slots/day · '+gpt+' games/team</span><br><br>';
+  h2+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead>';
+  h2+='<tr style="border-bottom:.5px solid rgba(0,0,0,.15)"><th style="text-align:left;padding:3px 8px">Group</th><th style="text-align:center;padding:3px 8px">Teams</th><th style="text-align:center;padding:3px 8px">Min fields</th><th style="text-align:center;padding:3px 8px">Rec fields needed</th><th style="text-align:center;padding:3px 8px">Status</th></tr>';
+  h2+='</thead><tbody>';
+  if(boysTotal>0){
+    const st=boysFieldsOk&&boysRecOk?'<span style="color:#085041;font-weight:600">✓ OK</span>':(!boysFieldsOk?'<span style="color:var(--red);font-weight:600">Need '+minBoysTotal+' boys fields</span>':'<span style="color:var(--amber);font-weight:600">Mark '+Math.max(0,minBoysRec-configuredBoysRec)+' as Recruiting</span>');
+    h2+=`<tr style="border-bottom:.5px solid rgba(0,0,0,.06)"><td style="padding:5px 8px;font-weight:500">Boys</td><td style="padding:5px 8px;text-align:center">${boysTotal} (${boysRecTeams} rec + ${boysNonRecTeams} non-rec)</td><td style="padding:5px 8px;text-align:center"><strong>${minBoysTotal}</strong> (${minBoysRec} rec + ${minBoysNonRec} non-rec)</td><td style="padding:5px 8px;text-align:center">${configuredBoysRec} / ${minBoysRec}</td><td style="padding:5px 8px;text-align:center">${st}</td></tr>`;
+  }
+  if(girlsTotal>0){
+    const st=girlsFieldsOk&&girlsRecOk?'<span style="color:#085041;font-weight:600">✓ OK</span>':(!girlsFieldsOk?'<span style="color:var(--red);font-weight:600">Need '+minGirlsTotal+' girls fields</span>':'<span style="color:var(--amber);font-weight:600">Mark '+Math.max(0,minGirlsRec-configuredGirlsRec)+' as Recruiting</span>');
+    h2+=`<tr style="border-bottom:.5px solid rgba(0,0,0,.06)"><td style="padding:5px 8px;font-weight:500">Girls</td><td style="padding:5px 8px;text-align:center">${girlsTotal} (${girlsRecTeams} rec + ${girlsNonRecTeams} non-rec)</td><td style="padding:5px 8px;text-align:center"><strong>${minGirlsTotal}</strong> (${minGirlsRec} rec + ${minGirlsNonRec} non-rec)</td><td style="padding:5px 8px;text-align:center">${configuredGirlsRec} / ${minGirlsRec}</td><td style="padding:5px 8px;text-align:center">${st}</td></tr>`;
+  }
+  h2+=`<tr style="border-top:1px solid rgba(0,0,0,.15);font-weight:600"><td style="padding:5px 8px">Total</td><td style="padding:5px 8px;text-align:center">${boysTotal+girlsTotal}</td><td style="padding:5px 8px;text-align:center">${minTotal} fields</td><td style="padding:5px 8px;text-align:center">${totalRecFields} rec fields assigned</td><td></td></tr>`;
+  h2+='</tbody></table>';
+  h2+='<div style="font-size:10px;margin-top:6px;opacity:.8">Set each field gender using Boys / Girls / Both dropdown. Check <strong>Recruiting</strong> on fields for recruiting-age divisions. Girls and boys fields are lined differently.</div>';
+  h2+='</div>';
+  el.innerHTML=h2;
+  el.style.display='block';
+}
+
 </script>
 </body>
 </html>
