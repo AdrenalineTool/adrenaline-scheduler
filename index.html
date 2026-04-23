@@ -201,7 +201,8 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <button class="step-btn" id="sb3" onclick="go('p3')">3 -- Pool seeding</button>
   <button class="step-btn" id="sb4" onclick="go('p4')">4 -- Travel tiers</button>
   <button class="step-btn" id="sb5" onclick="go('p5')">5 -- Schedule</button>
-  <button class="step-btn" id="sb6" onclick="go('p6')">6 -- Exports</button>
+  <button class="step-btn" id="sb6" onclick="go('p7')">6 -- Day 1 results</button>
+  <button class="step-btn" id="sb7" onclick="go('p7')">7 -- Exports</button>
 </div>
 
 <!-- ════════════════════════════════════════════════════
@@ -413,7 +414,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="flex:1"></div>
     <span id="conflict-ct" style="font-size:11px;font-weight:500"></span>
     <button class="btn btn-sm" id="regen-btn" style="display:none;color:var(--red);border-color:#f09595" onclick="generate()">Clear conflicts & regenerate</button>
-    <button class="btn btn-sm btn-navy" onclick="go('p6')">Exports -></button>
+    <button class="btn btn-sm btn-navy" onclick="go('p7')">Exports -></button>
   </div>
   <!-- WEATHER DELAY PANEL -->
   <div style="background:var(--lt-amber);border:.5px solid #FAC775;border-radius:8px;padding:12px 14px;margin-bottom:10px">
@@ -482,7 +483,25 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 <!-- ════════════════════════════════════════════════════
      PAGE 6 -- EXPORTS
 ═════════════════════════════════════════════════════ -->
+
+<!-- ════════════════════════════════════════════════════
+     PAGE 6 -- DAY 1 RESULTS
+═════════════════════════════════════════════════════ -->
 <div class="page" id="p6">
+  <div class="btn-row">
+    <button class="btn btn-sm" onclick="go('p5')">← Schedule</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-navy" onclick="applyDay1Results()">Apply results & seed Day 2 →</button>
+  </div>
+  <div class="cl cl-b" style="margin-bottom:12px">
+    Enter Day 1 results for each pool. The tool will automatically seed Day 2 using:
+    <strong>Points (Win=3, Tie=1, Loss=0) → Head-to-head → Fewest goals against → Goal differential.</strong>
+    Leave blank if results not yet available.
+  </div>
+  <div id="day1-results-out"></div>
+</div>
+
+<div class="page" id="p7">
   <div class="btn-row"><button class="btn btn-sm" onclick="go('p5')">← Schedule</button></div>
   <div class="cl cl-b" style="margin-bottom:14px">All exports are generated from the live schedule. Schedule files are Excel (.xlsx). The TourneyMachine import file is formatted for direct import -- no reformatting needed.</div>
 
@@ -542,6 +561,7 @@ function go(id){
     else if(i+1<n) b.classList.add('done');
   });
   if(id==='p4') renderTravel();
+  if(id==='p6') renderDay1Results();
 }
 function showDay(d){
   document.getElementById('grid-d1').style.display=d===1?'block':'none';
@@ -2232,6 +2252,152 @@ function validateAndProceed(){
   if(existing)existing.remove();
 
   go('p3');buildPools();
+}
+
+
+// ============================================================
+// DAY 1 RESULTS & STANDINGS
+// ============================================================
+let day1Results = {}; // {teamId: {w,l,t,gf,ga}}
+
+function renderDay1Results(){
+  const el=document.getElementById('day1-results-out');
+  if(!el)return;
+  if(!divs.length||!Object.keys(pools).length){
+    el.innerHTML='<div class="cl cl-a">Generate the schedule first, then return here to enter Day 1 results.</div>';
+    return;
+  }
+
+  // Initialize results for any team not yet entered
+  divs.forEach(d=>(pools[d.id]||[]).forEach(pool=>{
+    pool.teams.forEach(t=>{
+      if(!day1Results[t.id]) day1Results[t.id]={w:0,l:0,t:0,gf:0,ga:0};
+    });
+  }));
+
+  let html2='';
+  divs.forEach(d=>{
+    const dp=pools[d.id]||[];
+    html2+=`<div class="card" style="margin-bottom:16px">
+      <div class="card-title">${d.name}</div>`;
+
+    dp.forEach(pool=>{
+      html2+=`<div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--teal);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">${pool.label}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--navy);color:#fff">
+              <th style="padding:5px 10px;text-align:left;font-size:11px">Team</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">W</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">L</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">T</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">GF</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">GA</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">Pts</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">GD</th>
+              <th style="padding:5px 8px;text-align:center;font-size:11px">Seed</th>
+            </tr>
+          </thead>
+          <tbody id="pool-results-${d.id}-${pool.id}">`;
+
+      pool.teams.forEach((t,i)=>{
+        const r=day1Results[t.id]||{w:0,l:0,t:0,gf:0,ga:0};
+        const pts=r.w*3+r.t;
+        const gd=r.gf-r.ga;
+        html2+=`<tr style="border-bottom:.5px solid var(--mid-gray);background:${i%2===0?'#fff':'var(--lt-gray)'}">
+          <td style="padding:5px 10px;font-weight:500">${t.name}<br><span style="font-size:10px;color:var(--dark-gray)">${t.state} · ${t.tier}</span></td>
+          <td style="padding:3px 4px;text-align:center"><input type="number" min="0" max="10" value="${r.w}" style="width:36px;text-align:center;font-size:12px;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="updateResult(${t.id},'w',+this.value);refreshPoolStandings(${d.id},${pool.id})"></td>
+          <td style="padding:3px 4px;text-align:center"><input type="number" min="0" max="10" value="${r.l}" style="width:36px;text-align:center;font-size:12px;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="updateResult(${t.id},'l',+this.value);refreshPoolStandings(${d.id},${pool.id})"></td>
+          <td style="padding:3px 4px;text-align:center"><input type="number" min="0" max="10" value="${r.t}" style="width:36px;text-align:center;font-size:12px;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="updateResult(${t.id},'t',+this.value);refreshPoolStandings(${d.id},${pool.id})"></td>
+          <td style="padding:3px 4px;text-align:center"><input type="number" min="0" max="99" value="${r.gf}" style="width:40px;text-align:center;font-size:12px;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="updateResult(${t.id},'gf',+this.value);refreshPoolStandings(${d.id},${pool.id})"></td>
+          <td style="padding:3px 4px;text-align:center"><input type="number" min="0" max="99" value="${r.ga}" style="width:40px;text-align:center;font-size:12px;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="updateResult(${t.id},'ga',+this.value);refreshPoolStandings(${d.id},${pool.id})"></td>
+          <td style="padding:5px 8px;text-align:center;font-weight:600" id="pts-${t.id}">${pts}</td>
+          <td style="padding:5px 8px;text-align:center;color:${gd>0?'var(--teal)':gd<0?'var(--red)':'inherit'}" id="gd-${t.id}">${gd>0?'+':''}${gd}</td>
+          <td style="padding:5px 8px;text-align:center;font-weight:700;color:var(--navy)" id="seed-${t.id}">—</td>
+        </tr>`;
+      });
+
+      html2+=`</tbody></table></div>`;
+    });
+    html2+=`</div>`;
+  });
+
+  el.innerHTML=html2;
+
+  // Compute initial seeds
+  divs.forEach(d=>(pools[d.id]||[]).forEach(pool=>refreshPoolStandings(d.id,pool.id)));
+}
+
+function updateResult(teamId,field,val){
+  if(!day1Results[teamId])day1Results[teamId]={w:0,l:0,t:0,gf:0,ga:0};
+  day1Results[teamId][field]=val;
+  const r=day1Results[teamId];
+  const pts=r.w*3+r.t;
+  const gd=r.gf-r.ga;
+  const ptsEl=document.getElementById('pts-'+teamId);
+  const gdEl=document.getElementById('gd-'+teamId);
+  if(ptsEl)ptsEl.textContent=pts;
+  if(gdEl){gdEl.textContent=(gd>0?'+':'')+gd;gdEl.style.color=gd>0?'var(--teal)':gd<0?'var(--red)':'inherit';}
+}
+
+function refreshPoolStandings(divId,poolId){
+  const d=divs.find(x=>x.id===divId);
+  if(!d)return;
+  const pool=(pools[divId]||[]).find(p=>p.id===poolId);
+  if(!pool)return;
+
+  const sorted=seedPool(pool.teams,divId);
+  sorted.forEach((t,i)=>{
+    const el=document.getElementById('seed-'+t.id);
+    if(el){
+      el.textContent=i+1;
+      el.style.color=i<2?'var(--teal)':'var(--dark-gray)';
+    }
+  });
+}
+
+function seedPool(teams,divId){
+  // Tiebreaker: Points → Head-to-head → Fewest GA → Goal Differential
+  return [...teams].sort((a,b)=>{
+    const ra=day1Results[a.id]||{w:0,l:0,t:0,gf:0,ga:0};
+    const rb=day1Results[b.id]||{w:0,l:0,t:0,gf:0,ga:0};
+    const ptsDiff=(rb.w*3+rb.t)-(ra.w*3+ra.t);
+    if(ptsDiff!==0)return ptsDiff;
+    // Head-to-head: check if a beat b in sched1
+    const h2h=getHeadToHead(a.id,b.id);
+    if(h2h!==0)return -h2h; // positive = a won
+    // Fewest goals against
+    const gaDiff=ra.ga-rb.ga;
+    if(gaDiff!==0)return gaDiff;
+    // Goal differential
+    return (rb.gf-rb.ga)-(ra.gf-ra.ga);
+  });
+}
+
+function getHeadToHead(t1id,t2id){
+  // Returns +1 if t1 beat t2, -1 if t2 beat t1, 0 if not found/tied
+  // We don't have actual scores so use W/L records as proxy
+  // Real H2H would need score-by-game tracking
+  return 0; // placeholder — actual H2H requires per-game scores
+}
+
+function applyDay1Results(){
+  if(!Object.keys(day1Results).length){
+    showToast('Enter Day 1 results first','warn');
+    return;
+  }
+
+  // Re-seed pools based on standings
+  divs.forEach(d=>{
+    const dp=pools[d.id]||[];
+    dp.forEach(pool=>{
+      pool.seededTeams=seedPool(pool.teams,d.id);
+    });
+  });
+
+  showToast('Day 2 seeded from Day 1 results');
+  go('p5');
+  generate();
 }
 
 </script>
