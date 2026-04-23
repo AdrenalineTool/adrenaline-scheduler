@@ -362,7 +362,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div id="rec-field-rec" style="display:none;margin-top:8px"></div>
   <div class="divider"></div>
   <div class="btn-row" style="justify-content:flex-end">
-    <button class="btn btn-navy" onclick="go('p3');buildPools()">Pool seeding -></button>
+    <button class="btn btn-navy" onclick="validateAndProceed()">Pool seeding -></button>
   </div>
 </div>
 
@@ -2125,6 +2125,85 @@ function updateFieldGenderRecommendation(){
   h2+='</div>';
   el.innerHTML=h2;
   el.style.display='block';
+}
+
+
+// ============================================================
+// EVENT SETUP VALIDATION
+// ============================================================
+function validateAndProceed(){
+  const errors=[];
+  const warnings=[];
+
+  // Check teams uploaded
+  if(!divs.length){
+    errors.push('No teams uploaded — go back to Step 1 and upload your team list.');
+  }
+
+  // Check fields added
+  if(!fields.length){
+    errors.push('No fields added — add your fields in the Fields section above.');
+  }
+
+  if(fields.length>0){
+    // Check all fields have gender set (not just "both" if we have gender-specific divisions)
+    const hasBoysDiv=divs.some(d=>d.gender==='boys');
+    const hasGirlsDiv=divs.some(d=>d.gender==='girls');
+    const boysFields=fields.filter(f=>f.gender==='boys'||f.gender==='both').length;
+    const girlsFields=fields.filter(f=>f.gender==='girls'||f.gender==='both').length;
+
+    if(hasBoysDiv&&boysFields===0){
+      errors.push('You have boys divisions but no boys or both-gender fields. Set at least one field to Boys or Both.');
+    }
+    if(hasGirlsDiv&&girlsFields===0){
+      errors.push('You have girls divisions but no girls or both-gender fields. Set at least one field to Girls or Both.');
+    }
+
+    // Warn if all fields are "both" when there are gender-specific divisions
+    const allBoth=fields.every(f=>f.gender==='both');
+    if(allBoth&&hasBoysDiv&&hasGirlsDiv){
+      warnings.push('All fields are set to Both gender. For best results designate specific fields as Boys or Girls to match your venue layout — boys and girls fields are typically lined differently.');
+    }
+
+    // Check recruiting fields
+    const recTeams=divs.filter(d=>d.recruitable).reduce((a,d)=>a+d.teams.length,0);
+    const recFields=fields.filter(f=>f.recruiting).length;
+    if(recTeams>0&&recFields===0){
+      warnings.push('You have '+recTeams+' recruiting-age teams but no fields marked as Recruiting. Check the Recruiting box on the fields designated for recruiting-age divisions.');
+    }
+
+    // Check champ field exists if there are recruitable divisions
+    const champFields=fields.filter(f=>f.champ).length;
+    if(champFields===0){
+      warnings.push('No Championship field designated. Check Champ on the field where championship games will be played.');
+    }
+  }
+
+  // Show errors — block progression
+  if(errors.length){
+    const existing=document.getElementById('setup-validation-msg');
+    if(existing)existing.remove();
+    const div=document.createElement('div');
+    div.id='setup-validation-msg';
+    div.className='cl cl-r';
+    div.style.marginTop='10px';
+    div.innerHTML='<strong>Please fix the following before continuing:</strong><br>'+errors.map(e=>'• '+e).join('<br>');
+    document.querySelector('#p2 .btn-row:last-child').insertAdjacentElement('beforebegin',div);
+    div.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+
+  // Show warnings — allow progression with confirmation
+  if(warnings.length){
+    const msg=warnings.map(w=>'• '+w).join('\n');
+    if(!confirm('Heads up:\n\n'+msg+'\n\nContinue anyway?'))return;
+  }
+
+  // Clear any previous validation message
+  const existing=document.getElementById('setup-validation-msg');
+  if(existing)existing.remove();
+
+  go('p3');buildPools();
 }
 
 </script>
