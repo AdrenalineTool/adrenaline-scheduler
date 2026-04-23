@@ -358,6 +358,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <button class="btn btn-sm" onclick="addFs(8)">+ Add 8 fields</button>
   </div>
   <div id="parking-status" class="cl cl-t" style="display:none;margin-top:8px"></div>
+  <div id="field-gender-rec" style="display:none;margin-top:8px"></div>
   <div id="rec-field-rec" style="display:none;margin-top:8px"></div>
   <div class="divider"></div>
   <div class="btn-row" style="justify-content:flex-end">
@@ -588,19 +589,19 @@ function dl(fn,content,mime){
 // ============================================================
 // FIELDS
 // ============================================================
-function addF(n='',l=true,g='both',ch=false){
+function addF(n='',l=false,g='both',ch=false){
   setTimeout(runCalc,50);
   const id=fid++;
   fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
-function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();runCalc();}
+function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();runCalc();updateFieldGenderRecommendation();}
 function renderFields(){
   document.getElementById('fields-list').innerHTML=fields.map(f=>`
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 9px;background:var(--lt-gray);border-radius:5px;margin-bottom:4px">
       <input style="width:90px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" value="${f.name}" onchange="fields.find(x=>x.id===${f.id}).name=this.value">
-      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="fields.find(x=>x.id===${f.id}).gender=this.value">
+      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="fields.find(x=>x.id===${f.id}).gender=this.value;updateFieldGenderRecommendation()">
         <option value="both" ${f.gender==='both'?'selected':''}>Both</option>
         <option value="boys" ${f.gender==='boys'?'selected':''}>Boys</option>
         <option value="girls" ${f.gender==='girls'?'selected':''}>Girls</option>
@@ -612,7 +613,7 @@ function renderFields(){
         <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked"> Champ
       </label>
       <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--teal);font-weight:600">
-        <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked;updateRecFieldRecommendation()"> Recruiting
+        <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked;updateFieldGenderRecommendation();updateRecFieldRecommendation()"> Recruiting
       </label>
       <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Parking" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Parking spaces for this field">
       <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
@@ -630,6 +631,7 @@ function renderFields(){
       <button class="btn btn-sm btn-danger" onclick="remF(${f.id})">×</button>
     </div>`).join('');
   checkParkingConflicts();
+  updateFieldGenderRecommendation();
 }
 
 // ============================================================
@@ -775,6 +777,7 @@ function importRows(rows,colMap,filename){
   const calcTeamsEl=document.getElementById('calc-teams');
   if(calcTeamsEl) calcTeamsEl.value=totalUploaded;
   updateRecFieldRecommendation();
+  updateFieldGenderRecommendation();
   runCalc();
 }
 
@@ -2024,8 +2027,13 @@ function updateRecFieldRecommendation(){
   const girlsConcurrent=girlsRecTeams>0?Math.ceil(girlsRecGames/(minGirlsFields*usableRecSlots)):0;
 
   // Check current config
-  const currentRecBoys=fields.filter(f=>f.recruiting&&(f.gender==='boys'||f.gender==='both')).length;
-  const currentRecGirls=fields.filter(f=>f.recruiting&&(f.gender==='girls'||f.gender==='both')).length;
+  const recBothFields=fields.filter(f=>f.recruiting&&f.gender==='both').length;
+  const recBoysOnlyFields=fields.filter(f=>f.recruiting&&f.gender==='boys').length;
+  const recGirlsOnlyFields=fields.filter(f=>f.recruiting&&f.gender==='girls').length;
+  // "Both" gender fields are shared — allocate to whichever gender needs them most
+  const currentRecBoys=recBoysOnlyFields+recBothFields;
+  const currentRecGirls=recGirlsOnlyFields+recBothFields;
+  const totalRecFieldsAssigned=recBoysOnlyFields+recGirlsOnlyFields+recBothFields;
   const boysOk=boysRecTeams===0||currentRecBoys>=minBoysFields;
   const girlsOk=girlsRecTeams===0||currentRecGirls>=minGirlsFields;
 
@@ -2034,7 +2042,7 @@ function updateRecFieldRecommendation(){
       <strong>✓ Recruiting fields look good.</strong>
       ${recTeams} recruiting-age teams across ${recDivCount} divisions need a minimum of <strong>${totalMinRecFields} recruiting fields</strong>
       (${boysRecTeams>0?minBoysFields+' boys':''}${boysRecTeams>0&&girlsRecTeams>0?' + ':''}${girlsRecTeams>0?minGirlsFields+' girls':''}).
-      You have <strong>${currentRecBoys+currentRecGirls} recruiting fields assigned</strong>
+      You have <strong>${totalRecFieldsAssigned} recruiting fields assigned</strong>
       — Recruiting fields run wall-to-wall — every slot filled with a recruiting game both days.
       Recruiter lunch at ${fmt12(rl())} is a protected slot — no recruiting games that hour.
     </div>`;
@@ -2055,7 +2063,8 @@ function updateRecFieldRecommendation(){
       Recruiter lunch at ${fmt12(rl())} is always protected.
     </div>`;
   }
-  el.style.display='block';
+  // el.style.display='block'; // covered by updateFieldGenderRecommendation
+  el.style.display='none';
 }
 
 </script>
