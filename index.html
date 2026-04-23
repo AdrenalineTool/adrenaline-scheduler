@@ -414,8 +414,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="flex:1"></div>
     <span id="conflict-ct" style="font-size:11px;font-weight:500"></span>
     <button class="btn btn-sm" id="regen-btn" style="display:none;color:var(--red);border-color:#f09595" onclick="generate()">Clear conflicts & regenerate</button>
+    <button class="btn btn-sm btn-navy" onclick="go('p6')">Day 1 results -></button>
     <button class="btn btn-sm btn-navy" onclick="go('p7')">Exports -></button>
   </div>
+  <div id="conflict-detail" style="display:none;margin-bottom:8px"></div>
   <!-- WEATHER DELAY PANEL -->
   <div style="background:var(--lt-amber);border:.5px solid #FAC775;border-radius:8px;padding:12px 14px;margin-bottom:10px">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -1457,26 +1459,60 @@ function checkConflicts(sched){
 }
 function updateConflicts(){
   window._cset=new Set();
-  function markC(sched){
+  const conflictDetails=[];
+  function markC(sched,day){
     const tm={};
     Object.entries(sched).forEach(([slot,row])=>{
       Object.entries(row).forEach(([fid,g])=>{
         if(!g)return;
         [g.t1,g.t2].forEach(tid=>{
           if(!tm[tid])tm[tid]=[];
-          tm[tid].forEach(prev=>{if(prev.slot===slot){window._cset.add(slot+':'+fid);window._cset.add(slot+':'+prev.fid);}});
+          tm[tid].forEach(prev=>{
+            if(prev.slot===slot){
+              window._cset.add(slot+':'+fid);
+              window._cset.add(slot+':'+prev.fid);
+              // Find team name
+              let tname=tid;
+              divs.forEach(d=>d.teams.forEach(t=>{if(t.id===tid)tname=t.name;}));
+              conflictDetails.push({team:tname,slot:fmtSlot(slot),day:'Day '+day,
+                game1:g.t1n+' vs '+g.t2n,game2:(sched[prev.slot]&&sched[prev.slot][prev.fid])?
+                (sched[prev.slot][prev.fid].t1n+' vs '+sched[prev.slot][prev.fid].t2n):'game'});
+            }
+          });
           tm[tid].push({slot,fid});
         });
       });
     });
   }
-  markC(sched1);markC(sched2);
+  markC(sched1,1);markC(sched2,2);
 
   const c=checkConflicts(sched1)+checkConflicts(sched2);
   const el=document.getElementById('conflict-ct'),btn=document.getElementById('regen-btn');
   el.textContent=c===0?'✓ No conflicts':`${c} conflict(s) detected`;
   el.style.color=c===0?'var(--teal)':'var(--red)';
   btn.style.display=c>0?'inline-block':'none';
+
+  // Show conflict detail list
+  const detailEl=document.getElementById('conflict-detail');
+  if(detailEl){
+    if(conflictDetails.length===0){
+      detailEl.style.display='none';
+    } else {
+      // Deduplicate
+      const seen=new Set();
+      const unique=conflictDetails.filter(cd=>{
+        const key=cd.team+cd.slot+cd.day;
+        if(seen.has(key))return false;
+        seen.add(key);return true;
+      });
+      detailEl.style.display='block';
+      detailEl.innerHTML='<div class="cl cl-r"><strong>⚠ Conflict details — teams scheduled in two games at the same time:</strong><br><br>'+
+        unique.map(cd=>`<div style="padding:3px 0;border-bottom:.5px solid rgba(192,57,43,.2)">
+          <strong>${cd.team}</strong> — ${cd.day} at ${cd.slot}: appears in <em>${cd.game1}</em> and another game simultaneously
+        </div>`).join('')+
+        '<br><span style="font-size:11px">Drag games to new slots to resolve, or click Clear conflicts &amp; regenerate.</span></div>';
+    }
+  }
 }
 function dropGame(ev,toSlot,toFid,day){
   ev.preventDefault();if(!dgSrc)return;
