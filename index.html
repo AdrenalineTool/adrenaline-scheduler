@@ -355,7 +355,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   </div>
   <div class="form-row">
     <div class="fg"><label>Slot (min play)</label><input type="number" id="slotdur" value="45" min="30" max="90" step="5" oninput="runCalc();updateRecFieldRecommendation()"></div>
-    <div class="fg"><label>Changeover / warmup (min)</label><input type="number" id="buf" onchange="runCalc()" value="10" min="0" max="20" step="5"></div>
+    <div class="fg"><label>Changeover / warmup (min)</label><input type="number" id="buf" onchange="runCalc()" value="5" min="0" max="20" step="5"></div>
     <div class="fg"><label>Round buffer Day 2 (min)</label><input type="number" id="rdbuf" value="30" min="0" max="60" step="15"></div>
     <div class="fg"><label>Min rest between games</label><select id="minrest"><option value="1" selected>1 slot</option><option value="2">2 slots</option></select></div>
   </div>
@@ -821,7 +821,7 @@ function importRows(rows,colMap,filename){
     if(!dm[dn]){
       var id=did++;
       var gen=dn.toLowerCase().indexOf('girl')>=0?'girls':'boys';
-      var rec=dn.indexOf('2027')>=0||dn.indexOf('2028')>=0;
+      var rec=false; // default non-recruiting — set manually in pool seeding
       dm[dn]={id:id,name:dn,recruitable:rec,gender:gen,teams:[]};
       divs.push(dm[dn]);
     }
@@ -981,6 +981,17 @@ function buildPools(){
   renderPools();
 }
 
+function toggleRecruitable(divId, val){
+  const d=divs.find(x=>x.id===divId);
+  if(d){
+    d.recruitable=val;
+    renderPools();
+    updateFieldGenderRecommendation();
+    updateRecFieldRecommendation();
+    showToast(d.name+' marked as '+(val?'Recruiting':'Non-recruiting'));
+  }
+}
+
 function countRegionConflicts(teams){
   let c=0;
   for(let i=0;i<teams.length;i++)
@@ -999,7 +1010,9 @@ function renderPools(){
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${d.name}
         <span style="font-size:11px;font-weight:400;color:var(--dark-gray)">${d.teams.length} teams * ${dp.length} pool(s) * Top ${adv} advance</span>
-        ${d.recruitable?'<span class="pill p-ok">Recruitable</span>':''}
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;background:${d.recruitable?'var(--lt-teal)':'var(--lt-gray)'};padding:3px 8px;border-radius:20px;color:${d.recruitable?'#085041':'var(--dark-gray)'};font-weight:500">
+          <input type="checkbox" ${d.recruitable?'checked':''} onchange="toggleRecruitable(${d.id},this.checked)"> Recruiting division
+        </label>
       </div>
       <div class="pool-grid">
         ${dp.map((pool,pi)=>`
@@ -1207,41 +1220,69 @@ function genD1(){
     dpod[d.id].forEach(f=>{fieldLastSlot[f.id]=startSlot+slotsNeeded;});
   });
 
-  // ── STEP 3: Schedule games ────────────────────────────────────────────────
-  const schedOrder=[...divs.filter(d=>d.recruitable),...divs.filter(d=>!d.recruitable)];
-  let gc=0;
-
-  schedOrder.forEach(d=>{
+  // ── STEP 3: Greedy slot-filling scheduler ───────────────────────────────────
+  // Process one slot at a time across ALL divisions simultaneously
+  // This maximizes field utilization vs sequential per-division scheduling
+  
+  // Build matchup queues per division
+  const matchQueues={};
+  divs.forEach(d=>{
+    matchQueues[d.id]=[];
     (pools[d.id]||[]).forEach(pool=>{
       const ms=[];
       for(let i=0;i<pool.teams.length;i++)
-        for(let j=i+1;j<pool.teams.length;j++)ms.push([pool.teams[i],pool.teams[j]]);
+        for(let j=i+1;j<pool.teams.length;j++)
+          ms.push([pool.teams[i],pool.teams[j],pool.label]);
+      // Shuffle for variety
       for(let i=ms.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ms[i],ms[j]]=[ms[j],ms[i]];}
-      ms.forEach(([t1,t2])=>{
-        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt)return;
-        for(let si=0;si<slots.length;si++){
-          const s=slots[si],h=sH(s);
-          if(d.recruitable&&h===R)continue;
-          const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
-          if((te1==='in'||te1==='both')&&h<lc)continue;
-          if((te2==='in'||te2==='both')&&h<lc)continue;
-          if((te1==='out'||te1==='both')&&h>ec)continue;
-          if((te2==='out'||te2==='both')&&h>ec)continue;
-          const s1=tS[t1.id],s2=tS[t2.id];
-          if(!(s1.length===0||si-slots.indexOf(s1[s1.length-1])>minRest))continue;
-          if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;
-          if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
-          if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-          const podFields=dpod[d.id]||[];
-          const av=podFields.filter(f=>!sched1[s][f.id]);
-          if(!av.length)continue;
-          sched1[s][av[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
-            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,type:'pool'};
-          tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;played.add(pk(t1.id,t2.id));break;
-        }
-      });
+      matchQueues[d.id].push(...ms);
     });
   });
+
+  // Schedule order: rec divs first, then non-rec
+  const schedOrder=[...divs.filter(d=>d.recruitable),...divs.filter(d=>!d.recruitable)];
+
+  let gc=0;
+  // Process each slot, try to fill it across all divisions
+  for(let si=0;si<slots.length;si++){
+    const s=slots[si],h=sH(s);
+    schedOrder.forEach(d=>{
+      if(!matchQueues[d.id].length)return;
+      if(d.recruitable&&h===R)return;
+      const podFields=dpod[d.id]||[];
+      const avFields=podFields.filter(f=>!sched1[s][f.id]);
+      if(!avFields.length)return;
+      
+      // Find a valid matchup for this slot
+      const queue=matchQueues[d.id];
+      for(let qi=0;qi<queue.length;qi++){
+        const [t1,t2,poolLabel]=queue[qi];
+        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){queue.splice(qi,1);qi--;continue;}
+        const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
+        if((te1==='in'||te1==='both')&&h<lc)continue;
+        if((te2==='in'||te2==='both')&&h<lc)continue;
+        if((te1==='out'||te1==='both')&&h>ec)continue;
+        if((te2==='out'||te2==='both')&&h>ec)continue;
+        const s1=tS[t1.id],s2=tS[t2.id];
+        if(!(s1.length===0||si-slots.indexOf(s1[s1.length-1])>minRest))continue;
+        if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;
+        if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
+        if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
+        // Place game
+        sched1[s][avFields[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+          divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
+        tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
+        played.add(pk(t1.id,t2.id));
+        queue.splice(qi,1);
+        // Check if more fields available in this slot for another game from same div
+        const avFields2=podFields.filter(f=>!sched1[s][f.id]);
+        if(!avFields2.length)break;
+        break; // one game per div per slot (respect min rest)
+      }
+    });
+  }
+
+
   // ── BACKFILL PASS ────────────────────────────────────────────────────────
   // After main scheduling, fill remaining idle slots with unscheduled games
   // All existing rules apply (pods, rest, travel, lunch, gender)
@@ -1677,18 +1718,48 @@ function renderUtil(){
         <div class="met"><div class="met-v" style="color:var(--purple)">${prac}</div><div class="met-l">Practice slots</div></div>
         <div class="met"><div class="met-v" style="color:#aaa">${total-games-prac}</div><div class="met-l">Idle slots</div></div>
       </div>`;
+  // Legend
+  html+=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:10px">
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:var(--teal);border-radius:2px;display:inline-block"></span>Game</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#AFA9EC;border-radius:2px;display:inline-block"></span>Practice</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#E8E6DE;border-radius:2px;border:1px solid #D3D1C7;display:inline-block"></span>Idle</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:var(--navy);border-radius:2px;display:inline-block"></span>Lunch break</span>
+  </div>`;
+
   stats.forEach(st=>{
     const gp=st.f?Math.round(st.g/st.f*100):0;
     const pp=st.f?Math.round(st.p/st.f*100):0;
-    const bc=gp>=90?'var(--teal)':gp>=65?'#5DCAA5':gp>=35?'#AFA9EC':'#D3D1C7';
-    const tag=st.isL?`<span class="util-tag ut-lunch">lunch</span>`:gp>=90?`<span class="util-tag ut-full">full</span>`:gp>=65?`<span class="util-tag ut-part">partial</span>`:st.p>0?`<span class="util-tag ut-prac">+practice</span>`:`<span class="util-tag ut-idle">idle</span>`;
-    html+=`<div class="util-bar-row">
-      <span class="util-time">${fmtSlot(st.s)}</span>
-      <div class="util-bg">
-        <div class="util-fill-g" style="width:${st.isL?100:gp}%;background:${st.isL?'var(--navy)':bc}"></div>
-        ${!st.isL&&pp>0?`<div class="util-fill-p" style="left:${gp}%;width:${pp}%;background:#AFA9EC"></div>`:''}
+    const ip=Math.max(0,100-gp-pp); // idle %
+    const gameColor='var(--teal)';
+    const pracColor='#AFA9EC';
+    const idleColor='#E8E6DE';
+    const lunchColor='var(--navy)';
+
+    // Status label
+    let statusLabel='';
+    if(st.isL){
+      statusLabel=`<span style="font-size:9px;background:var(--navy);color:#fff;padding:1px 6px;border-radius:3px">Lunch</span>`;
+    } else if(gp>=90){
+      statusLabel=`<span style="font-size:9px;background:var(--lt-teal);color:#085041;padding:1px 6px;border-radius:3px">Full</span>`;
+    } else if(gp>=65){
+      statusLabel=`<span style="font-size:9px;background:var(--lt-blue);color:#0C447C;padding:1px 6px;border-radius:3px">${gp}% games</span>`;
+    } else if(pp>0){
+      statusLabel=`<span style="font-size:9px;background:var(--lt-purple);color:#3C3489;padding:1px 6px;border-radius:3px">${gp}% games · ${pp}% practice</span>`;
+    } else {
+      statusLabel=`<span style="font-size:9px;background:var(--lt-red);color:var(--red);padding:1px 6px;border-radius:3px">${ip}% idle</span>`;
+    }
+
+    html+=`<div class="util-bar-row" style="margin-bottom:4px">
+      <span class="util-time" style="font-size:10px;font-weight:500;min-width:52px">${fmtSlot(st.s)}</span>
+      <div style="flex:1;height:16px;background:${idleColor};border-radius:4px;overflow:hidden;position:relative;border:.5px solid #D3D1C7">
+        ${st.isL
+          ? `<div style="position:absolute;left:0;top:0;width:100%;height:100%;background:${lunchColor}"></div>`
+          : `<div style="position:absolute;left:0;top:0;width:${gp}%;height:100%;background:${gameColor}"></div>
+             <div style="position:absolute;left:${gp}%;top:0;width:${pp}%;height:100%;background:${pracColor}"></div>`
+        }
       </div>
-      <span class="util-pct">${st.isL?'':st.g+'/'+st.f}</span>${tag}
+      <span style="font-size:10px;color:var(--dark-gray);min-width:36px;text-align:right">${st.isL?'':st.g+'/'+st.f}</span>
+      <span style="min-width:110px;text-align:right">${statusLabel}</span>
     </div>`;
   });
   if(pc>0){
@@ -2074,36 +2145,26 @@ function runCalc(){
   const nonLitCount=fields.filter(f=>!f.lights).length;
   const totalConfigured=fields.length;
 
-  // Utilization estimate based on uploaded teams
+  // Utilization estimate — use actual configured fields
   const totalTeams=divs.reduce((a,d)=>a+d.teams.length,0);
-  const recTeamsCount=divs.filter(d=>d.recruitable).reduce((a,d)=>a+d.teams.length,0);
-  const nonRecTeamsCount=totalTeams-recTeamsCount;
-  const recGamesNeeded=Math.ceil(recTeamsCount*gpt/2);
-  const nonRecGamesNeeded=Math.ceil(nonRecTeamsCount*gpt/2);
-
-  // Field counts (from flagged fields or auto-calc)
-  const recFieldCount=fields.filter(f=>f.recruiting).length||
-    (recTeamsCount>0?Math.max(1,Math.ceil(recGamesNeeded/Math.max(1,usableNonLit-1))):0);
-  const nonRecFieldCount=Math.max(0,fields.length-recFieldCount)||
-    (nonRecTeamsCount>0?Math.max(1,Math.ceil(nonRecGamesNeeded/usableNonLit)):0);
-
-  // Available game slots
-  const recAvailable=recFieldCount*(usableNonLit); // rec loses 1 for lunch
-  const nonRecAvailable=nonRecFieldCount*usableNonLit;
-  const totalAvailable=recAvailable+nonRecAvailable;
-  const totalGamesNeeded=recGamesNeeded+nonRecGamesNeeded;
-
-  // Utilization
+  const totalGamesNeeded=Math.ceil(totalTeams*gpt/2);
+  const configuredFields=fields.length||fIn||0;
+  const totalAvailable=configuredFields>0?configuredFields*usableNonLit:0;
   const util=totalAvailable>0?Math.round(totalGamesNeeded/totalAvailable*100):0;
-  const idleSlots=totalAvailable-totalGamesNeeded;
+  const idleSlots=Math.max(0,totalAvailable-totalGamesNeeded);
   const utilColor=util>=90?'#085041':util>=75?'var(--amber)':'var(--red)';
+  const minFieldsNeeded=Math.ceil(totalGamesNeeded/usableNonLit);
 
   let utilNote='';
   if(totalTeams>0){
     utilNote='<br><span style="font-size:11px"><strong>With your '+totalTeams+' teams:</strong> '+
-      totalGamesNeeded+' games needed across '+(recFieldCount+nonRecFieldCount)+' fields × '+usableNonLit+' usable slots = '+totalAvailable+' game slots available. '+
-      '<strong style="color:'+utilColor+'">~'+util+'% utilization</strong>'+
-      (idleSlots>0?' ('+idleSlots+' idle field-slots — due to lunch break and division size rounding)':'.')+
+      totalGamesNeeded+' games needed. '+
+      (configuredFields>0?
+        configuredFields+' fields × '+usableNonLit+' usable slots = '+totalAvailable+' game slots → '+
+        '<strong style="color:'+utilColor+'">~'+util+'% utilization</strong>'+
+        (idleSlots>0?' · '+idleSlots+' idle slots':''):
+        'Minimum '+minFieldsNeeded+' fields needed')+
+      '. Teams/field: <strong>'+Math.round(totalTeams/(configuredFields||minFieldsNeeded)*10)/10+'</strong>'+
       '</span>';
   }
 
@@ -2469,6 +2530,18 @@ function updateFieldGenderRecommendation(){
   h2+=champStatus;
   h2+='</div>';
   el.innerHTML=h2;
+
+  // Championship field check
+  const champFields=fields.filter(f=>f.champ).length;
+  const hasBoysDivs=divs.some(d=>d.gender==='boys'||d.gender==='both');
+  const hasGirlsDivs=divs.some(d=>d.gender==='girls'||d.gender==='both');
+  const champNeeded=hasBoysDivs&&hasGirlsDivs?2:1;
+  const champOk=champFields>=champNeeded;
+  const champNote=document.createElement('div');
+  champNote.style.cssText='margin-top:8px;padding:6px 10px;border-radius:6px;font-size:11px;background:'+(champOk?'var(--lt-teal)':'var(--lt-amber)')+';color:'+(champOk?'#085041':'#412402');
+  champNote.innerHTML='<strong>'+(champOk?'✓':'⚠')+' Championship field'+(champNeeded>1?'s':'')+':</strong> Need '+champNeeded+' field'+(champNeeded>1?'s':'')+' marked as Champ '+(hasBoysDivs&&hasGirlsDivs?'(1 boys + 1 girls, or 1 Both-gender)':'')+'. Currently: '+champFields+' assigned.'+(champOk?'':' Check the <strong>Champ</strong> box on '+champNeeded+' field'+(champNeeded>1?'s':'')+' above.');
+  el.querySelector('.cl') && el.querySelector('.cl').appendChild(champNote);
+
   el.style.display='block';
 }
 
