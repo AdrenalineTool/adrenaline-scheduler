@@ -373,6 +373,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   </div>
 
   <div class="sec-label">Fields <span style="font-weight:400;color:var(--dark-gray)">(add each field for this event)</span></div>
+  <div class="cl cl-t" style="margin-bottom:8px;font-size:11px">Set the <strong>Venue/location</strong> on each field to group fields that are at the same physical location. The scheduler will only cluster fields within the same venue into a pod — teams will never be assigned games at different venues in the same division.</div>
   <div id="fields-list"></div>
   <div class="btn-row" style="margin-top:6px">
     <button class="btn btn-sm" onclick="addF()">+ Add field</button>
@@ -661,7 +662,7 @@ function dl(fn,content,mime){
 function addF(n='',l=false,g='both',ch=false){
   setTimeout(runCalc,50);
   const id=fid++;
-  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',location:'Main venue'});
+  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',venue:'Main venue',location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
@@ -697,6 +698,7 @@ function renderFields(){
         <option value="White" ${f.parkingPass==='White'?'selected':''} style="background:#f8fafc">⚪ White</option>
       </select>
       <input style="width:100px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Lot name" value="${f.parkingLot||''}" onchange="fields.find(x=>x.id===${f.id}).parkingLot=this.value" title="Parking lot name/description">
+      <input style="width:110px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;border-color:var(--teal)" placeholder="Venue/location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value" title="Venue or location name — fields at the same venue will be grouped as a pod">
       <button class="btn btn-sm btn-danger" onclick="remF(${f.id})">×</button>
     </div>`).join('');
   checkParkingConflicts();
@@ -1105,76 +1107,110 @@ function generate(){
 
 function genD1(){
   const sh=+document.getElementById('dstart').value,eh=+document.getElementById('dend').value;
-  const slots=getSlots(sh,eh);const R=rl(),N=nlH();
+  const slots=getSlots(sh,eh);const R=rl();
   const minRest=+document.getElementById('minrest').value,gpt=+document.getElementById('gpt').value;
   const lc=+document.getElementById('late-cut').value,ec=+document.getElementById('early-cut').value;
   sched1={};slots.forEach(s=>{sched1[s]={};fields.forEach(f=>{sched1[s][f.id]=null;});});
   const tG={},tS={},played=new Set();
   divs.forEach(d=>d.teams.forEach(t=>{tG[t.id]=0;tS[t.id]=[];}));
 
-  // ── POD ASSIGNMENT ────────────────────────────────────────────────────────
-  // GOAL: Fill recruiting fields wall-to-wall both days with recruiting games.
-  // Recruiting fields = fields with Recruiting checkbox checked.
-  // ALL recruiting divisions share ONLY those fields — no idle slots on rec fields.
-  // Non-recruiting divisions get all remaining fields.
-  // Recruiting divisions scheduled first to lock down their fields.
+  // ── VENUE-AWARE POD ASSIGNMENT ────────────────────────────────────────────
+  // Rule 1: Never assign a division a pod that spans multiple venues.
+  // Rule 2: Recruiting divisions share a rec field pod per venue per gender.
+  // Rule 3: Non-rec divisions get consistent pods with smart staggering —
+  //         divisions that finish early hand off their pod to a later division.
+  // Rule 4: Idle rec fields become available to non-rec divisions ONLY if
+  //         they are at the same venue as the non-rec division's pod.
   // ─────────────────────────────────────────────────────────────────────────
 
-  const recFieldsBoys=fields.filter(f=>f.recruiting&&(f.gender==='boys'||f.gender==='both'));
-  const recFieldsGirls=fields.filter(f=>f.recruiting&&(f.gender==='girls'||f.gender==='both'));
-  const boysFields=fields.filter(f=>f.gender==='boys'||f.gender==='both');
-  const girlsFields=fields.filter(f=>f.gender==='girls'||f.gender==='both');
+  // Group fields by venue
+  const venues=[...new Set(fields.map(f=>f.venue||'Main venue'))];
 
-  // Calculate minimum rec fields from team counts if none are manually flagged
-  const slotDurG=+document.getElementById('slotdur').value||50;
-  const bufG=+document.getElementById('buf').value||10;
-  const shG=+document.getElementById('dstart').value||8;
-  const ehG=+document.getElementById('dend').value||18;
-  const gptG=+document.getElementById('gpt').value||3;
-  const usableSlotsG=Math.floor(((ehG-shG)*60)/(slotDurG+bufG))-1; // minus lunch
-  const boysRecTeamsG=divs.filter(d=>d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
-  const girlsRecTeamsG=divs.filter(d=>d.recruitable&&d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
-  const autoBoysFields=boysRecTeamsG>0?Math.max(1,Math.ceil(boysRecTeamsG*gptG/2/usableSlotsG)):0;
-  const autoGirlsFields=girlsRecTeamsG>0?Math.max(1,Math.ceil(girlsRecTeamsG*gptG/2/usableSlotsG)):0;
+  // Per-venue field lists by gender
+  const venueFields={};
+  venues.forEach(v=>{
+    venueFields[v]={
+      all:fields.filter(f=>(f.venue||'Main venue')===v),
+      boys:fields.filter(f=>(f.venue||'Main venue')===v&&(f.gender==='boys'||f.gender==='both')),
+      girls:fields.filter(f=>(f.venue||'Main venue')===v&&(f.gender==='girls'||f.gender==='both')),
+      recBoys:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&(f.gender==='boys'||f.gender==='both')),
+      recGirls:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&(f.gender==='girls'||f.gender==='both')),
+    };
+  });
 
-  // Use flagged fields if available, otherwise auto-assign minimum from gender pool
-  const recBoysPool=recFieldsBoys.length?recFieldsBoys:boysFields.slice(0,autoBoysFields);
-  const recGirlsPool=recFieldsGirls.length?recFieldsGirls:girlsFields.slice(autoBoysFields,autoBoysFields+autoGirlsFields);
-
-  // Non-rec fields = everything not claimed by rec pools
-  const recIds=new Set([...recBoysPool,...recGirlsPool].map(f=>f.id));
-  const nonRecBoys=boysFields.filter(f=>!recIds.has(f.id));
-  const nonRecGirls=girlsFields.filter(f=>!recIds.has(f.id));
-
-  // Calculate minimum non-rec fields needed (same wall-to-wall logic as rec)
-  const nonRecBoysTeams=divs.filter(d=>!d.recruitable&&(d.gender==='boys'||d.gender==='both')).reduce((a,d)=>a+d.teams.length,0);
-  const nonRecGirlsTeams=divs.filter(d=>!d.recruitable&&(d.gender==='girls'||d.gender==='both')).reduce((a,d)=>a+d.teams.length,0);
-  const autoNonRecBoysFields=nonRecBoysTeams>0?Math.max(1,Math.ceil(nonRecBoysTeams*gptG/2/usableSlotsG)):0;
-  const autoNonRecGirlsFields=nonRecGirlsTeams>0?Math.max(1,Math.ceil(nonRecGirlsTeams*gptG/2/usableSlotsG)):0;
-
-  // Non-rec shared pool: all non-rec divisions of same gender share the same fields
-  // Same wall-to-wall + stagger logic as recruiting fields — just on different fields
-  const nonRecBoysPool=nonRecBoys.slice(0,autoNonRecBoysFields).length?
-    nonRecBoys.slice(0,autoNonRecBoysFields):
-    boysFields.filter(f=>!recIds.has(f.id)).slice(0,autoNonRecBoysFields);
-  const nonRecGirlsPool=nonRecGirls.slice(0,autoNonRecGirlsFields).length?
-    nonRecGirls.slice(0,autoNonRecGirlsFields):
-    girlsFields.filter(f=>!recIds.has(f.id)).slice(0,autoNonRecGirlsFields);
+  // Calculate min fields needed per group using usable slots
+  const slotDurG=+document.getElementById('slotdur').value||45;
+  const bufG=+document.getElementById('buf').value||5;
+  const usableSlotsG=slots.length-1; // minus lunch
+  const calcMinFields=(teams)=>teams>0?Math.max(1,Math.ceil(teams*gpt/2/usableSlotsG)):0;
 
   const dpod={};
-  // Recruiting divisions → shared rec pool
-  divs.filter(d=>d.recruitable).forEach(d=>{
-    dpod[d.id]=d.gender==='boys'?recBoysPool:recGirlsPool;
-  });
-  // Non-recruiting divisions → shared non-rec pool (all same gender share same fields)
-  divs.filter(d=>!d.recruitable).forEach(d=>{
-    dpod[d.id]=(d.gender==='boys'||d.gender==='both')?nonRecBoysPool:nonRecGirlsPool;
+
+  // ── STEP 1: Assign recruiting divisions to rec field pods (per venue) ─────
+  // Pick the venue with the most rec fields for each gender
+  const boysRecDivs=divs.filter(d=>d.recruitable&&d.gender==='boys');
+  const girlsRecDivs=divs.filter(d=>d.recruitable&&d.gender==='girls');
+
+  const bestBoysRecVenue=venues.sort((a,b)=>(venueFields[b].recBoys.length)-(venueFields[a].recBoys.length))[0];
+  const bestGirlsRecVenue=venues.sort((a,b)=>(venueFields[b].recGirls.length)-(venueFields[a].recGirls.length))[0];
+
+  const recBoysPool=venueFields[bestBoysRecVenue]?.recBoys.length?
+    venueFields[bestBoysRecVenue].recBoys:
+    venueFields[bestBoysRecVenue]?.boys.slice(0,calcMinFields(boysRecDivs.reduce((a,d)=>a+d.teams.length,0)))||[];
+
+  const recGirlsPool=venueFields[bestGirlsRecVenue]?.recGirls.length?
+    venueFields[bestGirlsRecVenue].recGirls:
+    venueFields[bestGirlsRecVenue]?.girls.slice(0,calcMinFields(girlsRecDivs.reduce((a,d)=>a+d.teams.length,0)))||[];
+
+  boysRecDivs.forEach(d=>{dpod[d.id]=recBoysPool;});
+  girlsRecDivs.forEach(d=>{dpod[d.id]=recGirlsPool;});
+
+  const recIds=new Set([...recBoysPool,...recGirlsPool].map(f=>f.id));
+
+  // ── STEP 2: Assign non-rec divisions with smart stagger ───────────────────
+  // Sort non-rec divisions largest first so they get first pick of fields
+  const nonRecDivs=[...divs.filter(d=>!d.recruitable)].sort((a,b)=>b.teams.length-a.teams.length);
+
+  // Per venue, assign non-rec divisions to available fields
+  // Track field usage timeline to enable staggering
+  const fieldLastSlot={}; // {fieldId: last slot index used}
+  fields.forEach(f=>{fieldLastSlot[f.id]=-1;});
+
+  nonRecDivs.forEach(d=>{
+    const gen=d.gender;
+    const gamesNeeded=Math.ceil(d.teams.length*gpt/2);
+    const podSize=Math.max(1,Math.ceil(gamesNeeded/usableSlotsG));
+
+    // Find best venue for this division (most available fields of right gender)
+    let bestVenue=venues[0];
+    let bestScore=-1;
+    venues.forEach(v=>{
+      const avail=(gen==='boys'?venueFields[v].boys:gen==='girls'?venueFields[v].girls:venueFields[v].all)
+        .filter(f=>!recIds.has(f.id));
+      if(avail.length>bestScore){bestScore=avail.length;bestVenue=v;}
+    });
+
+    // Get available fields at best venue (non-rec fields first, then idle rec fields)
+    const venueAvail=(gen==='boys'?venueFields[bestVenue].boys:
+      gen==='girls'?venueFields[bestVenue].girls:venueFields[bestVenue].all);
+    const nonRecFirst=venueAvail.filter(f=>!recIds.has(f.id));
+    const recOverflow=venueAvail.filter(f=>recIds.has(f.id)); // same-venue idle rec fields
+
+    // Pick pod: prefer fields that will be free earliest (smart stagger)
+    const allCandidates=[...nonRecFirst,...recOverflow];
+    const sorted=[...allCandidates].sort((a,b)=>(fieldLastSlot[a.id]||0)-(fieldLastSlot[b.id]||0));
+    dpod[d.id]=sorted.slice(0,podSize);
+
+    // Estimate when this division will finish and update field timeline
+    const slotsNeeded=Math.ceil(gamesNeeded/podSize);
+    const startSlot=(dpod[d.id].length>0?Math.max(...dpod[d.id].map(f=>fieldLastSlot[f.id]||0)):0);
+    dpod[d.id].forEach(f=>{fieldLastSlot[f.id]=startSlot+slotsNeeded;});
   });
 
-  // Schedule recruiting divisions FIRST so they fill their fields wall-to-wall
+  // ── STEP 3: Schedule games ────────────────────────────────────────────────
   const schedOrder=[...divs.filter(d=>d.recruitable),...divs.filter(d=>!d.recruitable)];
-
   let gc=0;
+
   schedOrder.forEach(d=>{
     (pools[d.id]||[]).forEach(pool=>{
       const ms=[];
@@ -1185,9 +1221,6 @@ function genD1(){
         if(tG[t1.id]>=gpt||tG[t2.id]>=gpt)return;
         for(let si=0;si<slots.length;si++){
           const s=slots[si],h=sH(s);
-          // Lunch break rules:
-          // Recruiting divisions: ALWAYS skip recruiter lunch slot — fields go dark
-          // Non-recruiting divisions: NO protected lunch slot — teams eat in natural game gaps
           if(d.recruitable&&h===R)continue;
           const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
           if((te1==='in'||te1==='both')&&h<lc)continue;
@@ -1211,6 +1244,7 @@ function genD1(){
   });
   window._played=played;window._tS=tS;window._dpod=dpod;
 }
+
 function genD2(){
   const sh=+document.getElementById('dstart').value,eh=+document.getElementById('d2end').value;
   const slots=getSlots(sh,eh);const R=rl();
