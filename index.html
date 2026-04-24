@@ -1242,6 +1242,49 @@ function genD1(){
       });
     });
   });
+  // ── BACKFILL PASS ────────────────────────────────────────────────────────
+  // After main scheduling, fill remaining idle slots with unscheduled games
+  // All existing rules apply (pods, rest, travel, lunch, gender)
+  let backfillCount=0;
+  schedOrder.forEach(d=>{
+    (pools[d.id]||[]).forEach(pool=>{
+      const ms=[];
+      for(let i=0;i<pool.teams.length;i++)
+        for(let j=i+1;j<pool.teams.length;j++){
+          // Only include games not yet scheduled
+          const key=pk(pool.teams[i].id,pool.teams[j].id);
+          if(!played.has(key)&&tG[pool.teams[i].id]<gpt&&tG[pool.teams[j].id]<gpt)
+            ms.push([pool.teams[i],pool.teams[j]]);
+        }
+      for(let i=ms.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ms[i],ms[j]]=[ms[j],ms[i]];}
+      ms.forEach(([t1,t2])=>{
+        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt)return;
+        for(let si=0;si<slots.length;si++){
+          const s=slots[si],h=sH(s);
+          if(d.recruitable&&h===R)continue;
+          const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
+          if((te1==='in'||te1==='both')&&h<lc)continue;
+          if((te2==='in'||te2==='both')&&h<lc)continue;
+          if((te1==='out'||te1==='both')&&h>ec)continue;
+          if((te2==='out'||te2==='both')&&h>ec)continue;
+          const s1=tS[t1.id],s2=tS[t2.id];
+          if(!(s1.length===0||si-slots.indexOf(s1[s1.length-1])>minRest))continue;
+          if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;
+          if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
+          if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
+          const podFields=dpod[d.id]||[];
+          const av=podFields.filter(f=>!sched1[s][f.id]);
+          if(!av.length)continue;
+          sched1[s][av[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,type:'pool'};
+          tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
+          played.add(pk(t1.id,t2.id));backfillCount++;break;
+        }
+      });
+    });
+  });
+  if(backfillCount>0)console.log('Backfill placed '+backfillCount+' additional games');
+
   window._played=played;window._tS=tS;window._dpod=dpod;
 }
 
@@ -1470,6 +1513,10 @@ function genD2(){
 // ============================================================
 function computePractice(){
   practiceSlots={};
+  // Count teams that requested practice — used to cap total practice assignments
+  const practiceRequesters=divs.reduce((a,d)=>a+d.teams.filter(t=>t.wantsPractice).length,0);
+  const maxPracticeSlots=Math.ceil(practiceRequesters/2); // 2 teams per field per slot
+  let totalPracticeAssigned=0;
   const sh=+document.getElementById('dstart').value,eh=+document.getElementById('dend').value;
   const slots=getSlots(sh,eh);const R=rl(),N=nlH();
   const teamSlotIdx={};
@@ -1492,7 +1539,7 @@ function computePractice(){
     const practiced=new Set(Object.values(practiceSlots).flatMap(ps=>ps.assignments.flatMap(a=>(a.teams||[a.team]).filter(Boolean).map(t=>t.id))));
     const teamsWithGap=[];
     divs.forEach(d=>d.teams.forEach(t=>{
-      if(!t.wantsPractice)return; // only teams that requested practice
+      if(!t.wantsPractice)return; // OPTION C: only teams that explicitly requested practice
       if(practiced.has(t.id))return; // already got one practice
       const my=teamSlotIdx[t.id]||[];
       if(my.includes(si))return; // playing this slot
@@ -1526,7 +1573,9 @@ function computePractice(){
       assignments.push({field:f,teams:pair});
     });
 
-    if(assignments.length){
+    if(assignments.length&&totalPracticeAssigned<maxPracticeSlots){
+      totalPracticeAssigned+=assignments.reduce((a,x)=>a+x.teams.length,0);
+      if(totalPracticeAssigned>maxPracticeSlots+2)return; // stop assigning once cap reached
       practiceSlots[s]={
         assignments,
         assignedCount:assignments.reduce((a,x)=>a+x.teams.length,0),
@@ -1557,7 +1606,7 @@ function renderGrid(sched,containerId,isD1){
   const slots=Object.keys(sched).sort((a,b)=>sH(a)-sH(b));
   const R=rl(),N=nlH();
   if(!slots.length){document.getElementById(containerId).innerHTML='';return;}
-  let t=`<table><thead><tr><th style="min-width:58px">Time</th>${fields.map(f=>`<th>${f.name}${f.champ?' ★':''}</th>`).join('')}</tr></thead><tbody>`;
+  let t=`<table><thead><tr><th style="min-width:58px">Time</th>${fields.map(f=>`<th>${f.name}${f.champ?' ★':''}${f.recruiting?' ⭐':''}<br><span style="font-size:8px;font-weight:400;opacity:.7">${f.venue||'Main venue'}</span></th>`).join('')}</tr></thead><tbody>`;
   slots.forEach(slot=>{
     const h=sH(slot),isR=h===R,isN=h===N&&N!==R;
     const hp=isD1&&practiceSlots[slot];
@@ -1890,7 +1939,7 @@ function expTM(){
 function expD1(){
   if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
   const slots=Object.keys(sched1).sort((a,b)=>sH(a)-sH(b));
-  const rows=[['Time',...fields.map(f=>f.name+(f.recruiting?' [Recruiting]':''))]];
+  const rows=[['Time',...fields.map(f=>f.name+(f.recruiting?' [Recruiting]':'')+(f.venue&&f.venue!=='Main venue'?' ('+f.venue+')':''))]];
   slots.forEach(s=>{
     const h=sH(s),isR=h===rl(),isN=h===nlH()&&nlH()!==rl();
     const r=[fmtSlot(s)];
@@ -2541,6 +2590,7 @@ function renderDay1Results(){
     fieldHtml+=`<div style="margin-bottom:14px">
       <div style="font-size:11px;font-weight:600;color:var(--navy);background:var(--lt-gray);padding:5px 10px;border-radius:5px;margin-bottom:4px">
         ${f.name}${f.recruiting?' <span style="color:var(--teal);font-size:10px">[Recruiting]</span>':''}
+        <span style="font-size:10px;font-weight:400;color:var(--dark-gray)"> · ${f.venue||'Main venue'}</span>
       </div>`;
 
     fieldGames.forEach(g=>{
@@ -2841,7 +2891,7 @@ function renderMobileScorer(){
     if(!total)return;
     const allDone=scored===total;
     html2+=`<button class="scorer-field-btn${scorerActiveField===f.id?' active':''}" onclick="selectScorerField(${f.id})">
-      <span>${f.name}${f.recruiting?' ⭐':''}</span>
+      <span>${f.name}${f.recruiting?' ⭐':''} <span style="font-size:11px;font-weight:400;opacity:.75">· ${f.venue||'Main venue'}</span></span>
       <span class="game-count">${scored}/${total} games entered${allDone?' ✓':''}</span>
     </button>`;
   });
