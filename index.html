@@ -2239,20 +2239,75 @@ function toggleThreeDay(){
 // ============================================================
 function checkParkingConflicts(){
   if(!fields.length) return;
-  const totalSpaces=fields.reduce((a,f)=>a+(f.parking||0),0);
-  const totalTeams=divs.reduce((a,d)=>a+d.teams.length,0);
-  const carsNeeded=totalTeams*20;
   const el=document.getElementById('parking-status');
   if(!el) return;
+
+  const totalSpaces=fields.reduce((a,f)=>a+(f.parking||0),0);
+  const totalTeams=divs.reduce((a,d)=>a+d.teams.length,0);
   if(totalSpaces===0){el.style.display='none';return;}
-  el.style.display='block';
+
+  const carsNeeded=totalTeams*20;
+  let html2='';
+
+  // Overall check
   if(totalSpaces>=carsNeeded){
-    el.className='cl cl-t';
-    el.textContent=`Parking OK: ${totalSpaces} spaces available, ${carsNeeded} needed (${totalTeams} teams x 20 cars). Surplus: ${totalSpaces-carsNeeded} spaces.`;
+    html2+=`<div class="cl cl-t" style="margin-bottom:6px"><strong>✓ Total parking OK:</strong> ${totalSpaces} spaces available, ${carsNeeded} needed (${totalTeams} teams × 20 cars). Surplus: ${totalSpaces-carsNeeded} spaces.</div>`;
   } else {
-    el.className='cl cl-r';
-    el.textContent=`Parking CONFLICT: ${totalSpaces} spaces available, ${carsNeeded} needed (${totalTeams} teams x 20 cars). Shortfall: ${carsNeeded-totalSpaces} spaces.`;
+    html2+=`<div class="cl cl-r" style="margin-bottom:6px"><strong>⚠ Parking shortfall:</strong> ${totalSpaces} spaces available, ${carsNeeded} needed. Shortfall: ${carsNeeded-totalSpaces} spaces.</div>`;
   }
+
+  // Venue-level breakdown
+  const venues=[...new Set(fields.map(f=>f.venue||'Main venue'))];
+  if(venues.length>1||totalTeams>0){
+    html2+='<div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:4px">Venue-level parking analysis:</div>';
+    html2+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead>';
+    html2+='<tr style="background:var(--navy);color:#fff"><th style="padding:4px 8px;text-align:left">Venue</th><th style="padding:4px 8px;text-align:center">Fields</th><th style="padding:4px 8px;text-align:center">Spaces</th><th style="padding:4px 8px;text-align:center">Est. teams</th><th style="padding:4px 8px;text-align:center">Cars needed</th><th style="padding:4px 8px;text-align:center">Status</th></tr>';
+    html2+='</thead><tbody>';
+
+    venues.forEach((v,vi)=>{
+      const vFields=fields.filter(f=>(f.venue||'Main venue')===v);
+      const vSpaces=vFields.reduce((a,f)=>a+(f.parking||0),0);
+      const vFieldIds=new Set(vFields.map(f=>f.id));
+
+      // Estimate teams at this venue from dpod if schedule generated, else proportional
+      let vTeams=0;
+      if(window._dpod&&Object.keys(window._dpod).length){
+        divs.forEach(d=>{
+          const pod=window._dpod[d.id]||[];
+          if(pod.some(f=>vFieldIds.has(f.id))) vTeams+=d.teams.length;
+        });
+      } else {
+        // Proportional estimate based on field count
+        vTeams=Math.round(totalTeams*(vFields.length/fields.length));
+      }
+
+      const vCarsNeeded=vTeams*20;
+      // Stagger benefit: not all teams at venue simultaneously
+      // Peak demand ~60% of total (staggered arrivals/departures)
+      const peakDemand=Math.round(vCarsNeeded*0.6);
+      const ok=vSpaces>=peakDemand;
+      const tight=vSpaces>=peakDemand&&vSpaces<vCarsNeeded;
+
+      html2+=`<tr style="border-bottom:.5px solid var(--mid-gray);background:${vi%2===0?'#fff':'var(--lt-gray)'}">
+        <td style="padding:4px 8px;font-weight:500">${v}</td>
+        <td style="padding:4px 8px;text-align:center">${vFields.length}</td>
+        <td style="padding:4px 8px;text-align:center">${vSpaces||'—'}</td>
+        <td style="padding:4px 8px;text-align:center">~${vTeams}</td>
+        <td style="padding:4px 8px;text-align:center">${vCarsNeeded} (peak ~${peakDemand})</td>
+        <td style="padding:4px 8px;text-align:center">${
+          !vSpaces?'<span style="color:var(--dark-gray)">Not entered</span>':
+          ok&&!tight?'<span style="color:var(--teal);font-weight:600">✓ OK</span>':
+          tight?'<span style="color:var(--amber);font-weight:600">⚠ Tight at peak</span>':
+          '<span style="color:var(--red);font-weight:600">✗ Shortfall</span>'
+        }</td>
+      </tr>`;
+    });
+    html2+='</tbody></table>';
+    html2+='<div style="font-size:10px;color:var(--dark-gray);margin-top:4px">Peak demand estimated at 60% of total — staggered start times mean not all teams arrive simultaneously. Assign larger divisions to venues with more parking to balance load.</div>';
+  }
+
+  el.innerHTML=html2;
+  el.style.display='block';
 }
 
 // ============================================================
