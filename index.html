@@ -167,6 +167,26 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 .toast-err { background: var(--lt-red); color: var(--red); border: .5px solid #F09595; }
 .toast-warn { background: var(--lt-amber); color: #412402; border: .5px solid #FAC775; }
 
+/* ── MOBILE SCORER ── */
+.scorer-field-btn { padding: 12px 16px; font-size: 14px; font-weight: 600; border: 1.5px solid var(--mid-gray); border-radius: 8px; cursor: pointer; background: #fff; color: var(--navy); font-family: var(--font); width: 100%; text-align: left; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.scorer-field-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.scorer-field-btn .game-count { font-size: 11px; font-weight: 400; opacity: .7; }
+.scorer-game-card { background: #fff; border: 1.5px solid var(--mid-gray); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.scorer-game-card.scored { border-color: #86efac; background: #f0fdf4; }
+.scorer-game-time { font-size: 11px; color: var(--dark-gray); margin-bottom: 4px; }
+.scorer-game-div { font-size: 11px; color: var(--purple); font-weight: 500; margin-bottom: 10px; }
+.scorer-teams { display: flex; align-items: center; gap: 8px; }
+.scorer-team { flex: 1; text-align: center; }
+.scorer-team-name { font-size: 13px; font-weight: 600; color: var(--navy); margin-bottom: 8px; line-height: 1.3; }
+.scorer-score-input { width: 70px; height: 56px; font-size: 28px; font-weight: 700; text-align: center; border: 2px solid var(--mid-gray); border-radius: 10px; background: #fff; color: #1a1a18; font-family: var(--font); -webkit-appearance: none; appearance: none; }
+.scorer-score-input:focus { outline: none; border-color: var(--navy); }
+.scorer-vs { font-size: 16px; font-weight: 600; color: var(--dark-gray); flex-shrink: 0; }
+.scorer-submit { width: 100%; padding: 12px; font-size: 14px; font-weight: 600; background: var(--navy); color: #fff; border: none; border-radius: 8px; cursor: pointer; margin-top: 12px; font-family: var(--font); }
+.scorer-submit.saved { background: var(--teal); }
+.scorer-view-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+.scorer-view-btn { flex: 1; padding: 8px; font-size: 12px; font-weight: 500; border: 1.5px solid var(--mid-gray); border-radius: 6px; cursor: pointer; background: #fff; color: var(--dark-gray); font-family: var(--font); text-align: center; }
+.scorer-view-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
 /* ── MISC ── */
 .pill { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
 .p-ok { background: var(--lt-teal); color: #085041; }
@@ -500,7 +520,12 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <strong>Points (Win=3, Tie=1, Loss=0) → Head-to-head → Fewest goals against → Goal differential.</strong>
     Leave blank if results not yet available.
   </div>
+  <div class="scorer-view-toggle">
+    <button class="scorer-view-btn active" id="view-desktop" onclick="setResultsView('desktop')">🖥 Desktop view — all fields + standings</button>
+    <button class="scorer-view-btn" id="view-mobile" onclick="setResultsView('mobile')">📱 Field scorer — phone optimized</button>
+  </div>
   <div id="day1-results-out"></div>
+  <div id="day1-mobile-out" style="display:none"></div>
 </div>
 
 <div class="page" id="p7">
@@ -540,6 +565,28 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 <div id="toast"></div>
 
 <script>
+// ============================================================
+// STAGE 2 ROADMAP (planned features)
+// ============================================================
+// 1. MOBILE SCORE ENTRY — lightweight field-scorer interface
+//    - Separate mobile-optimized page (e.g. /score) per field
+//    - Field staff select their field, see only their games
+//    - Simple score entry: Team A [score] vs Team B [score] + Submit
+//    - Real-time sync: scores write to shared backend (Firebase/Supabase)
+//      and appear instantly in JR's scheduler without manual import
+//    - Interim option: QR code → Google Form → Sheet import
+//
+// 2. USER ACCOUNTS & SAVED EVENTS
+//    - JR logs in, events are saved and reloadable
+//    - No re-entering teams/fields/settings each time
+//    - Event history and year-over-year comparison
+//
+// 3. HOSTED BACKEND
+//    - Move from single HTML file to hosted app
+//    - Enables real-time score sync, user accounts, event persistence
+//    - Aidan's AI Recruiter Book tool integration
+// ============================================================
+
 // ============================================================
 // STATE
 // ============================================================
@@ -2442,70 +2489,122 @@ function renderDay1Results(){
     el.innerHTML='<div class="cl cl-a">Generate the schedule first, then return here to enter Day 1 results.</div>';
     return;
   }
+  if(!window.gameScores)window.gameScores={};
 
-  // Build game list from sched1 per division/pool
-  // gameScores: {gameId: {t1id, t2id, t1score, t2score}}
-  if(!window.gameScores) window.gameScores={};
+  // ── LEFT: Games by field ──────────────────────────────────────────────────
+  let fieldHtml='<div style="flex:1;min-width:300px">';
+  fieldHtml+='<div class="sec-label">Games by field — enter scores here</div>';
 
+  fields.forEach(f=>{
+    const fieldGames=[];
+    Object.entries(sched1).forEach(([slot,row])=>{
+      const g=row[f.id];
+      if(g&&g.type==='pool') fieldGames.push({...g,slot});
+    });
+    fieldGames.sort((a,b)=>sH(a.slot)-sH(b.slot));
+    if(!fieldGames.length)return;
+
+    fieldHtml+=`<div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--navy);background:var(--lt-gray);padding:5px 10px;border-radius:5px;margin-bottom:4px">
+        ${f.name}${f.recruiting?' <span style="color:var(--teal);font-size:10px">[Recruiting]</span>':''}
+      </div>`;
+
+    fieldGames.forEach(g=>{
+      const gs=window.gameScores[g.id]||{t1score:'',t2score:''};
+      const hasResult=gs.t1score!==''&&gs.t2score!=='';
+      const t1s=parseInt(gs.t1score)||0,t2s=parseInt(gs.t2score)||0;
+      const resultBadge=hasResult?(t1s>t2s?'<span style="font-size:9px;background:var(--lt-teal);color:#085041;padding:1px 5px;border-radius:3px;margin-left:4px">Final</span>':
+        t1s<t2s?'<span style="font-size:9px;background:var(--lt-teal);color:#085041;padding:1px 5px;border-radius:3px;margin-left:4px">Final</span>':
+        '<span style="font-size:9px;background:var(--lt-amber);color:#412402;padding:1px 5px;border-radius:3px;margin-left:4px">Tie</span>'):'';
+
+      fieldHtml+=`<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:${hasResult?'#f0fdf4':'#fff'};border:.5px solid ${hasResult?'#86efac':'var(--mid-gray)'};border-radius:5px;margin-bottom:3px;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--dark-gray);min-width:46px">${fmtSlot(g.slot)}</span>
+        <span style="font-size:10px;color:var(--purple)">${g.divName} ${g.pool||''}</span>
+        <div style="display:flex;align-items:center;gap:4px;flex:1;justify-content:flex-end">
+          <span style="font-size:11px;font-weight:500;text-align:right;min-width:80px">${g.t1n}</span>
+          <input type="number" min="0" max="99" value="${gs.t1score}" placeholder="–"
+            style="width:40px;text-align:center;font-size:13px;font-weight:700;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px"
+            onchange="setGameScore('${g.id}',${g.t1},'t1',+this.value,${g.t2});computeAllStandings();refreshFieldView()">
+          <span style="font-size:11px;color:var(--dark-gray)">–</span>
+          <input type="number" min="0" max="99" value="${gs.t2score}" placeholder="–"
+            style="width:40px;text-align:center;font-size:13px;font-weight:700;padding:2px 4px;border:.5px solid var(--mid-gray);border-radius:4px"
+            onchange="setGameScore('${g.id}',${g.t1},'t2',+this.value,${g.t2});computeAllStandings();refreshFieldView()">
+          <span style="font-size:11px;font-weight:500;min-width:80px">${g.t2n}</span>
+          ${resultBadge}
+        </div>
+      </div>`;
+    });
+    fieldHtml+='</div>';
+  });
+  fieldHtml+='</div>';
+
+  // ── RIGHT: Pool standings ─────────────────────────────────────────────────
+  let standingsHtml='<div style="flex:1;min-width:280px">';
+  standingsHtml+='<div class="sec-label">Pool standings — live tiebreakers</div>';
+  standingsHtml+='<div id="all-standings"></div>';
+  standingsHtml+='</div>';
+
+  el.innerHTML=`<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">${fieldHtml}${standingsHtml}</div>`;
+
+  computeAllStandings();
+}
+
+function refreshFieldView(){
+  // Re-render just the score inputs to update colors without full rebuild
+  computeAllStandings();
+}
+
+function computeAllStandings(){
+  divs.forEach(d=>computeStandings(d.id));
+  // Render all standings into the right panel
+  const el=document.getElementById('all-standings');
+  if(!el)return;
   let html2='';
   divs.forEach(d=>{
     const dp=pools[d.id]||[];
-    html2+=`<div class="card" style="margin-bottom:20px">
-      <div class="card-title">${d.name} <span style="font-size:11px;font-weight:400;color:var(--dark-gray)">${d.recruitable?'· Recruitable':''}</span></div>`;
-
+    html2+=`<div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px">${d.name}</div>`;
     dp.forEach(pool=>{
-      // Get games for this pool from sched1
-      const poolGames=[];
-      Object.entries(sched1).forEach(([slot,row])=>{
-        Object.values(row).forEach(g=>{
-          if(g&&g.divId===d.id&&g.pool===pool.label&&g.type==='pool'){
-            if(!poolGames.find(pg=>pg.id===g.id)) poolGames.push({...g,slot});
-          }
-        });
+      const seeded=pool.seededTeams||pool.teams;
+      const adv=dp.length===1?Math.min(4,Math.ceil(d.teams.length*0.67)):2;
+      html2+=`<div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:600;color:var(--teal);margin-bottom:3px;text-transform:uppercase">${pool.label}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:10px">
+          <thead><tr style="background:var(--navy);color:#fff">
+            <th style="padding:3px 6px;text-align:left">#</th>
+            <th style="padding:3px 6px;text-align:left">Team</th>
+            <th style="padding:3px 5px;text-align:center">W</th>
+            <th style="padding:3px 5px;text-align:center">L</th>
+            <th style="padding:3px 5px;text-align:center">T</th>
+            <th style="padding:3px 5px;text-align:center">GD</th>
+            <th style="padding:3px 5px;text-align:center">Pts</th>
+          </tr></thead><tbody>`;
+      seeded.forEach((t,i)=>{
+        const r=window.gameScores?Object.entries(window.gameScores).reduce((acc,[gid,gs])=>{
+          if(gs.t1score===''||gs.t2score==='')return acc;
+          const s1=parseInt(gs.t1score)||0,s2=parseInt(gs.t2score)||0;
+          if(gs.t1id===t.id){if(s1>s2)acc.w++;else if(s2>s1)acc.l++;else acc.tie++;acc.gf+=s1;acc.ga+=s2;}
+          else if(gs.t2id===t.id){if(s2>s1)acc.w++;else if(s1>s2)acc.l++;else acc.tie++;acc.gf+=s2;acc.ga+=s1;}
+          acc.pts=acc.w*3+acc.tie;return acc;
+        },{w:0,l:0,tie:0,gf:0,ga:0,pts:0}):{w:0,l:0,tie:0,gf:0,ga:0,pts:0};
+        const gd=r.gf-r.ga;
+        html2+=`<tr style="border-bottom:.5px solid var(--mid-gray);background:${i%2===0?'#fff':'var(--lt-gray)'}">
+          <td style="padding:3px 6px;font-weight:700;color:${i<adv?'var(--teal)':'var(--dark-gray)'}">${i+1}</td>
+          <td style="padding:3px 6px;font-weight:${i<adv?'600':'400'}">${t.name}</td>
+          <td style="padding:3px 5px;text-align:center">${r.w}</td>
+          <td style="padding:3px 5px;text-align:center">${r.l}</td>
+          <td style="padding:3px 5px;text-align:center">${r.tie}</td>
+          <td style="padding:3px 5px;text-align:center;color:${gd>0?'var(--teal)':gd<0?'var(--red)':'inherit'}">${gd>0?'+':''}${gd}</td>
+          <td style="padding:3px 5px;text-align:center;font-weight:700">${r.pts}</td>
+        </tr>`;
       });
-      poolGames.sort((a,b)=>sH(a.slot)-sH(b.slot));
-
-      html2+=`<div style="margin-bottom:14px">
-        <div style="font-size:11px;font-weight:600;color:var(--teal);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">${pool.label} — ${poolGames.length} games</div>`;
-
-      if(poolGames.length===0){
-        html2+='<div style="font-size:11px;color:var(--dark-gray);padding:8px">No games found — generate schedule first.</div>';
-      } else {
-        poolGames.forEach(g=>{
-          const gs=window.gameScores[g.id]||{t1score:'',t2score:''};
-          const hasResult=gs.t1score!==''&&gs.t2score!=='';
-          const t1score=parseInt(gs.t1score)||0;
-          const t2score=parseInt(gs.t2score)||0;
-          const resultLabel=hasResult?(t1score>t2score?'<span style="color:var(--teal);font-weight:600">W</span>/<span style="color:var(--red)">L</span>':
-            t1score<t2score?'<span style="color:var(--red)">L</span>/<span style="color:var(--teal);font-weight:600">W</span>':
-            '<span style="color:var(--amber)">T</span>/<span style="color:var(--amber)">T</span>'):'';
-          html2+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${hasResult?'#f0fdf4':'var(--lt-gray)'};border-radius:5px;margin-bottom:4px;flex-wrap:wrap">
-            <span style="font-size:10px;color:var(--dark-gray);min-width:50px">${fmtSlot(g.slot)}</span>
-            <span style="flex:1;font-size:12px;font-weight:500;text-align:right">${g.t1n}</span>
-            <input type="number" min="0" max="99" value="${gs.t1score}" placeholder="0"
-              style="width:44px;text-align:center;font-size:14px;font-weight:600;padding:3px 4px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff"
-              onchange="setGameScore('${g.id}',${g.t1},'t1',+this.value,${g.t2});computeStandings(${d.id})">
-            <span style="font-size:12px;font-weight:500;color:var(--dark-gray)">– ${resultLabel||'vs'} –</span>
-            <input type="number" min="0" max="99" value="${gs.t2score}" placeholder="0"
-              style="width:44px;text-align:center;font-size:14px;font-weight:600;padding:3px 4px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff"
-              onchange="setGameScore('${g.id}',${g.t1},'t2',+this.value,${g.t2});computeStandings(${d.id})">
-            <span style="flex:1;font-size:12px;font-weight:500">${g.t2n}</span>
-          </div>`;
-        });
-      }
-
-      // Standings table for this pool
-      html2+=`<div id="standings-${d.id}-${pool.id}" style="margin-top:8px"></div>`;
-      html2+='</div>';
+      html2+='</tbody></table></div>';
     });
     html2+='</div>';
   });
-
   el.innerHTML=html2;
-
-  // Compute initial standings
-  divs.forEach(d=>computeStandings(d.id));
 }
+
 
 function setGameScore(gameId,t1id,side,score,t2id){
   if(!window.gameScores)window.gameScores={};
@@ -2661,6 +2760,136 @@ function applyDay1Results(){
   showToast('Day 2 seeded from Day 1 results');
   go('p5');
   generate();
+}
+
+
+// ============================================================
+// MOBILE FIELD SCORER
+// ============================================================
+let scorerView='desktop';
+let scorerActiveField=null;
+
+function setResultsView(view){
+  scorerView=view;
+  document.getElementById('view-desktop').classList.toggle('active',view==='desktop');
+  document.getElementById('view-mobile').classList.toggle('active',view==='mobile');
+  document.getElementById('day1-results-out').style.display=view==='desktop'?'block':'none';
+  document.getElementById('day1-mobile-out').style.display=view==='mobile'?'block':'none';
+  if(view==='mobile') renderMobileScorer();
+  else renderDay1Results();
+}
+
+function renderMobileScorer(){
+  const el=document.getElementById('day1-mobile-out');
+  if(!el)return;
+  if(!fields.length||!Object.keys(sched1).length){
+    el.innerHTML='<div class="cl cl-a">Generate schedule first then return here.</div>';
+    return;
+  }
+
+  // Field selector
+  let html2='<div style="max-width:480px;margin:0 auto">';
+  html2+='<div style="font-size:12px;color:var(--dark-gray);margin-bottom:10px">Select your field to enter scores:</div>';
+
+  // Count games per field
+  const fieldGameCounts={};
+  const fieldGameScored={};
+  fields.forEach(f=>{
+    const games=Object.values(sched1).map(row=>row[f.id]).filter(g=>g&&g.type==='pool');
+    fieldGameCounts[f.id]=games.length;
+    fieldGameScored[f.id]=games.filter(g=>window.gameScores&&window.gameScores[g.id]&&
+      window.gameScores[g.id].t1score!==''&&window.gameScores[g.id].t2score!=='').length;
+  });
+
+  fields.forEach(f=>{
+    const total=fieldGameCounts[f.id]||0;
+    const scored=fieldGameScored[f.id]||0;
+    if(!total)return;
+    const allDone=scored===total;
+    html2+=`<button class="scorer-field-btn${scorerActiveField===f.id?' active':''}" onclick="selectScorerField(${f.id})">
+      <span>${f.name}${f.recruiting?' ⭐':''}</span>
+      <span class="game-count">${scored}/${total} games entered${allDone?' ✓':''}</span>
+    </button>`;
+  });
+
+  // Game cards for selected field
+  if(scorerActiveField!==null){
+    const f=fields.find(x=>x.id===scorerActiveField);
+    if(f){
+      const games=[];
+      Object.entries(sched1).forEach(([slot,row])=>{
+        const g=row[f.id];
+        if(g&&g.type==='pool')games.push({...g,slot});
+      });
+      games.sort((a,b)=>sH(a.slot)-sH(b.slot));
+
+      html2+=`<div style="margin-top:16px">
+        <div style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--navy)">${f.name} — ${games.length} games</div>`;
+
+      games.forEach(g=>{
+        const gs=window.gameScores&&window.gameScores[g.id]?window.gameScores[g.id]:{t1score:'',t2score:''};
+        const scored=gs.t1score!==''&&gs.t2score!=='';
+        const t1s=parseInt(gs.t1score)||0,t2s=parseInt(gs.t2score)||0;
+        html2+=`<div class="scorer-game-card${scored?' scored':''}">
+          <div class="scorer-game-time">${fmtSlot(g.slot)}</div>
+          <div class="scorer-game-div">${g.divName} · ${g.pool||''}</div>
+          <div class="scorer-teams">
+            <div class="scorer-team">
+              <div class="scorer-team-name">${g.t1n}</div>
+              <input type="number" class="scorer-score-input" min="0" max="99"
+                value="${gs.t1score}" placeholder="0" inputmode="numeric"
+                id="mob-t1-${g.id}"
+                onchange="saveMobileScore('${g.id}',${g.t1},${g.t2})">
+            </div>
+            <div class="scorer-vs">–</div>
+            <div class="scorer-team">
+              <div class="scorer-team-name">${g.t2n}</div>
+              <input type="number" class="scorer-score-input" min="0" max="99"
+                value="${gs.t2score}" placeholder="0" inputmode="numeric"
+                id="mob-t2-${g.id}"
+                onchange="saveMobileScore('${g.id}',${g.t1},${g.t2})">
+            </div>
+          </div>
+          ${scored?`<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--teal);font-weight:600">
+            ✓ ${t1s > t2s ? g.t1n+' wins' : t2s > t1s ? g.t2n+' wins' : 'Tie'} (${t1s}–${t2s})
+          </div>`:''}
+          <button class="scorer-submit${scored?' saved':''}" onclick="saveMobileScore('${g.id}',${g.t1},${g.t2})">
+            ${scored?'✓ Score saved — tap to update':'Save score'}
+          </button>
+        </div>`;
+      });
+      html2+='</div>';
+    }
+  }
+
+  html2+='</div>';
+  el.innerHTML=html2;
+}
+
+function selectScorerField(fieldId){
+  scorerActiveField=fieldId;
+  renderMobileScorer();
+  // Scroll to game cards
+  setTimeout(()=>{
+    const cards=document.querySelector('.scorer-game-card');
+    if(cards)cards.scrollIntoView({behavior:'smooth',block:'start'});
+  },100);
+}
+
+function saveMobileScore(gameId,t1id,t2id){
+  if(!window.gameScores)window.gameScores={};
+  const t1input=document.getElementById('mob-t1-'+gameId);
+  const t2input=document.getElementById('mob-t2-'+gameId);
+  if(!t1input||!t2input)return;
+  const t1score=t1input.value;
+  const t2score=t2input.value;
+  window.gameScores[gameId]={t1id,t2id,t1score,t2score};
+  setGameScore(gameId,t1id,'t1',+t1score,t2id);
+  setGameScore(gameId,t1id,'t2',+t2score,t2id);
+  computeAllStandings();
+  // Re-render to show updated status
+  setTimeout(()=>renderMobileScorer(),50);
+  showToast('Score saved');
 }
 
 </script>
