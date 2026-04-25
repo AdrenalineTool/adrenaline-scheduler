@@ -2212,7 +2212,7 @@ function runCalc(){
   // Utilization estimate — use actual configured fields
   const totalTeams=divs.reduce((a,d)=>a+d.teams.length,0);
   const totalGamesNeeded=Math.ceil(totalTeams*gpt/2);
-  const configuredFields=fields.length||fIn||0;
+  const configuredFields=fields.length||parseInt(document.getElementById('calc-fields')?.value||'0')||0;
   const totalAvailable=configuredFields>0?configuredFields*usableNonLit:0;
   const util=totalAvailable>0?Math.round(totalGamesNeeded/totalAvailable*100):0;
   const idleSlots=Math.max(0,totalAvailable-totalGamesNeeded);
