@@ -2650,17 +2650,6 @@ function updateFieldGenderRecommendation(){
   h2+='</div>';
   el.innerHTML=h2;
 
-  // Championship field check
-  const champFields=fields.filter(f=>f.champ).length;
-  const hasBoysDivs=divs.some(d=>d.gender==='boys'||d.gender==='both');
-  const hasGirlsDivs=divs.some(d=>d.gender==='girls'||d.gender==='both');
-  const champNeeded=hasBoysDivs&&hasGirlsDivs?2:1;
-  const champOk=champFields>=champNeeded;
-  const champNote=document.createElement('div');
-  champNote.style.cssText='margin-top:8px;padding:6px 10px;border-radius:6px;font-size:11px;background:'+(champOk?'var(--lt-teal)':'var(--lt-amber)')+';color:'+(champOk?'#085041':'#412402');
-  champNote.innerHTML='<strong>'+(champOk?'✓':'⚠')+' Championship field'+(champNeeded>1?'s':'')+':</strong> Need '+champNeeded+' field'+(champNeeded>1?'s':'')+' marked as Champ '+(hasBoysDivs&&hasGirlsDivs?'(1 boys + 1 girls, or 1 Both-gender)':'')+'. Currently: '+champFields+' assigned.'+(champOk?'':' Check the <strong>Champ</strong> box on '+champNeeded+' field'+(champNeeded>1?'s':'')+' above.');
-  el.querySelector('.cl') && el.querySelector('.cl').appendChild(champNote);
-
   el.style.display='block';
 }
 
