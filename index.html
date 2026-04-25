@@ -2134,7 +2134,17 @@ function expAidan(){
 // ============================================================
 function loadSample(){
   fields=[];divs=[];tid=1;did=1;fid=1;
-  [{n:'Field 1',l:true,g:'both',ch:true},{n:'Field 2',l:true,g:'both',ch:false},{n:'Field 3',l:true,g:'boys',ch:false},{n:'Field 4',l:true,g:'boys',ch:false},{n:'Field 5',l:true,g:'girls',ch:true},{n:'Field 6',l:true,g:'girls',ch:false},{n:'Field 7',l:false,g:'both',ch:false},{n:'Field 8',l:false,g:'both',ch:false}].forEach(f=>fields.push({id:fid++,name:f.n,lights:f.l,gender:f.g,champ:f.ch,location:'Main venue'}));
+  [
+    {n:'Field 1',l:false,g:'boys',ch:false,rec:true, parking:120,lot:'Lot A',venue:'Main venue'},
+    {n:'Field 2',l:false,g:'boys',ch:false,rec:true, parking:120,lot:'Lot A',venue:'Main venue'},
+    {n:'Field 3',l:false,g:'boys',ch:true, rec:false,parking:120,lot:'Lot A',venue:'Main venue'},
+    {n:'Field 4',l:false,g:'boys',ch:false,rec:false,parking:120,lot:'Lot A',venue:'Main venue'},
+    {n:'Field 5',l:false,g:'girls',ch:false,rec:true, parking:80, lot:'Lot B',venue:'Main venue'},
+    {n:'Field 6',l:false,g:'girls',ch:true, rec:false,parking:80, lot:'Lot B',venue:'Main venue'},
+    {n:'Field 7',l:false,g:'girls',ch:false,rec:false,parking:80, lot:'Lot B',venue:'Main venue'},
+    {n:'Field 8',l:false,g:'both', ch:false,rec:false,parking:60, lot:'Lot C',venue:'Main venue'},
+  ].forEach(f=>fields.push({id:fid++,name:f.n,lights:f.l,gender:f.g,champ:f.ch,
+    recruiting:f.rec,parking:f.parking,parkingPass:'',parkingLot:f.lot,venue:f.venue,location:f.venue}));
   [{n:'2028 Boys Elite',r:true,g:'boys',t:[['Hawks MD','MD','Elite'],['Wolves VA','VA','Strong'],['Eagles PA','PA','Strong'],['Lions NY','NY','Mid'],['Bears NJ','NJ','Mid'],['Tigers NC','NC','Lower']]},
    {n:'2028 Boys AA',r:true,g:'boys',t:[['Storm MD','MD','Elite'],['Flash VA','VA','Strong'],['Force PA','PA','Mid'],['Rush NY','NY','Mid'],['Drive OH','OH','Mid'],['Push IL','IL','Lower']]},
    {n:'2027 Boys Elite',r:true,g:'boys',t:[['Express MD','MD','Elite'],['Charge VA','VA','Strong'],['Power PA','PA','Mid'],['Fury OH','OH','Mid'],['Blast GA','GA','Lower'],['Strike TX','TX','Lower']]},
@@ -2144,8 +2154,14 @@ function loadSample(){
    {n:'2027 Girls Elite',r:true,g:'girls',t:[['Pride MD','MD','Elite'],['Spirit VA','VA','Strong'],['Grace PA','PA','Mid'],['Glory NY','NY','Mid'],['Force FL','FL','Lower'],['Quest CO','CO','Lower']]}
   ].forEach(s=>{const id=did++;divs.push({id,name:s.n,recruitable:s.r,gender:s.g,teams:s.t.map(([nm,st,ti])=>({id:tid++,name:nm,state:st,tier:ti,travelTier:'local',travelWaitlist:false}))});});
   renderFields();updL();
-  showToast('Sample event loaded -- 40 teams across 7 divisions');
-  const calcEl=document.getElementById('calc-teams');if(calcEl)calcEl.value=divs.reduce(function(a,d){return a+d.teams.length;},0);
+  renderFields();
+  updL();
+  updateFieldGenderRecommendation();
+  const calcEl=document.getElementById('calc-teams');
+  if(calcEl){calcEl.value=divs.reduce(function(a,d){return a+d.teams.length;},0);}
+  runCalc();
+  checkParkingConflicts();
+  showToast('Sample event loaded -- 40 teams, 8 fields, 7 divisions');
 }
 
 // ============================================================
@@ -2161,13 +2177,21 @@ updL();
 // FIELD & TEAM CALCULATOR
 // ============================================================
 function runCalc(){
-  // Read live from event setup fields
-  const slotDur=+document.getElementById('slotdur').value||50;
-  const buf=+document.getElementById('buf').value||10;
-  const sh=+document.getElementById('dstart').value||8;
-  const ehNonLit=+document.getElementById('dend').value||18;
-  const ehLit=+document.getElementById('dend-lit').value||21;
-  const gpt=+document.getElementById('gpt').value||3;
+  // Read live from event setup fields — with null checks since page may not be active
+  const slotDurEl=document.getElementById('slotdur');
+  const bufEl=document.getElementById('buf');
+  const dstartEl=document.getElementById('dstart');
+  const dendEl=document.getElementById('dend');
+  const dendLitEl=document.getElementById('dend-lit');
+  const gptEl=document.getElementById('gpt');
+  if(!slotDurEl||!bufEl||!dstartEl||!dendEl||!dendLitEl||!gptEl)return;
+
+  const slotDur=+slotDurEl.value||45;
+  const buf=+bufEl.value||5;
+  const sh=+dstartEl.value||8;
+  const ehNonLit=+dendEl.value||18;
+  const ehLit=+dendLitEl.value||21;
+  const gpt=+gptEl.value||3;
   const slotTotal=slotDur+buf;
 
   // End time = last game ENDING time, so subtract one slot
