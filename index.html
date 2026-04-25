@@ -556,12 +556,30 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <span class="exp-badge eb-aidan">Aidan / CX</span>
   </div>
   <div class="exp-row" onclick="expParkingPasses()">
-    <div><div class="exp-name">Parking passes -- per team</div><div class="exp-sub">Team name * Division * Pass color * Lot name * Primary field -- one row per team</div></div>
+    <div><div class="exp-name">Parking passes -- master list</div><div class="exp-sub">All teams · Pass color · Lot name · Primary field · One row per team · For Eric ops distribution</div></div>
     <span class="exp-badge eb-eric">Eric / Ops</span>
+  </div>
+  <div class="exp-row" onclick="expParkingPassesByTeam()">
+    <div><div class="exp-name">Parking passes -- per team (.xlsx)</div><div class="exp-sub">One sheet per team · Color-coded · Lot · Field · Event info · Ready for Aidan email delivery</div></div>
+    <span class="exp-badge eb-aidan">Aidan / Email</span>
   </div>
   <div class="exp-row" onclick="expRefs()"><div><div class="exp-name">Referee assignment sheet -- both days</div><div class="exp-sub">Game ID * field * time * division * gender * recruitable flag</div></div><span class="exp-badge eb-jr">Assignors</span></div>
   <div class="exp-row" onclick="expEric()"><div><div class="exp-name">Field-view schedule (Eric)</div><div class="exp-sub">Per-field timeline both days * practice assignments included</div></div><span class="exp-badge eb-eric">Eric</span></div>
   <div class="exp-row" onclick="expAidan()"><div><div class="exp-name">Recruiter window report (Aidan)</div><div class="exp-sub">All recruitable games both days * lunch protection confirmed</div></div><span class="exp-badge eb-aidan">Aidan</span></div>
+
+  <div class="sec-label">Print materials</div>
+  <div class="exp-row" onclick="expArrivalCards()">
+    <div><div class="exp-name">Team arrival cards (.xlsx)</div><div class="exp-sub">One sheet per team — game times, field, parking lot, pass color, check-in info · Aidan emails to teams</div></div>
+    <span class="exp-badge eb-aidan">Aidan / Teams</span>
+  </div>
+  <div class="exp-row" onclick="expFieldSigns()">
+    <div><div class="exp-name">Field schedule signs (.xlsx)</div><div class="exp-sub">One sheet per field — full day schedule in large print · Print and post at each field entrance</div></div>
+    <span class="exp-badge eb-eric">Eric / Ops</span>
+  </div>
+  <div class="exp-row" onclick="expParkingLotSigns()">
+    <div><div class="exp-name">Parking lot signs (.xlsx)</div><div class="exp-sub">One sheet per lot — color-coded, divisions, field numbers · Print and post at venue entrances</div></div>
+    <span class="exp-badge eb-eric">Eric / Ops</span>
+  </div>
 
   <div class="sec-label">Template</div>
   <div class="exp-row" onclick="dlTemplate()"><div><div class="exp-name">Team upload template (.csv)</div><div class="exp-sub">CSV with column headers and example rows -- fill in and upload in Step 1</div></div><span class="exp-badge eb-jr">JR</span></div>
@@ -3375,6 +3393,366 @@ function expTrafficFlow(){
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   dl(`ParkingTrafficFlow_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   showToast('Parking traffic flow exported');
+}
+
+
+// ============================================================
+// PRINT MATERIALS EXPORTS
+// ============================================================
+
+// ── Per-team parking passes (one sheet per team) ──────────────────────────────
+function expParkingPassesByTeam(){
+  if(!divs.length){showToast('Load teams first','warn');return;}
+  if(!window.XLSX){showToast('Excel library not loaded','err');return;}
+
+  // Build team → parking info from schedule
+  const teamPass={};
+  Object.entries(sched1).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      const f=fields.find(x=>x.id===+fid);
+      if(!f)return;
+      if(!teamPass[g.t1n])teamPass[g.t1n]={pass:f.parkingPass||'',lot:f.parkingLot||'',field:f.name,venue:f.venue||'Main venue',div:g.divName};
+      if(!teamPass[g.t2n])teamPass[g.t2n]={pass:f.parkingPass||'',lot:f.parkingLot||'',field:f.name,venue:f.venue||'Main venue',div:g.divName};
+    });
+  });
+
+  const passColors={
+    'Red':'FFEE9999','Blue':'FF99BBEE','Green':'FF99DD99',
+    'Yellow':'FFFFEE77','Orange':'FFEECC88','Purple':'FFCCAAEE','White':'FFFAFAFA','':{fill:'FFEEEEEE'}
+  };
+  const ename=document.getElementById('ename').value||'Event';
+  const d1=document.getElementById('edate').value||'';
+  const d2=document.getElementById('edate2').value||'';
+  const wb=XLSX.utils.book_new();
+
+  divs.forEach(d=>{
+    d.teams.forEach(t=>{
+      const info=teamPass[t.name]||{pass:'',lot:'Not assigned',field:'TBD',venue:'Main venue',div:d.name};
+      const passColor=info.pass||'';
+      const fillHex=passColors[passColor]||'FFEEEEEE';
+
+      // Build team schedule
+      const teamGames=[];
+      [sched1,sched2].forEach((sc,di)=>{
+        Object.keys(sc).sort((a,b)=>sH(a)-sH(b)).forEach(slot=>{
+          Object.entries(sc[slot]).forEach(([fid,g])=>{
+            if(g&&(g.t1===t.id||g.t2===t.id)){
+              const opp=g.t1===t.id?g.t2n:g.t1n;
+              const f=fields.find(x=>x.id===+fid);
+              teamGames.push([`Day ${di+1}`,fmtSlot(slot),f?f.name:'',opp,g.type==='pool'?`Pool play (${g.pool||''})`:g.label||g.type]);
+            }
+          });
+        });
+      });
+
+      const rows=[
+        [ename],
+        [`${d1}${d2?' — '+d2:''}`],
+        [''],
+        ['PARKING PASS'],
+        [passColor?passColor+' LOT':'PARKING INFORMATION'],
+        [''],
+        ['Team:', t.name],
+        ['Division:', d.name],
+        ['Parking lot:', info.lot],
+        ['Venue:', info.venue],
+        ['Primary field:', info.field],
+        ['Pass color:', passColor||'Check with ops'],
+        [''],
+        ['YOUR SCHEDULE'],
+        ['Day','Time','Field','Opponent','Round'],
+        ...teamGames,
+        [''],
+        ['Questions? See the operations tent on arrival.'],
+      ];
+
+      const ws=XLSX.utils.aoa_to_sheet(rows);
+
+      // Style the pass color cell
+      ws['!cols']=[{wch:18},{wch:28},{wch:14},{wch:22},{wch:20}];
+
+      // Merge title cells and style
+      ws['!merges']=[
+        {s:{r:0,c:0},e:{r:0,c:4}},
+        {s:{r:1,c:0},e:{r:1,c:4}},
+        {s:{r:3,c:0},e:{r:3,c:4}},
+        {s:{r:4,c:0},e:{r:4,c:4}},
+      ];
+
+      // Apply fill to pass color row
+      const passCell=XLSX.utils.encode_cell({r:4,c:0});
+      if(!ws[passCell])ws[passCell]={v:rows[4][0],t:'s'};
+      ws[passCell].s={
+        fill:{fgColor:{rgb:fillHex.replace('FF','')}},
+        font:{bold:true,sz:16},
+        alignment:{horizontal:'center'}
+      };
+
+      // Safe sheet name (Excel max 31 chars, no special chars)
+      const safeName=(t.name+' '+d.name.slice(0,8)).replace(/[\/?*[\]:]/g,'').slice(0,31);
+      XLSX.utils.book_append_sheet(wb,ws,safeName);
+    });
+  });
+
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
+  dl(`ParkingPasses_PerTeam_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  showToast('Per-team parking passes exported — one sheet per team');
+}
+
+// ── Team arrival cards ────────────────────────────────────────────────────────
+function expArrivalCards(){
+  if(!divs.length){showToast('Load teams first','warn');return;}
+  if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
+  if(!window.XLSX){showToast('Excel library not loaded','err');return;}
+
+  const teamPass={};
+  Object.entries(sched1).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      const f=fields.find(x=>x.id===+fid);
+      if(!f)return;
+      if(!teamPass[g.t1n])teamPass[g.t1n]={pass:f.parkingPass||'',lot:f.parkingLot||'',field:f.name,venue:f.venue||'Main venue'};
+      if(!teamPass[g.t2n])teamPass[g.t2n]={pass:f.parkingPass||'',lot:f.parkingLot||'',field:f.name,venue:f.venue||'Main venue'};
+    });
+  });
+
+  const ename=document.getElementById('ename').value||'Event';
+  const d1=document.getElementById('edate').value||'';
+  const d2=document.getElementById('edate2').value||'';
+  const wb=XLSX.utils.book_new();
+
+  divs.forEach(d=>{
+    d.teams.forEach(t=>{
+      const info=teamPass[t.name]||{pass:'',lot:'See ops tent',field:'TBD',venue:'Main venue'};
+
+      // Team games both days
+      const d1games=[],d2games=[];
+      Object.keys(sched1).sort((a,b)=>sH(a)-sH(b)).forEach(slot=>{
+        Object.entries(sched1[slot]).forEach(([fid,g])=>{
+          if(g&&(g.t1===t.id||g.t2===t.id)){
+            const opp=g.t1===t.id?g.t2n:g.t1n;
+            const f=fields.find(x=>x.id===+fid);
+            d1games.push([fmtSlot(slot),f?f.name:'',opp]);
+          }
+        });
+      });
+      Object.keys(sched2).sort((a,b)=>sH(a)-sH(b)).forEach(slot=>{
+        Object.entries(sched2[slot]).forEach(([fid,g])=>{
+          if(g&&(g.t1===t.id||g.t2===t.id)){
+            const opp=g.t1===t.id?g.t2n:g.t1n;
+            const f=fields.find(x=>x.id===+fid);
+            d2games.push([fmtSlot(slot),f?f.name:'',opp,g.label||g.type]);
+          }
+        });
+      });
+
+      const rows=[
+        ['TEAM ARRIVAL INFORMATION'],
+        [ename],
+        [''],
+        ['Team:', t.name, '', 'Division:', d.name],
+        [''],
+        ['ARRIVAL & PARKING'],
+        ['Venue:', info.venue, '', 'Parking lot:', info.lot],
+        ['Primary field:', info.field, '', 'Parking pass:', info.pass||'See ops tent'],
+        [''],
+        ['Arrive at least 30 minutes before your first game for check-in.'],
+        [''],
+        ['DAY 1 SCHEDULE — '+d1],
+        ['Time','Field','Opponent','',''],
+        ...d1games.map(g=>[g[0],g[1],g[2],'','']),
+        [''],
+        ['DAY 2 SCHEDULE — '+d2],
+        ['Time','Field','Opponent','Round',''],
+        ...d2games.map(g=>[g[0],g[1],g[2],g[3]||'','']),
+        [''],
+        ['CHECK-IN'],
+        ['All teams must check in at the operations tent with roster by 30 min before first game.'],
+        ['Bring: signed roster, medical release forms, player IDs.'],
+        [''],
+        ['adrenalinetool.github.io/adrenaline-scheduler'],
+      ];
+
+      const ws=XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols']=[{wch:16},{wch:18},{wch:22},{wch:14},{wch:16}];
+      ws['!merges']=[
+        {s:{r:0,c:0},e:{r:0,c:4}},
+        {s:{r:1,c:0},e:{r:1,c:4}},
+        {s:{r:9,c:0},e:{r:9,c:4}},
+        {s:{r:11,c:0},e:{r:11,c:4}},
+        {s:{r:11+d1games.length+2,c:0},e:{r:11+d1games.length+2,c:4}},
+      ];
+
+      const safeName=(t.name).replace(/[\/?*[\]:]/g,'').slice(0,31);
+      XLSX.utils.book_append_sheet(wb,ws,safeName);
+    });
+  });
+
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  dl(`ArrivalCards_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  showToast('Team arrival cards exported — one sheet per team');
+}
+
+// ── Field schedule signs ──────────────────────────────────────────────────────
+function expFieldSigns(){
+  if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
+  if(!window.XLSX){showToast('Excel library not loaded','err');return;}
+
+  const ename=document.getElementById('ename').value||'Event';
+  const d1=document.getElementById('edate').value||'';
+  const d2=document.getElementById('edate2').value||'';
+  const wb=XLSX.utils.book_new();
+
+  fields.forEach(f=>{
+    const rows=[
+      [f.name+(f.champ?' — CHAMPIONSHIP FIELD':'')+(f.recruiting?' — RECRUITING FIELD':'')],
+      [ename+' · '+f.venue||'Main venue'],
+      [''],
+    ];
+
+    // Day 1
+    rows.push(['DAY 1 — '+d1]);
+    rows.push(['Time','Home','Away','Division','Pool']);
+    const slots1=Object.keys(sched1).sort((a,b)=>sH(a)-sH(b));
+    slots1.forEach(slot=>{
+      const g=sched1[slot][f.id];
+      if(g){
+        rows.push([fmtSlot(slot),g.t1n,g.t2n,g.divName,g.pool||g.label||'']);
+      } else {
+        const h=sH(slot);
+        if(h===rl()&&f.recruiting){
+          rows.push([fmtSlot(slot),'— RECRUITER LUNCH —','','','']);
+        } else {
+          rows.push([fmtSlot(slot),'—','','','']);
+        }
+      }
+    });
+
+    rows.push(['']);
+
+    // Day 2
+    rows.push(['DAY 2 — '+d2]);
+    rows.push(['Time','Home / Seed','Away / Seed','Division','Round']);
+    const slots2=Object.keys(sched2).sort((a,b)=>sH(a)-sH(b));
+    slots2.forEach(slot=>{
+      const g=sched2[slot][f.id];
+      if(g){
+        rows.push([fmtSlot(slot),g.t1n,g.t2n,g.divName,g.label||g.type||'']);
+      } else {
+        rows.push([fmtSlot(slot),'—','','','']);
+      }
+    });
+
+    rows.push(['']);
+    rows.push(['Questions? Operations tent — see event staff.']);
+
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:10},{wch:26},{wch:26},{wch:20},{wch:16}];
+    ws['!merges']=[
+      {s:{r:0,c:0},e:{r:0,c:4}},
+      {s:{r:1,c:0},e:{r:1,c:4}},
+    ];
+
+    const safeName=f.name.replace(/[\/?*[\]:]/g,'').slice(0,31);
+    XLSX.utils.book_append_sheet(wb,ws,safeName);
+  });
+
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  dl(`FieldSigns_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  showToast('Field schedule signs exported — one sheet per field');
+}
+
+// ── Parking lot signs ─────────────────────────────────────────────────────────
+function expParkingLotSigns(){
+  if(!fields.length){showToast('Add fields first','warn');return;}
+  if(!window.XLSX){showToast('Excel library not loaded','err');return;}
+
+  const ename=document.getElementById('ename').value||'Event';
+  const d1=document.getElementById('edate').value||'';
+  const d2=document.getElementById('edate2').value||'';
+  const wb=XLSX.utils.book_new();
+
+  // Group fields by parking lot
+  const lots={};
+  fields.forEach(f=>{
+    const lot=f.parkingLot||'General Parking';
+    if(!lots[lot])lots[lot]={fields:[],pass:f.parkingPass||'',venue:f.venue||'Main venue'};
+    lots[lot].fields.push(f);
+    if(f.parkingPass)lots[lot].pass=f.parkingPass;
+  });
+
+  Object.entries(lots).forEach(([lotName,info])=>{
+    const lotFields=info.fields;
+    const fieldNames=lotFields.map(f=>f.name).join(', ');
+    const totalSpaces=lotFields.reduce((a,f)=>a+(f.parking||0),0);
+    const passColor=info.pass;
+
+    // Which divisions play at these fields?
+    const divNames=new Set();
+    if(Object.keys(sched1).length){
+      Object.values(sched1).forEach(row=>{
+        lotFields.forEach(f=>{
+          const g=row[f.id];
+          if(g)divNames.add(g.divName);
+        });
+      });
+    }
+
+    const rows=[
+      [passColor?passColor.toUpperCase()+' PARKING LOT':'PARKING LOT'],
+      [lotName],
+      [ename],
+      [d1+(d2?' — '+d2:'')],
+      [''],
+      ['FIELDS SERVED'],
+      [fieldNames],
+      [''],
+      ['CAPACITY'],
+      [totalSpaces?totalSpaces+' spaces':'See event staff'],
+      [''],
+    ];
+
+    if(divNames.size>0){
+      rows.push(['DIVISIONS PLAYING AT THESE FIELDS']);
+      [...divNames].sort().forEach(dn=>rows.push([dn]));
+      rows.push(['']);
+    }
+
+    rows.push(['ARRIVAL INSTRUCTIONS']);
+    rows.push(['Display parking pass on dashboard.']);
+    rows.push(['Check in at operations tent before first game.']);
+    rows.push(['Questions? See event staff at operations tent.']);
+    rows.push(['']);
+    rows.push(['adrenalinetool.github.io/adrenaline-scheduler']);
+
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:40}];
+    ws['!merges']=[
+      {s:{r:0,c:0},e:{r:0,c:0}},
+    ];
+
+    // Apply pass color fill to header
+    const passColorHex={
+      'Red':'FFEE9999','Blue':'FF9999EE','Green':'FF99DD99',
+      'Yellow':'FFFFEE77','Orange':'FFEECC88','Purple':'FFCCAAEE','White':'FFFAFAFA'
+    };
+    const headerCell=ws['A1'];
+    if(headerCell&&passColorHex[passColor]){
+      headerCell.s={
+        fill:{fgColor:{rgb:passColorHex[passColor].replace('FF','')}},
+        font:{bold:true,sz:20},
+        alignment:{horizontal:'center'}
+      };
+    }
+
+    const safeName=lotName.replace(/[\/?*[\]:]/g,'').slice(0,31);
+    XLSX.utils.book_append_sheet(wb,ws,safeName);
+  });
+
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
+  dl(`ParkingLotSigns_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  showToast('Parking lot signs exported — one sheet per lot');
 }
 
 </script>
