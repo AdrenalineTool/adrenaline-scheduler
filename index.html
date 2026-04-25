@@ -501,6 +501,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div class="grid-wrap" id="grid-d1"></div>
   <div class="grid-wrap" id="grid-d2" style="display:none"></div>
   <div class="grid-wrap" id="grid-d3" style="display:none"></div>
+  <div id="traffic-chart-out" style="margin-top:16px"></div>
 </div>
 
 <!-- ════════════════════════════════════════════════════
@@ -550,6 +551,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div class="exp-row" onclick="expPractice()"><div><div class="exp-name">Practice slot availability</div><div class="exp-sub">Idle field assignments * Salesforce case notes pre-written</div></div><span class="exp-badge eb-jr">JR</span></div>
 
   <div class="sec-label">Staff files</div>
+  <div class="exp-row" onclick="expTrafficFlow()">
+    <div><div class="exp-name">Parking traffic flow chart (.xlsx)</div><div class="exp-sub">Cars per time slot per lot · Both days · Capacity vs demand · For Aidan CX comms</div></div>
+    <span class="exp-badge eb-aidan">Aidan / CX</span>
+  </div>
   <div class="exp-row" onclick="expParkingPasses()">
     <div><div class="exp-name">Parking passes -- per team</div><div class="exp-sub">Team name * Division * Pass color * Lot name * Primary field -- one row per team</div></div>
     <span class="exp-badge eb-eric">Eric / Ops</span>
@@ -1113,6 +1118,7 @@ function generate(){
   renderUtil();
   updateConflicts();
   checkParkingConflicts();
+  renderTrafficChart();
   document.getElementById('topbar-event').textContent=document.getElementById('ename').value+' * '+document.getElementById('edate').value;
   document.getElementById('tb-d1').textContent='Day 1 -- '+Object.values(sched1).reduce((a,s)=>a+Object.values(s).filter(g=>g).length,0)+' games';
   document.getElementById('tb-d2').textContent='Day 2 -- '+Object.values(sched2).reduce((a,s)=>a+Object.values(s).filter(g=>g).length,0)+' games';
@@ -1194,13 +1200,29 @@ function genD1(){
     const gamesNeeded=Math.ceil(d.teams.length*gpt/2);
     const podSize=Math.max(1,Math.ceil(gamesNeeded/usableSlotsG));
 
-    // Find best venue for this division (most available fields of right gender)
+    // Find best venue for this division — balance fields AND parking capacity
+    const divTeams=d.teams.length;
     let bestVenue=venues[0];
     let bestScore=-1;
     venues.forEach(v=>{
       const avail=(gen==='boys'?venueFields[v].boys:gen==='girls'?venueFields[v].girls:venueFields[v].all)
         .filter(f=>!recIds.has(f.id));
-      if(avail.length>bestScore){bestScore=avail.length;bestVenue=v;}
+      if(!avail.length)return;
+
+      // Calculate current parking load at this venue
+      const vSpaces=venueFields[v].all.reduce((a,f)=>a+(f.parking||0),0);
+      const vTeamsAlready=divs.filter(d2=>!d2.recruitable&&dpod[d2.id]&&
+        dpod[d2.id].some(f=>(f.venue||'Main venue')===v)).reduce((a,d2)=>a+d2.teams.length,0);
+      const vCarsAfter=(vTeamsAlready+divTeams)*20;
+      const vPeakAfter=Math.round(vCarsAfter*0.6); // stagger benefit
+
+      // Parking score: penalize venues over capacity
+      const parkingOk=vSpaces===0||vPeakAfter<=vSpaces;
+      const parkingPenalty=vSpaces>0&&!parkingOk?-1000:0;
+
+      // Score = available fields + parking bonus
+      const score=avail.length+parkingPenalty+(parkingOk?1:0);
+      if(score>bestScore){bestScore=score;bestVenue=v;}
     });
 
     // Get available fields at best venue (non-rec fields first, then idle rec fields)
@@ -2658,6 +2680,20 @@ function validateAndProceed(){
       if(needBoysChamp&&!hasBoysChamp) errors.push('Boys divisions need a Championship field. Check Champ on a Boys or Both field.');
       if(needGirlsChamp&&!hasGirlsChamp) errors.push('Girls divisions need a Championship field. Check Champ on a Girls or Both field.');
     }
+
+    // REQUIRED: Parking spaces for all fields
+    const missingParking=fields.filter(f=>!f.parking||f.parking===0);
+    if(missingParking.length===fields.length){
+      errors.push('Parking spaces are required for all fields. Enter spaces for each field — enables parking-optimized pod assignment and the traffic flow chart.');
+    } else if(missingParking.length>0){
+      errors.push('Parking spaces missing for: '+missingParking.map(f=>f.name).join(', ')+'. Enter spaces for all fields to enable parking optimization.');
+    }
+
+    // Warn if lot names missing
+    const missingLot=fields.filter(f=>!f.parkingLot||f.parkingLot.trim()==='');
+    if(missingLot.length>0){
+      warnings.push('Lot name blank for: '+missingLot.map(f=>f.name).join(', ')+'. Add lot names for parking pass distribution.');
+    }
   }
 
   // Show errors — block progression
@@ -3102,6 +3138,243 @@ function saveMobileScore(gameId,t1id,t2id){
   // Re-render to show updated status
   setTimeout(()=>renderMobileScorer(),50);
   showToast('Score saved');
+}
+
+
+// ============================================================
+// TRAFFIC FLOW CHART
+// ============================================================
+function renderTrafficChart(){
+  const el=document.getElementById('traffic-chart-out');
+  if(!el)return;
+  if(!Object.keys(sched1).length){
+    el.innerHTML='<div class="cl cl-a">Generate schedule first, then view traffic flow chart.</div>';
+    return;
+  }
+
+  // Get all venues and their lots
+  const venues=[...new Set(fields.map(f=>f.venue||'Main venue'))];
+  const slots1=Object.keys(sched1).sort((a,b)=>sH(a)-sH(b));
+  const slots2=Object.keys(sched2).sort((a,b)=>sH(a)-sH(b));
+  const allSlots=[...new Set([...slots1,...slots2])].sort((a,b)=>sH(a)-sH(b));
+
+  // For each slot, count teams arriving/at-venue/leaving per venue
+  // A team is "at venue" for a slot if they have a game or are between games
+  const venueLoad={}; // {venue: {slot: teamCount}}
+  venues.forEach(v=>{venueLoad[v]={};allSlots.forEach(s=>{venueLoad[v][s]=0;});});
+
+  // Build team schedule: which slots each team is "present" (game ± 1 slot buffer)
+  const teamPresence={}; // {teamId: Set of slot indices}
+  divs.forEach(d=>d.teams.forEach(t=>{teamPresence[t.id]=new Set();}));
+
+  const markPresent=(sched,slotsList)=>{
+    slotsList.forEach((s,si)=>{
+      Object.values(sched[s]||{}).forEach(g=>{
+        if(!g)return;
+        // Team present this slot plus buffer slots around it
+        [g.t1,g.t2].forEach(tid=>{
+          if(!teamPresence[tid])return;
+          teamPresence[tid].add(si);
+          if(si>0)teamPresence[tid].add(si-1);
+          if(si<slotsList.length-1)teamPresence[tid].add(si+1);
+        });
+      });
+    });
+  };
+  markPresent(sched1,slots1);
+  markPresent(sched2,slots2);
+
+  // Map each team to their primary venue via dpod
+  const teamVenue={};
+  divs.forEach(d=>{
+    const pod=window._dpod&&window._dpod[d.id];
+    const venue=pod&&pod.length?(pod[0].venue||'Main venue'):'Main venue';
+    d.teams.forEach(t=>{teamVenue[t.id]=venue;});
+  });
+
+  // Count teams present per venue per slot
+  allSlots.forEach((s,si)=>{
+    divs.forEach(d=>d.teams.forEach(t=>{
+      if(teamPresence[t.id]&&teamPresence[t.id].has(si)){
+        const v=teamVenue[t.id]||'Main venue';
+        venueLoad[v][s]=(venueLoad[v][s]||0)+1;
+      }
+    }));
+  });
+
+  // Render chart
+  const colors=['#1B3A5C','#1D9E75','#BA7517','#534AB7','#C0392B','#0C447C'];
+  let html2=`<div style="margin-bottom:16px">
+    <div class="sec-label">Parking traffic flow — estimated cars at each lot by time slot</div>
+    <div style="font-size:11px;color:var(--dark-gray);margin-bottom:12px">
+      Based on teams × 20 cars per team. Each team counted as present for their game slot plus one buffer slot on each side.
+      Stagger effect reduces peak demand vs simultaneous arrivals.
+    </div>`;
+
+  // Legend
+  html2+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+  venues.forEach((v,vi)=>{
+    const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+    const lot=[...new Set(fields.filter(f=>(f.venue||'Main venue')===v).map(f=>f.parkingLot||'').filter(Boolean))].join(', ');
+    html2+=`<span style="display:flex;align-items:center;gap:4px;font-size:11px">
+      <span style="width:12px;height:12px;background:${colors[vi%colors.length]};border-radius:2px;display:inline-block"></span>
+      <strong>${v}</strong>${lot?' · '+lot:''} (${vSpaces} spaces)
+    </span>`;
+  });
+  html2+='</div>';
+
+  // Chart per venue
+  venues.forEach((v,vi)=>{
+    const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+    const color=colors[vi%colors.length];
+    const maxLoad=Math.max(...allSlots.map(s=>(venueLoad[v][s]||0)*20),vSpaces,1);
+    const lot=[...new Set(fields.filter(f=>(f.venue||'Main venue')===v).map(f=>f.parkingLot||'').filter(Boolean))].join(' / ');
+
+    html2+=`<div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:6px">
+        ${v}${lot?' · '+lot:''} — ${vSpaces} spaces available
+      </div>
+      <div style="display:flex;gap:2px;align-items:flex-end;height:80px;background:var(--lt-gray);border-radius:6px;padding:8px;overflow-x:auto">`;
+
+    allSlots.forEach(s=>{
+      const teams=venueLoad[v][s]||0;
+      const cars=teams*20;
+      const pct=Math.round(cars/maxLoad*100);
+      const overCap=vSpaces>0&&cars>vSpaces;
+      const barColor=overCap?'#C0392B':cars>vSpaces*0.85?'#BA7517':color;
+      html2+=`<div style="display:flex;flex-direction:column;align-items:center;min-width:28px">
+        <div style="font-size:8px;color:var(--dark-gray);margin-bottom:2px">${cars||''}</div>
+        <div style="width:22px;height:${Math.max(2,pct*0.64)}px;background:${barColor};border-radius:2px 2px 0 0;min-height:2px"
+          title="${fmtSlot(s)}: ~${cars} cars (${teams} teams)"></div>
+        <div style="font-size:8px;color:var(--dark-gray);margin-top:2px;writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);height:32px">${fmtSlot(s)}</div>
+      </div>`;
+    });
+
+    if(vSpaces>0){
+      html2+=`</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:10px">
+        <span style="width:20px;height:2px;background:#C0392B;display:inline-block"></span> Capacity limit (${vSpaces} spaces)
+        <span style="margin-left:8px;color:var(--dark-gray)">Bars: navy = OK · amber = near capacity · red = over capacity</span>
+      </div>`;
+    } else {
+      html2+=`</div><div style="font-size:10px;color:var(--dark-gray);margin-top:4px">Enter parking spaces for fields at this venue to see capacity line.</div>`;
+    }
+    html2+='</div>';
+  });
+
+  html2+='</div>';
+  el.innerHTML=html2;
+}
+
+
+function expTrafficFlow(){
+  if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
+  if(!window.XLSX){showToast('Excel library not loaded','err');return;}
+
+  const venues=[...new Set(fields.map(f=>f.venue||'Main venue'))];
+  const ename=document.getElementById('ename').value||'Event';
+  const wb=XLSX.utils.book_new();
+
+  [1,2].forEach(day=>{
+    const sched=day===1?sched1:sched2;
+    const slots=Object.keys(sched).sort((a,b)=>sH(a)-sH(b));
+    if(!slots.length)return;
+
+    // Build team presence per slot per venue (same logic as renderTrafficChart)
+    const teamVenue={};
+    divs.forEach(d=>{
+      const pod=window._dpod&&window._dpod[d.id];
+      const v=pod&&pod.length?(pod[0].venue||'Main venue'):'Main venue';
+      d.teams.forEach(t=>{teamVenue[t.id]=v;});
+    });
+
+    const venueLoad={};
+    venues.forEach(v=>{venueLoad[v]={};slots.forEach(s=>{venueLoad[v][s]=0;});});
+
+    slots.forEach((s,si)=>{
+      Object.values(sched[s]||{}).forEach(g=>{
+        if(!g)return;
+        [g.t1,g.t2].forEach(tid=>{
+          const v=teamVenue[tid]||'Main venue';
+          [si-1,si,si+1].forEach(i=>{
+            if(i>=0&&i<slots.length){
+              venueLoad[v][slots[i]]=(venueLoad[v][slots[i]]||0)+1;
+            }
+          });
+        });
+      });
+    });
+
+    // Deduplicate counts (team counted once per slot)
+    // Build rows
+    const header=['Time',...venues.flatMap(v=>{
+      const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+      const lot=[...new Set(fields.filter(f=>(f.venue||'Main venue')===v).map(f=>f.parkingLot||'').filter(Boolean))].join('/');
+      return [`${v}${lot?' ('+lot+')':''} — Cars`,`${v} — Capacity (${vSpaces})`,'Status'];
+    })];
+
+    const rows=[header];
+    slots.forEach(s=>{
+      const row=[fmtSlot(s)];
+      venues.forEach(v=>{
+        const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+        const cars=Math.round((venueLoad[v][s]||0)*20*0.6); // stagger factor
+        const status=vSpaces===0?'No data':cars>vSpaces?'Over capacity':cars>vSpaces*0.85?'Near capacity':'OK';
+        row.push(cars,vSpaces,status);
+      });
+      rows.push(row);
+    });
+
+    // Summary row
+    const summaryRow=['PEAK'];
+    venues.forEach(v=>{
+      const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+      const peak=Math.max(...slots.map(s=>Math.round((venueLoad[v][s]||0)*20*0.6)));
+      summaryRow.push(peak,vSpaces,vSpaces>0?(peak>vSpaces?'Over capacity':peak>vSpaces*0.85?'Near capacity':'OK'):'');
+    });
+    rows.push(summaryRow);
+
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+
+    // Color coding via cell styles (basic)
+    ws['!cols']=[{wch:10},...venues.flatMap(()=>[{wch:18},{wch:14},{wch:14}])];
+    XLSX.utils.book_append_sheet(wb,ws,`Day ${day} Traffic`);
+  });
+
+  // Summary sheet
+  const sumRows=[
+    ['Adrenaline Lacrosse — Parking Traffic Flow Summary'],
+    ['Event:',ename],
+    ['Generated:',new Date().toLocaleDateString()],
+    [''],
+    ['About this report'],
+    ['Cars per time slot estimated as: teams present × 20 cars per team × 0.6 stagger factor'],
+    ['Stagger factor (0.6) accounts for staggered arrival/departure — not all teams arrive simultaneously'],
+    ['Teams counted as present for their game slot plus one buffer slot on each side'],
+    [''],
+    ['Venue','Lot','Total Spaces','Total Teams','Peak Cars','Peak % of Capacity','Status'],
+  ];
+  venues.forEach(v=>{
+    const vFields=fields.filter(f=>(f.venue||'Main venue')===v);
+    const vSpaces=vFields.reduce((a,f)=>a+(f.parking||0),0);
+    const lot=[...new Set(vFields.map(f=>f.parkingLot||'').filter(Boolean))].join(', ');
+    const vTeams=divs.filter(d=>{
+      const pod=window._dpod&&window._dpod[d.id];
+      return pod&&pod.some(f=>(f.venue||'Main venue')===v);
+    }).reduce((a,d)=>a+d.teams.length,0);
+    const peakCars=Math.round(vTeams*20*0.6);
+    const pct=vSpaces>0?Math.round(peakCars/vSpaces*100):0;
+    const status=vSpaces===0?'Spaces not entered':peakCars>vSpaces?'Over capacity':peakCars>vSpaces*0.85?'Near capacity':'OK';
+    sumRows.push([v,lot,vSpaces,vTeams,peakCars,vSpaces>0?pct+'%':'',status]);
+  });
+
+  const wsSummary=XLSX.utils.aoa_to_sheet(sumRows);
+  wsSummary['!cols']=[{wch:20},{wch:18},{wch:14},{wch:14},{wch:12},{wch:18},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,wsSummary,'Summary');
+
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  dl(`ParkingTrafficFlow_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  showToast('Parking traffic flow exported');
 }
 
 </script>
