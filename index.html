@@ -870,6 +870,18 @@ function importRows(rows,colMap,filename){
   });
   var total=divs.reduce(function(a,d){return a+d.teams.length;},0);
   if(total===0){ showUploadError('No valid teams found. Check Team Name and Division columns have data.'); return; }
+
+  // Sort divisions: Boys first then Girls, within each gender by grad year descending (oldest first)
+  divs.sort(function(a,b){
+    // Gender sort: boys before girls
+    var gA=a.gender==='boys'?0:1, gB=b.gender==='boys'?0:1;
+    if(gA!==gB)return gA-gB;
+    // Extract grad year from division name (4-digit number)
+    var yA=parseInt((a.name.match(/\d{4}/)||['9999'])[0]);
+    var yB=parseInt((b.name.match(/\d{4}/)||['9999'])[0]);
+    if(yA!==yB)return yA-yB; // ascending year (2026 before 2027 etc)
+    return a.name.localeCompare(b.name);
+  });
   resetDropZone();
   var ed=document.getElementById('upload-error'); if(ed) ed.style.display='none';
   document.getElementById('col-map-area').style.display='none';
@@ -883,8 +895,10 @@ function importRows(rows,colMap,filename){
       +'<td>'+(c.Elite||'')+'</td><td>'+(c.Strong||'')+'</td><td>'+(c.Mid||'')+'</td><td>'+(c.Lower||'')+'</td>'
       +'<td style="text-align:center"><label style="display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-size:12px">'
       +'<input type="checkbox" '+(d.recruitable?'checked':'')
-      +' onchange="var dv=divs.find(function(x){return x.id==='+d.id+'});if(dv){dv.recruitable=this.checked;updateFieldGenderRecommendation();updateRecFieldRecommendation();}">'
-      +'<span style="color:var(--teal)">'+(d.recruitable?'Yes':'No')+'</span></label></td></tr>';
+      +' onchange="var dv=divs.find(function(x){return x.id==='+d.id+'});if(dv){dv.recruitable=this.checked;'
+      +'this.nextElementSibling.textContent=this.checked?\'✓ Recruiting\':\'No\';'
+      +'updateFieldGenderRecommendation();updateRecFieldRecommendation();}">'
+      +'<span style="color:'+(d.recruitable?'var(--teal)':'var(--dark-gray)')+';font-size:11px">'+(d.recruitable?'✓ Recruiting':'No')+'</span></label></td></tr>';
   });
   tbl+='</tbody></table>';
   tbl+='<div style="font-size:11px;color:var(--dark-gray);margin-top:6px;padding:6px 10px;background:var(--lt-teal);border-radius:5px">'
@@ -2797,6 +2811,31 @@ function validateAndProceed(){
     const missingLot=fields.filter(f=>!f.parkingLot||f.parkingLot.trim()==='');
     if(missingLot.length>0){
       warnings.push('Lot name blank for: '+missingLot.map(f=>f.name).join(', ')+'. Add lot names for parking pass distribution.');
+    }
+  }
+
+  // Check if no recruiting divisions — require acknowledgment
+  const hasRecruiting=divs.some(d=>d.recruitable);
+  if(!hasRecruiting&&divs.length>0){
+    const alreadyAcked=document.getElementById('no-recruiting-ack')&&
+      document.getElementById('no-recruiting-ack').checked;
+    if(!alreadyAcked){
+      // Show acknowledgment checkbox if not already visible
+      const existing=document.getElementById('no-recruiting-ack-block');
+      if(!existing){
+        const ackDiv=document.createElement('div');
+        ackDiv.id='no-recruiting-ack-block';
+        ackDiv.className='cl cl-a';
+        ackDiv.style.marginTop='10px';
+        ackDiv.innerHTML='<strong>No recruiting divisions selected.</strong> This event will be scheduled as a non-recruiting event — no recruiting fields or recruiter lunch protection will be applied.<br><br>'
+          +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px">'
+          +'<input type="checkbox" id="no-recruiting-ack" onchange="if(this.checked){this.parentElement.parentElement.style.background=\'var(--lt-teal)\';this.parentElement.style.color=\'#085041\'}">'
+          +'<span>I confirm this is a <strong>non-recruiting event</strong> — no college coaches will be evaluating players</span>'
+          +'</label>';
+        document.querySelector('#p2 .btn-row:last-child').insertAdjacentElement('beforebegin',ackDiv);
+        ackDiv.scrollIntoView({behavior:'smooth'});
+      }
+      return; // Block until acknowledged
     }
   }
 
