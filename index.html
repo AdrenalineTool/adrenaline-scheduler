@@ -373,7 +373,13 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   </div>
 
   <div class="sec-label">Fields <span style="font-weight:400;color:var(--dark-gray)">(add each field for this event)</span></div>
-  <div class="cl cl-t" style="margin-bottom:8px;font-size:11px">Set the <strong>Venue/location</strong> on each field to group fields that are at the same physical location. The scheduler will only cluster fields within the same venue into a pod — teams will never be assigned games at different venues in the same division.</div>
+  <div class="cl cl-t" style="margin-bottom:8px;font-size:11px">
+    <strong>Venue/location</strong> — groups fields at the same physical site into pods. Teams never play at two different venues. 
+    <strong>Lot name</strong> — the parking lot for teams at that field. If a venue has multiple lots serving different field clusters, 
+    assign different lot names to those fields (e.g. Fields 1-3 → "Lot A", Fields 4-6 → "Lot B"). 
+    Teams get parking passes for their specific lot based on which fields they play on. 
+    <strong>Parking pass color</strong> — assign a unique color per lot for easy visual identification at check-in.
+  </div>
   <div id="fields-list"></div>
   <div class="btn-row" style="margin-top:6px">
     <button class="btn btn-sm" onclick="addF()">+ Add field</button>
@@ -397,6 +403,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <button class="btn btn-sm" onclick="go('p2')">← Setup</button>
     <div style="flex:1"></div>
     <button class="btn btn-navy" onclick="go('p4')">Travel tiers -></button>
+  </div>
+  <div class="cl cl-a" style="margin-bottom:8px">
+    <strong>⭐ Mark recruiting divisions below</strong> — check "Recruiting division" on any division where college coaches will be evaluating players.
+    Leave all unchecked for non-recruiting events. This controls which fields are used for recruiting games and which teams get recruiter-visible time slots.
   </div>
   <div class="cl cl-b">Snake draft distributes teams by strength tier. <strong>Drag teams between pools to override.</strong> Each pool should have representation across Elite / Strong / Mid / Lower.</div>
   <div class="cl cl-t" style="margin-top:6px"><strong>Pool seeding method:</strong> (1) Sort by skill tier — Elite > Strong > Mid > Lower, random within tier. (2) Snake draft into pools. (3) Auto-resolve region conflicts by swapping same-tier teams between pools. (4) Flag unavoidable remaining conflicts with ⚠. <strong>Day 2 standings criteria:</strong> Win=3pts, Tie=1pt, Loss=0 → Head-to-head → Fewest goals against → Goal differential.</div>
@@ -692,37 +702,46 @@ function addFs(n){for(let i=0;i<n;i++)addF();}
 function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();runCalc();updateFieldGenderRecommendation();}
 function renderFields(){
   document.getElementById('fields-list').innerHTML=fields.map(f=>`
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 9px;background:var(--lt-gray);border-radius:5px;margin-bottom:4px">
-      <input style="width:90px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" value="${f.name}" onchange="fields.find(x=>x.id===${f.id}).name=this.value">
-      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" onchange="fields.find(x=>x.id===${f.id}).gender=this.value;updateFieldGenderRecommendation()">
-        <option value="both" ${f.gender==='both'?'selected':''}>Both</option>
-        <option value="boys" ${f.gender==='boys'?'selected':''}>Boys</option>
-        <option value="girls" ${f.gender==='girls'?'selected':''}>Girls</option>
-      </select>
-      <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer">
-        <input type="checkbox" ${f.lights?'checked':''} onchange="fields.find(x=>x.id===${f.id}).lights=this.checked;runCalc()"> Lights
-      </label>
-      <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600">
-        <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked"> Champ
-      </label>
-      <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--teal);font-weight:600">
-        <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked;updateFieldGenderRecommendation();updateRecFieldRecommendation()"> Recruiting
-      </label>
-      <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Parking" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Parking spaces for this field">
-      <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
-      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:${f.parkingPass?parkingPassColors[f.parkingPass]||'#fff':'#fff'}" title="Parking pass color for teams at this field" onchange="fields.find(x=>x.id===${f.id}).parkingPass=this.value;renderFields()">
-        <option value="">No pass</option>
-        <option value="Red" ${f.parkingPass==='Red'?'selected':''} style="background:#fee2e2">🔴 Red</option>
-        <option value="Blue" ${f.parkingPass==='Blue'?'selected':''} style="background:#dbeafe">🔵 Blue</option>
-        <option value="Green" ${f.parkingPass==='Green'?'selected':''} style="background:#dcfce7">🟢 Green</option>
-        <option value="Yellow" ${f.parkingPass==='Yellow'?'selected':''} style="background:#fef9c3">🟡 Yellow</option>
-        <option value="Orange" ${f.parkingPass==='Orange'?'selected':''} style="background:#ffedd5">🟠 Orange</option>
-        <option value="Purple" ${f.parkingPass==='Purple'?'selected':''} style="background:#f3e8ff">🟣 Purple</option>
-        <option value="White" ${f.parkingPass==='White'?'selected':''} style="background:#f8fafc">⚪ White</option>
-      </select>
-      <input style="width:100px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px" placeholder="Lot name" value="${f.parkingLot||''}" onchange="fields.find(x=>x.id===${f.id}).parkingLot=this.value" title="Parking lot name/description">
-      <input style="width:110px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;border-color:var(--teal)" placeholder="Venue/location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value" title="Venue or location name — fields at the same venue will be grouped as a pod">
-      <button class="btn btn-sm btn-danger" onclick="remF(${f.id})">×</button>
+    <div style="background:var(--lt-gray);border-radius:5px;margin-bottom:6px;overflow:hidden">
+      <!-- Field name + type row -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 9px;border-bottom:.5px solid var(--mid-gray)">
+        <input style="width:90px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" value="${f.name}" onchange="fields.find(x=>x.id===${f.id}).name=this.value">
+        <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" onchange="fields.find(x=>x.id===${f.id}).gender=this.value;updateFieldGenderRecommendation()">
+          <option value="both" ${f.gender==='both'?'selected':''}>Both genders</option>
+          <option value="boys" ${f.gender==='boys'?'selected':''}>Boys only</option>
+          <option value="girls" ${f.gender==='girls'?'selected':''}>Girls only</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer">
+          <input type="checkbox" ${f.lights?'checked':''} onchange="fields.find(x=>x.id===${f.id}).lights=this.checked;runCalc()"> Lights
+        </label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600">
+          <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked"> Champ field
+        </label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--teal);font-weight:600">
+          <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked;updateFieldGenderRecommendation();updateRecFieldRecommendation()"> Recruiting field
+        </label>
+        <button class="btn btn-sm btn-danger" style="margin-left:auto" onclick="remF(${f.id})">× Remove</button>
+      </div>
+      <!-- Venue + Parking row -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 9px">
+        <span style="font-size:10px;font-weight:600;color:var(--navy);min-width:36px">VENUE:</span>
+        <input style="width:130px;font-size:12px;padding:3px 7px;border:.5px solid var(--teal);border-radius:4px;background:#fff" placeholder="Venue / location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value" title="Physical site name — fields with same venue are grouped into pods. Teams never cross venues.">
+        <div style="width:.5px;height:20px;background:var(--mid-gray);margin:0 4px"></div>
+        <span style="font-size:10px;font-weight:600;color:var(--amber);min-width:54px">PARKING:</span>
+        <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Spaces" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Total parking spaces serving this field">
+        <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
+        <input style="width:100px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Lot name" value="${f.parkingLot||''}" onchange="fields.find(x=>x.id===${f.id}).parkingLot=this.value" title="Lot name — teams at this field get this lot on their pass. Different lot names for different clusters at same venue.">
+        <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:${f.parkingPass?parkingPassColors[f.parkingPass]||'#fff':'#fff'}" title="Pass color for teams at this field" onchange="fields.find(x=>x.id===${f.id}).parkingPass=this.value;renderFields()">
+          <option value="">No pass color</option>
+          <option value="Red" ${f.parkingPass==='Red'?'selected':''} style="background:#fee2e2">🔴 Red pass</option>
+          <option value="Blue" ${f.parkingPass==='Blue'?'selected':''} style="background:#dbeafe">🔵 Blue pass</option>
+          <option value="Green" ${f.parkingPass==='Green'?'selected':''} style="background:#dcfce7">🟢 Green pass</option>
+          <option value="Yellow" ${f.parkingPass==='Yellow'?'selected':''} style="background:#fef9c3">🟡 Yellow pass</option>
+          <option value="Orange" ${f.parkingPass==='Orange'?'selected':''} style="background:#ffedd5">🟠 Orange pass</option>
+          <option value="Purple" ${f.parkingPass==='Purple'?'selected':''} style="background:#f3e8ff">🟣 Purple pass</option>
+          <option value="White" ${f.parkingPass==='White'?'selected':''} style="background:#f8fafc">⚪ White pass</option>
+        </select>
+      </div>
     </div>`).join('');
   checkParkingConflicts();
   updateFieldGenderRecommendation();
@@ -2579,7 +2598,33 @@ function updateRecFieldRecommendation(){
 function updateFieldGenderRecommendation(){
   const el=document.getElementById('field-gender-rec');
   if(!el)return;
-  if(!divs.length||!fields.length){el.style.display='none';return;}
+  if(!divs.length){el.style.display='none';return;}
+  // Show recommendation even before fields are added — tells JR what to configure
+  if(!fields.length){
+    const slotDur2=+document.getElementById('slotdur').value||45;
+    const buf2=+document.getElementById('buf').value||5;
+    const sh2=+document.getElementById('dstart').value||8;
+    const eh2=+document.getElementById('dend').value||18;
+    const gpt2=+document.getElementById('gpt').value||3;
+    const usable2=Math.floor(((eh2-sh2)*60)/(slotDur2+buf2))-1;
+    const bT=divs.filter(d=>d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
+    const gT=divs.filter(d=>d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
+    const bRecT=divs.filter(d=>d.gender==='boys'&&d.recruitable).reduce((a,d)=>a+d.teams.length,0);
+    const gRecT=divs.filter(d=>d.gender==='girls'&&d.recruitable).reduce((a,d)=>a+d.teams.length,0);
+    const mBoys=bT>0?Math.max(1,Math.ceil(bT*gpt2/2/usable2)):0;
+    const mGirls=gT>0?Math.max(1,Math.ceil(gT*gpt2/2/usable2)):0;
+    const mBoysRec=bRecT>0?Math.max(1,Math.ceil(bRecT*gpt2/2/usable2)):0;
+    const mGirlsRec=gRecT>0?Math.max(1,Math.ceil(gRecT*gpt2/2/usable2)):0;
+    el.innerHTML=`<div class="cl cl-a">
+      <strong>Add fields below — here is what you need based on your ${divs.reduce((a,d)=>a+d.teams.length,0)} teams:</strong><br><br>
+      ${bT>0?`<strong>Boys fields needed: ${mBoys} total</strong> (${mBoysRec} recruiting + ${mBoys-mBoysRec} non-recruiting)<br>`:''}
+      ${gT>0?`<strong>Girls fields needed: ${mGirls} total</strong> (${mGirlsRec} recruiting + ${mGirls-mGirlsRec} non-recruiting)<br>`:''}
+      <strong>Total minimum: ${mBoys+mGirls} fields</strong><br><br>
+      <span style="font-size:10px">At ${usable2} usable slots/day · ${gpt2} games/team · ${slotDur2+buf2}-min slots. Use "+ Add field" above to add fields.</span>
+    </div>`;
+    el.style.display='block';
+    return;
+  }
   const slotDur=+document.getElementById('slotdur').value||45;
   const buf=+document.getElementById('buf').value||5;
   const sh=+document.getElementById('dstart').value||8;
