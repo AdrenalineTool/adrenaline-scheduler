@@ -893,12 +893,19 @@ function importRows(rows,colMap,filename){
     d.teams.forEach(function(t){c[t.tier]=(c[t.tier]||0)+1;});
     tbl+='<tr><td style="font-weight:500">'+d.name+'</td><td>'+d.teams.length+'</td>'
       +'<td>'+(c.Elite||'')+'</td><td>'+(c.Strong||'')+'</td><td>'+(c.Mid||'')+'</td><td>'+(c.Lower||'')+'</td>'
-      +'<td style="text-align:center"><label style="display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-size:12px">'
-      +'<input type="checkbox" '+(d.recruitable?'checked':'')
-      +' onchange="var dv=divs.find(function(x){return x.id==='+d.id+'});if(dv){dv.recruitable=this.checked;'
-      +'this.nextElementSibling.textContent=this.checked?\'✓ Recruiting\':\'No\';'
+      +'<td style="text-align:center;padding:4px 8px">'
+      +'<label style="display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;'
+      +(d.recruitable?'background:var(--lt-teal);color:#085041;':'background:var(--lt-gray);color:var(--dark-gray);')
+      +'padding:4px 8px;border-radius:4px;font-size:11px;font-weight:500">'
+      +'<input type="checkbox" style="width:14px;height:14px;cursor:pointer" '+(d.recruitable?'checked':'')
+      +' onchange="var dv=divs.find(function(x){return x.id==='+d.id+'});if(dv){'
+      +'dv.recruitable=this.checked;'
+      +'this.parentElement.style.background=this.checked?\'var(--lt-teal)\':\'var(--lt-gray)\';'
+      +'this.parentElement.style.color=this.checked?\'#085041\':\'var(--dark-gray)\';'
+      +'this.nextElementSibling.textContent=this.checked?\'✓ Recruiting\':\'Not recruiting\';'
       +'updateFieldGenderRecommendation();updateRecFieldRecommendation();}">'
-      +'<span style="color:'+(d.recruitable?'var(--teal)':'var(--dark-gray)')+';font-size:11px">'+(d.recruitable?'✓ Recruiting':'No')+'</span></label></td></tr>';
+      +'<span>'+(d.recruitable?'✓ Recruiting':'Not recruiting')+'</span>'
+      +'</label></td></tr>';
   });
   tbl+='</tbody></table>';
   tbl+='<div style="font-size:11px;color:var(--dark-gray);margin-top:6px;padding:6px 10px;background:var(--lt-teal);border-radius:5px">'
