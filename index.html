@@ -692,7 +692,7 @@ function dl(fn,content,mime){
 // ============================================================
 // FIELDS
 // ============================================================
-function addF(n='',l=false,g='both',ch=false){
+function addF(n='',l=false,g='boys',ch=false){
   setTimeout(runCalc,50);
   const id=fid++;
   fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',venue:'Main venue',location:'Main venue'});
@@ -707,9 +707,8 @@ function renderFields(){
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 9px;border-bottom:.5px solid var(--mid-gray)">
         <input style="width:90px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" value="${f.name}" onchange="fields.find(x=>x.id===${f.id}).name=this.value">
         <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" onchange="fields.find(x=>x.id===${f.id}).gender=this.value;updateFieldGenderRecommendation()">
-          <option value="both" ${f.gender==='both'?'selected':''}>Both genders</option>
-          <option value="boys" ${f.gender==='boys'?'selected':''}>Boys only</option>
-          <option value="girls" ${f.gender==='girls'?'selected':''}>Girls only</option>
+          <option value="boys" ${f.gender==='boys'||f.gender==='both'?'selected':''}>Boys</option>
+          <option value="girls" ${f.gender==='girls'?'selected':''}>Girls</option>
         </select>
         <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer">
           <input type="checkbox" ${f.lights?'checked':''} onchange="fields.find(x=>x.id===${f.id}).lights=this.checked;runCalc()"> Lights
@@ -876,13 +875,21 @@ function importRows(rows,colMap,filename){
   document.getElementById('col-map-area').style.display='none';
   var msg='<strong style="color:var(--teal)">&#x2713; '+total+' team'+(total!==1?'s':'')+' imported across '+divs.length+' division'+(divs.length!==1?'s':'')+' from &ldquo;'+filename+'&rdquo;</strong>';
   document.getElementById('preview-msg').innerHTML=msg;
-  var tbl='<table class="summary-table"><thead><tr><th>Division</th><th>Teams</th><th>Elite</th><th>Strong</th><th>Mid</th><th>Lower</th><th>Recruitable</th></tr></thead><tbody>';
+  var tbl='<table class="summary-table"><thead><tr><th>Division</th><th>Teams</th><th>Elite</th><th>Strong</th><th>Mid</th><th>Lower</th><th style="color:var(--teal)">Recruiting division?</th></tr></thead><tbody>';
   divs.forEach(function(d){
     var c={Elite:0,Strong:0,Mid:0,Lower:0};
     d.teams.forEach(function(t){c[t.tier]=(c[t.tier]||0)+1;});
-    tbl+='<tr><td style="font-weight:500">'+d.name+'</td><td>'+d.teams.length+'</td><td>'+(c.Elite||'')+'</td><td>'+(c.Strong||'')+'</td><td>'+(c.Mid||'')+'</td><td>'+(c.Lower||'')+'</td><td>'+(d.recruitable?'&#x2713;':'')+'</td></tr>';
+    tbl+='<tr><td style="font-weight:500">'+d.name+'</td><td>'+d.teams.length+'</td>'
+      +'<td>'+(c.Elite||'')+'</td><td>'+(c.Strong||'')+'</td><td>'+(c.Mid||'')+'</td><td>'+(c.Lower||'')+'</td>'
+      +'<td style="text-align:center"><label style="display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-size:12px">'
+      +'<input type="checkbox" '+(d.recruitable?'checked':'')
+      +' onchange="var dv=divs.find(function(x){return x.id==='+d.id+'});if(dv){dv.recruitable=this.checked;updateFieldGenderRecommendation();updateRecFieldRecommendation();}">'
+      +'<span style="color:var(--teal)">'+(d.recruitable?'Yes':'No')+'</span></label></td></tr>';
   });
   tbl+='</tbody></table>';
+  tbl+='<div style="font-size:11px;color:var(--dark-gray);margin-top:6px;padding:6px 10px;background:var(--lt-teal);border-radius:5px">'
+    +'<strong>Check recruiting divisions above</strong> — this tells the field calculator how many recruiting fields you need. '
+    +'Leave all unchecked for non-recruiting events.</div>';
   document.getElementById('preview-tbl').innerHTML=tbl;
   document.getElementById('preview-area').style.display='block';
   // Auto-populate calculator with uploaded team count
@@ -1187,10 +1194,10 @@ function genD1(){
   venues.forEach(v=>{
     venueFields[v]={
       all:fields.filter(f=>(f.venue||'Main venue')===v),
-      boys:fields.filter(f=>(f.venue||'Main venue')===v&&(f.gender==='boys'||f.gender==='both')),
-      girls:fields.filter(f=>(f.venue||'Main venue')===v&&(f.gender==='girls'||f.gender==='both')),
-      recBoys:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&(f.gender==='boys'||f.gender==='both')),
-      recGirls:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&(f.gender==='girls'||f.gender==='both')),
+      boys:fields.filter(f=>(f.venue||'Main venue')===v&&f.gender==='boys'),
+      girls:fields.filter(f=>(f.venue||'Main venue')===v&&f.gender==='girls'),
+      recBoys:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&f.gender==='boys'),
+      recGirls:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&f.gender==='girls'),
     };
   });
 
@@ -1403,10 +1410,10 @@ function genD2(){
     let pool;
     if(prefChamp){
       const cf=fields.filter(f=>f.champ&&(f.gender==='both'||f.gender===gen));
-      pool=cf.length?cf:fields.filter(f=>f.gender==='both'||f.gender===gen);
+      pool=cf.length?cf:fields.filter(f=>f.gender===gen);
     } else {
       const d1pod=window._dpod&&window._dpod[t1.divId||0];
-      pool=d1pod&&d1pod.length?d1pod:fields.filter(f=>f.gender==='both'||f.gender===gen);
+      pool=d1pod&&d1pod.length?d1pod:fields.filter(f=>f.gender===gen);
     }
     for(let si=0;si<slots.length;si++){
       const s=slots[si],h=sH(s);
@@ -1420,7 +1427,7 @@ function genD2(){
       if(t2.id>0){const s2=tS2[t2.id]||[];if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;}
       if(Object.values(sched2[s]).some(g=>g&&t1.id>0&&(g.t1===t1.id||g.t2===t1.id)))continue;
       if(Object.values(sched2[s]).some(g=>g&&t2.id>0&&(g.t1===t2.id||g.t2===t2.id)))continue;
-      const av=pool.filter(f=>(f.gender==='both'||f.gender===gen)&&!sched2[s][f.id]);if(!av.length)continue;
+      const av=pool.filter(f=>f.gender===gen&&!sched2[s][f.id]);if(!av.length)continue;
       sched2[s][av[0].id]={id:`D2-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
         divId:t1.divId||0,divName:t1.divName||'',rec:t1.rec||false,gen,type,label,fallback:isFallback||false};
       if(t1.id>0){tS2[t1.id]=tS2[t1.id]||[];tS2[t1.id].push(s);}
@@ -2161,8 +2168,8 @@ function loadSample(){
     {n:'Field 5',l:false,g:'girls',ch:false,rec:true, parking:80, lot:'Lot B',venue:'Main venue'},
     {n:'Field 6',l:false,g:'girls',ch:true, rec:false,parking:80, lot:'Lot B',venue:'Main venue'},
     {n:'Field 7',l:false,g:'girls',ch:false,rec:false,parking:80, lot:'Lot B',venue:'Main venue'},
-    {n:'Field 8',l:false,g:'both', ch:false,rec:false,parking:60, lot:'Lot C',venue:'Main venue'},
-  ].forEach(f=>fields.push({id:fid++,name:f.n,lights:f.l,gender:f.g,champ:f.ch,
+    {n:'Field 8',l:false,g:'boys',ch:false,rec:false,parking:60, lot:'Lot C',venue:'Main venue'},
+  ].forEach(f=>fields.push({id:fid++,name:f.n,lights:f.l,gender:f.g==='both'?'boys':f.g,champ:f.ch,
     recruiting:f.rec,parking:f.parking,parkingPass:'',parkingLot:f.lot,venue:f.venue,location:f.venue}));
   [{n:'2028 Boys Elite',r:true,g:'boys',t:[['Hawks MD','MD','Elite'],['Wolves VA','VA','Strong'],['Eagles PA','PA','Strong'],['Lions NY','NY','Mid'],['Bears NJ','NJ','Mid'],['Tigers NC','NC','Lower']]},
    {n:'2028 Boys AA',r:true,g:'boys',t:[['Storm MD','MD','Elite'],['Flash VA','VA','Strong'],['Force PA','PA','Mid'],['Rush NY','NY','Mid'],['Drive OH','OH','Mid'],['Push IL','IL','Lower']]},
@@ -2646,27 +2653,48 @@ function updateFieldGenderRecommendation(){
   const minTotal=minBoysTotal+minGirlsTotal;
   const configuredBoys=fields.filter(f=>f.gender==='boys').length;
   const configuredGirls=fields.filter(f=>f.gender==='girls').length;
-  const configuredBoth=fields.filter(f=>f.gender==='both').length;
-  const configuredBoysRec=fields.filter(f=>f.recruiting&&(f.gender==='boys'||f.gender==='both')).length;
-  const configuredGirlsRec=fields.filter(f=>f.recruiting&&(f.gender==='girls'||f.gender==='both')).length;
+  const configuredBoysRec=fields.filter(f=>f.recruiting&&f.gender==='boys').length;
+  const configuredGirlsRec=fields.filter(f=>f.recruiting&&f.gender==='girls').length;
   const totalRecFields=fields.filter(f=>f.recruiting).length;
-  const boysFieldsOk=boysTotal===0||(configuredBoys+configuredBoth)>=minBoysTotal;
-  const girlsFieldsOk=girlsTotal===0||(configuredGirls+configuredBoth)>=minGirlsTotal;
+  const boysFieldsOk=boysTotal===0||configuredBoys>=minBoysTotal;
+  const girlsFieldsOk=girlsTotal===0||configuredGirls>=minGirlsTotal;
+  const totalFieldsOk=boysFieldsOk&&girlsFieldsOk;
   const boysRecOk=boysRecTeams===0||configuredBoysRec>=minBoysRec;
   const girlsRecOk=girlsRecTeams===0||configuredGirlsRec>=minGirlsRec;
-  const allOk=boysFieldsOk&&girlsFieldsOk&&boysRecOk&&girlsRecOk;
-  let h2='<div class="cl '+(allOk?'cl-t':'cl-a')+'">';
-  h2+='<strong>'+(allOk?'✓ Field configuration looks good.':'Field configuration needed.')+'</strong> ';
-  h2+='<span style="font-size:11px;opacity:.8">'+usable+' usable slots/day · '+gpt+' games/team</span><br><br>';
+  // Parking: all fields must have spaces entered
+  const parkingOk=fields.length>0&&fields.every(f=>f.parking&&f.parking>0);
+  // Lot names: all fields should have lot names
+  const lotOk=fields.length>0&&fields.every(f=>f.parkingLot&&f.parkingLot.trim()!=='');
+  // Champ field
+  const champOk2=fields.some(f=>f.champ);
+  const allOk=boysFieldsOk&&girlsFieldsOk&&totalFieldsOk&&boysRecOk&&girlsRecOk&&parkingOk&&lotOk&&champOk2;
+  // Build list of what's still missing
+  const missing=[];
+  if(!boysFieldsOk) missing.push('Need '+minBoysTotal+' boys fields (have '+configuredBoys+')');
+  if(!girlsFieldsOk) missing.push('Need '+minGirlsTotal+' girls fields (have '+configuredGirls+') — set field gender to Girls');
+  if(boysTotal>0&&girlsTotal>0&&!totalFieldsOk) missing.push('Total fields ('+totalFieldCapacity+') insufficient — need at least '+(minBoysTotal+minGirlsTotal)+' ('+minBoysTotal+' boys + '+minGirlsTotal+' girls). Add more fields or set dedicated gender per field.');
+  if(!boysRecOk) missing.push('Need '+minBoysRec+' boys recruiting fields (have '+configuredBoysRec+')');
+  if(!girlsRecOk) missing.push('Need '+minGirlsRec+' girls recruiting fields (have '+configuredGirlsRec+')');
+  if(!parkingOk) missing.push('Enter parking spaces for all fields');
+  if(!lotOk) missing.push('Enter lot names for all fields');
+  if(!champOk2) missing.push('Designate at least one Championship field');
+
+  let h2='<div class="cl '+(allOk?'cl-t':'cl-r')+'">';
+  h2+='<strong>'+(allOk?'✓ Field configuration complete — ready to proceed.':'⚠ Field configuration incomplete.')+'</strong> ';
+  h2+='<span style="font-size:11px;opacity:.8">'+usable+' usable slots/day · '+gpt+' games/team</span>';
+  if(missing.length){
+    h2+='<br><br><strong>Still needed:</strong><br>'+missing.map(m=>'• '+m).join('<br>');
+  }
+  h2+='<br><br>';
   h2+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead>';
   h2+='<tr style="border-bottom:.5px solid rgba(0,0,0,.15)"><th style="text-align:left;padding:3px 8px">Group</th><th style="text-align:center;padding:3px 8px">Teams</th><th style="text-align:center;padding:3px 8px">Min fields</th><th style="text-align:center;padding:3px 8px">Rec fields needed</th><th style="text-align:center;padding:3px 8px">Status</th></tr>';
   h2+='</thead><tbody>';
   if(boysTotal>0){
-    const st=boysFieldsOk&&boysRecOk?'<span style="color:#085041;font-weight:600">✓ OK</span>':(!boysFieldsOk?'<span style="color:var(--red);font-weight:600">Need '+minBoysTotal+' boys fields</span>':'<span style="color:var(--amber);font-weight:600">Mark '+Math.max(0,minBoysRec-configuredBoysRec)+' as Recruiting</span>');
+    const st=boysFieldsOk&&boysRecOk?'<span style="color:#085041;font-weight:600">✓ OK</span>':(!boysFieldsOk?'<span style="color:var(--red);font-weight:600">Need '+minBoysTotal+' boys fields (have '+configuredBoys+')</span>':'<span style="color:var(--amber);font-weight:600">Mark '+Math.max(0,minBoysRec-configuredBoysRec)+' as Recruiting</span>');
     h2+=`<tr style="border-bottom:.5px solid rgba(0,0,0,.06)"><td style="padding:5px 8px;font-weight:500">Boys</td><td style="padding:5px 8px;text-align:center">${boysTotal} (${boysRecTeams} rec + ${boysNonRecTeams} non-rec)</td><td style="padding:5px 8px;text-align:center"><strong>${minBoysTotal}</strong> (${minBoysRec} rec + ${minBoysNonRec} non-rec)</td><td style="padding:5px 8px;text-align:center">${configuredBoysRec} / ${minBoysRec}</td><td style="padding:5px 8px;text-align:center">${st}</td></tr>`;
   }
   if(girlsTotal>0){
-    const st=girlsFieldsOk&&girlsRecOk?'<span style="color:#085041;font-weight:600">✓ OK</span>':(!girlsFieldsOk?'<span style="color:var(--red);font-weight:600">Need '+minGirlsTotal+' girls fields</span>':'<span style="color:var(--amber);font-weight:600">Mark '+Math.max(0,minGirlsRec-configuredGirlsRec)+' as Recruiting</span>');
+    const st=girlsFieldsOk&&girlsRecOk&&(girlsTotal===0||boysTotal===0||configuredGirls>0||configuredBoth>=minGirlsTotal)?'<span style="color:#085041;font-weight:600">✓ OK</span>':(!girlsFieldsOk?'<span style="color:var(--red);font-weight:600">Need '+minGirlsTotal+' girls fields (have '+configuredGirls+')</span>':'<span style="color:var(--amber);font-weight:600">Mark '+Math.max(0,minGirlsRec-configuredGirlsRec)+' as Recruiting</span>');
     h2+=`<tr style="border-bottom:.5px solid rgba(0,0,0,.06)"><td style="padding:5px 8px;font-weight:500">Girls</td><td style="padding:5px 8px;text-align:center">${girlsTotal} (${girlsRecTeams} rec + ${girlsNonRecTeams} non-rec)</td><td style="padding:5px 8px;text-align:center"><strong>${minGirlsTotal}</strong> (${minGirlsRec} rec + ${minGirlsNonRec} non-rec)</td><td style="padding:5px 8px;text-align:center">${configuredGirlsRec} / ${minGirlsRec}</td><td style="padding:5px 8px;text-align:center">${st}</td></tr>`;
   }
   h2+=`<tr style="border-top:1px solid rgba(0,0,0,.15);font-weight:600"><td style="padding:5px 8px">Total</td><td style="padding:5px 8px;text-align:center">${boysTotal+girlsTotal}</td><td style="padding:5px 8px;text-align:center">${minTotal} fields</td><td style="padding:5px 8px;text-align:center">${totalRecFields} rec fields assigned</td><td></td></tr>`;
@@ -2720,8 +2748,8 @@ function validateAndProceed(){
     // Check all fields have gender set (not just "both" if we have gender-specific divisions)
     const hasBoysDiv=divs.some(d=>d.gender==='boys');
     const hasGirlsDiv=divs.some(d=>d.gender==='girls');
-    const boysFields=fields.filter(f=>f.gender==='boys'||f.gender==='both').length;
-    const girlsFields=fields.filter(f=>f.gender==='girls'||f.gender==='both').length;
+    const boysFields=fields.filter(f=>f.gender==='boys').length;
+    const girlsFields=fields.filter(f=>f.gender==='girls').length;
 
     if(hasBoysDiv&&boysFields===0){
       errors.push('You have boys divisions but no boys or both-gender fields. Set at least one field to Boys or Both.');
@@ -2731,7 +2759,7 @@ function validateAndProceed(){
     }
 
     // Warn if all fields are "both" when there are gender-specific divisions
-    const allBoth=fields.every(f=>f.gender==='both');
+    const allBoth=false; // Both gender removed
     if(allBoth&&hasBoysDiv&&hasGirlsDiv){
       warnings.push('All fields are set to Both gender. For best results designate specific fields as Boys or Girls to match your venue layout — boys and girls fields are typically lined differently.');
     }
