@@ -891,10 +891,16 @@ function importRows(rows,colMap,filename){
       +'<td style="text-align:center;padding:4px 8px">'
       +'<label style="display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;'
       +(d.recruitable?'background:var(--lt-teal);color:#085041;':'background:var(--lt-gray);color:var(--dark-gray);')
-      +'padding:4px 8px;border-radius:4px;font-size:11px;font-weight:500" id="rec-lbl-'+d.id+'">'
+      +'padding:4px 8px;border-radius:4px;font-size:11px;font-weight:500">'
       +'<input type="checkbox" style="width:14px;height:14px;cursor:pointer;accent-color:var(--teal)" '+(d.recruitable?'checked ':'')
-      +'onchange="setDivRecruitable('+d.id+',this.checked)">'
-      +'<span id="rec-txt-'+d.id+'">'+(d.recruitable?'✓ Recruiting':'Not recruiting')+'</span>'
+      +'onchange="'
+      +'var dv=divs.find(function(x){return x.id==='+d.id+'});'
+      +'if(dv){dv.recruitable=this.checked;}'
+      +'this.nextElementSibling.textContent=this.checked?\'✓ Recruiting\':\'Not recruiting\';'
+      +'this.parentElement.style.background=this.checked?\'var(--lt-teal)\':\'var(--lt-gray)\';'
+      +'this.parentElement.style.color=this.checked?\'#085041\':\'var(--dark-gray)\';'
+      +'updateFieldGenderRecommendation();updateRecFieldRecommendation();">'
+      +'<span>'+(d.recruitable?'✓ Recruiting':'Not recruiting')+'</span>'
       +'</label></td></tr>';
   });
   tbl+='</tbody></table>';
@@ -2699,13 +2705,9 @@ function updateFieldGenderRecommendation(){
   const totalFieldsOk=boysFieldsOk&&girlsFieldsOk;
   const boysRecOk=boysRecTeams===0||configuredBoysRec>=minBoysRec;
   const girlsRecOk=girlsRecTeams===0||configuredGirlsRec>=minGirlsRec;
-  // Parking: all fields must have spaces entered
-  const parkingOk=fields.length>0&&fields.every(f=>f.parking&&f.parking>0);
-  // Lot names: all fields should have lot names
-  const lotOk=fields.length>0&&fields.every(f=>f.parkingLot&&f.parkingLot.trim()!=='');
   // Champ field
   const champOk2=fields.some(f=>f.champ);
-  const allOk=boysFieldsOk&&girlsFieldsOk&&totalFieldsOk&&boysRecOk&&girlsRecOk&&parkingOk&&lotOk&&champOk2;
+  const allOk=boysFieldsOk&&girlsFieldsOk&&totalFieldsOk&&boysRecOk&&girlsRecOk&&champOk2;
   // Build list of what's still missing
   const missing=[];
   if(!boysFieldsOk) missing.push('Need '+minBoysTotal+' boys fields (have '+configuredBoys+')');
@@ -2713,9 +2715,7 @@ function updateFieldGenderRecommendation(){
   if(boysTotal>0&&girlsTotal>0&&!totalFieldsOk) missing.push('Total fields ('+totalFieldCapacity+') insufficient — need at least '+(minBoysTotal+minGirlsTotal)+' ('+minBoysTotal+' boys + '+minGirlsTotal+' girls). Add more fields or set dedicated gender per field.');
   if(!boysRecOk) missing.push('Need '+minBoysRec+' boys recruiting fields (have '+configuredBoysRec+')');
   if(!girlsRecOk) missing.push('Need '+minGirlsRec+' girls recruiting fields (have '+configuredGirlsRec+')');
-  if(!parkingOk) missing.push('Enter parking spaces for all fields');
-  if(!lotOk) missing.push('Enter lot names for all fields');
-  if(!champOk2) missing.push('Designate at least one Championship field');
+  if(!champOk2) missing.push('Designate at least one Championship field (check Champ on a field above)');
 
   let h2='<div class="cl '+(allOk?'cl-t':'cl-r')+'">';
   h2+='<strong>'+(allOk?'✓ Field configuration complete — ready to proceed.':'⚠ Field configuration incomplete.')+'</strong> ';
@@ -2823,18 +2823,16 @@ function validateAndProceed(){
       if(needGirlsChamp&&!hasGirlsChamp) errors.push('Girls divisions need a Championship field. Check Champ on a Girls or Both field.');
     }
 
-    // REQUIRED: Parking spaces for all fields
-    const missingParking=fields.filter(f=>!f.parking||f.parking===0);
-    if(missingParking.length===fields.length){
-      errors.push('Parking spaces are required for all fields. Enter spaces for each field — enables parking-optimized pod assignment and the traffic flow chart.');
-    } else if(missingParking.length>0){
-      errors.push('Parking spaces missing for: '+missingParking.map(f=>f.name).join(', ')+'. Enter spaces for all fields to enable parking optimization.');
-    }
-
-    // Warn if lot names missing
-    const missingLot=fields.filter(f=>!f.parkingLot||f.parkingLot.trim()==='');
-    if(missingLot.length>0){
-      warnings.push('Lot name blank for: '+missingLot.map(f=>f.name).join(', ')+'. Add lot names for parking pass distribution.');
+    // Parking lots: hard block
+    if(parkingLots.length===0){
+      errors.push('Parking lots are required. Add at least one parking lot in the Parking Lots section below the fields — assign fields to each lot and enter total spaces.');
+    } else {
+      const lotsNoFields=parkingLots.filter(l=>l.fieldIds.length===0);
+      if(lotsNoFields.length>0) errors.push('Assign fields to parking lot(s): '+lotsNoFields.map(l=>l.name).join(', ')+'.');
+      const lotsNoSpaces=parkingLots.filter(l=>!l.spaces||l.spaces===0);
+      if(lotsNoSpaces.length>0) errors.push('Enter parking spaces for lot(s): '+lotsNoSpaces.map(l=>l.name).join(', ')+'.');
+      const lotsNoColor=parkingLots.filter(l=>!l.color);
+      if(lotsNoColor.length>0) errors.push('Set a parking pass color for lot(s): '+lotsNoColor.map(l=>l.name).join(', ')+'. Required for team parking pass distribution.');
     }
   }
 
