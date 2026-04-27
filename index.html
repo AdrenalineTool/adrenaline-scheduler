@@ -1756,8 +1756,8 @@ function renderGrid(sched,containerId,isD1){
     const hp=isD1&&practiceSlots[slot];
     t+=`<tr><td class="tc">${fmtSlot(slot)}${hp?`<br><span style="font-size:8px;color:var(--purple);font-weight:600">+prac</span>`:''}</td>`;
     fields.forEach(f=>{
-      if(isR&&f.recruiting){t+=`<td><div class="g-lunch">Recruiter break</div></td>`;return;}
       const g=sched[slot]&&sched[slot][f.id];
+      if(isR&&f.recruiting&&!g){t+=`<td><div class="g-lunch">Recruiter break</div></td>`;return;}
       if(g){
         const ck=slot+':'+f.id;const hasConflict=window._cset&&window._cset.has(ck);const cls=hasConflict?'g-conflict':(g.type==='champ'?'g-champ':g.type==='bracket'?'g-bracket':(g.type==='consolation'||g.type==='nonbracket')?(g.fallback?'g-warn':'g-con'):g.rec?'g-rec':'g-pool');
         t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'${isD1?'d1':'d2'}');this.classList.remove('drop-cell')">
