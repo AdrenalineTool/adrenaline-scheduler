@@ -1404,27 +1404,97 @@ function genD1(){
   }
 
 
-  // ── BACKFILL PASS ────────────────────────────────────────────────────────
-  // After main scheduling, fill remaining idle slots with unscheduled games
-  // All existing rules apply (pods, rest, travel, lunch, gender)
+  // ── BACKFILL PASS (3 phases) ─────────────────────────────────────────────
+  // Phase 1: Per-division end-pack — sort remaining unscheduled matchups so
+  //   they fill earliest available slots, pushing idle time to end of day.
+  // Phase 2: Smarter targeted backfill — fill mid-day gaps on any field
+  //   before filling end-of-day gaps. A mid-day gap = idle slot between
+  //   two occupied slots on the same field.
+  // Phase 3: Cross-division fill — use ANY division sharing the same pod
+  //   to fill remaining gaps, not just the pod's primary division.
+  // All rules apply: min rest, travel constraints, lunch protection.
+
   let backfillCount=0;
+
+  // Build remaining matchups per division
+  const remaining={};
   schedOrder.forEach(d=>{
+    remaining[d.id]=[];
     (pools[d.id]||[]).forEach(pool=>{
-      const ms=[];
       for(let i=0;i<pool.teams.length;i++)
         for(let j=i+1;j<pool.teams.length;j++){
-          // Only include games not yet scheduled
           const key=pk(pool.teams[i].id,pool.teams[j].id);
           if(!played.has(key)&&tG[pool.teams[i].id]<gpt&&tG[pool.teams[j].id]<gpt)
-            ms.push([pool.teams[i],pool.teams[j]]);
+            remaining[d.id].push([pool.teams[i],pool.teams[j],pool.label]);
         }
-      for(let i=ms.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ms[i],ms[j]]=[ms[j],ms[i]];}
-      ms.forEach(([t1,t2])=>{
-        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt)return;
-        for(let si=0;si<slots.length;si++){
-          const s=slots[si],h=sH(s);
-          if(d.recruitable&&isLunchSlot(s))continue;
-          const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
+    });
+    // Shuffle for variety
+    for(let i=remaining[d.id].length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [remaining[d.id][i],remaining[d.id][j]]=[remaining[d.id][j],remaining[d.id][i]];
+    }
+  });
+
+  // Identify mid-day gaps per field (slots between two occupied slots)
+  function getMidDayGaps(fieldId){
+    const occupied=slots.map((s,si)=>({s,si,has:!!sched1[s][fieldId]}));
+    const gaps=[];
+    for(let si=1;si<occupied.length-1;si++){
+      if(!occupied[si].has){
+        // Check if there's a game before AND after this slot on this field
+        const hasBefore=occupied.slice(0,si).some(x=>x.has);
+        const hasAfter=occupied.slice(si+1).some(x=>x.has);
+        if(hasBefore&&hasAfter) gaps.push(si); // true mid-day gap
+      }
+    }
+    return gaps;
+  }
+
+  // Phase 1+2: Fill mid-day gaps first, then remaining slots
+  // Build slot priority: mid-day gaps first (sorted by field then slot),
+  // then end-of-day slots
+  const midDayGapSlots=new Set();
+  fields.forEach(f=>{
+    getMidDayGaps(f.id).forEach(si=>midDayGapSlots.add(si));
+  });
+  const prioritizedSlots=[
+    ...slots.map((s,si)=>({s,si,priority:midDayGapSlots.has(si)?0:1}))
+      .sort((a,b)=>a.priority-b.priority||a.si-b.si)
+      .map(x=>x.s)
+  ];
+
+  // Phase 3: Build reverse pod map — for each field, which divisions use it?
+  const fieldDivs={};
+  fields.forEach(f=>{fieldDivs[f.id]=[];});
+  Object.entries(dpod).forEach(([divId,podFields])=>{
+    podFields.forEach(f=>{
+      if(!fieldDivs[f.id]) fieldDivs[f.id]=[];
+      if(!fieldDivs[f.id].includes(+divId)) fieldDivs[f.id].push(+divId);
+    });
+  });
+
+  // Run backfill over prioritized slots
+  prioritizedSlots.forEach(s=>{
+    const h=sH(s);
+    const si=slots.indexOf(s);
+
+    // For each field, check if idle and try to fill
+    fields.forEach(f=>{
+      if(sched1[s][f.id]) return; // already has a game
+      if(isLunchSlot(s)&&(dpod[fieldDivs[f.id][0]]||[]).some(pf=>pf.id===f.id)) return;
+
+      // Try divisions that use this field (cross-division fill)
+      const divIds=fieldDivs[f.id]||[];
+      for(const divId of divIds){
+        const d=divs.find(x=>x.id===divId);
+        if(!d||!remaining[d.id]||!remaining[d.id].length) continue;
+        if(d.recruitable&&isLunchSlot(s)) continue;
+
+        for(let qi=0;qi<remaining[d.id].length;qi++){
+          const [t1,t2,poolLabel]=remaining[d.id][qi];
+          if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){remaining[d.id].splice(qi,1);qi--;continue;}
+          const te1=t1.travelWaitlist?'local':t1.travelTier;
+          const te2=t2.travelWaitlist?'local':t2.travelTier;
           if((te1==='in'||te1==='both')&&h<lc)continue;
           if((te2==='in'||te2==='both')&&h<lc)continue;
           if((te1==='out'||te1==='both')&&h>ec)continue;
@@ -1434,18 +1504,23 @@ function genD1(){
           if(!(s2.length===0||si-slots.indexOf(s2[s2.length-1])>minRest))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-          const podFields=dpod[d.id]||[];
-          const av=podFields.filter(f=>!sched1[s][f.id]);
-          if(!av.length)continue;
-          sched1[s][av[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
-            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,type:'pool'};
+          // Gender check
+          if(f.gender!==d.gender) continue;
+          // Place game
+          sched1[s][f.id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
           tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
-          played.add(pk(t1.id,t2.id));backfillCount++;break;
+          played.add(pk(t1.id,t2.id));
+          remaining[d.id].splice(qi,1);
+          backfillCount++;
+          break; // one game per field per slot
         }
-      });
+      }
     });
   });
-  if(backfillCount>0)console.log('Backfill placed '+backfillCount+' additional games');
+
+  if(backfillCount>0) console.log('Backfill placed '+backfillCount+' additional games ('+midDayGapSlots.size+' mid-day gaps targeted)');
+
 
   window._played=played;window._tS=tS;window._dpod=dpod;
 }
