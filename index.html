@@ -1752,12 +1752,11 @@ function renderGrid(sched,containerId,isD1){
   if(!slots.length){document.getElementById(containerId).innerHTML='';return;}
   let t=`<table><thead><tr><th style="min-width:58px">Time</th>${fields.map(f=>`<th>${f.name}${f.champ?' ★':''}${f.recruiting?' ⭐':''}<br><span style="font-size:8px;font-weight:400;opacity:.7">${f.venue||'Main venue'}</span></th>`).join('')}</tr></thead><tbody>`;
   slots.forEach(slot=>{
-    const h=sH(slot),isR=h===R,isN=h===N&&N!==R;
+    const h=sH(slot),isR=h===R;
     const hp=isD1&&practiceSlots[slot];
     t+=`<tr><td class="tc">${fmtSlot(slot)}${hp?`<br><span style="font-size:8px;color:var(--purple);font-weight:600">+prac</span>`:''}</td>`;
     fields.forEach(f=>{
-      if(isR){t+=`<td><div class="g-lunch">Recruiter break</div></td>`;return;}
-      if(isN){t+=`<td><div class="g-tlunch">Team lunch</div></td>`;return;}
+      if(isR&&f.recruiting){t+=`<td><div class="g-lunch">Recruiter break</div></td>`;return;}
       const g=sched[slot]&&sched[slot][f.id];
       if(g){
         const ck=slot+':'+f.id;const hasConflict=window._cset&&window._cset.has(ck);const cls=hasConflict?'g-conflict':(g.type==='champ'?'g-champ':g.type==='bracket'?'g-bracket':(g.type==='consolation'||g.type==='nonbracket')?(g.fallback?'g-warn':'g-con'):g.rec?'g-rec':'g-pool');
@@ -2658,14 +2657,18 @@ function updateFieldGenderRecommendation(){
     const eh2=+document.getElementById('dend').value||18;
     const gpt2=+document.getElementById('gpt').value||3;
     const usable2=Math.floor(((eh2-sh2)*60)/(slotDur2+buf2))-1;
+    const nonRecUsable2=usable2+1;
     const bT=divs.filter(d=>d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
     const gT=divs.filter(d=>d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
     const bRecT=divs.filter(d=>d.gender==='boys'&&d.recruitable).reduce((a,d)=>a+d.teams.length,0);
     const gRecT=divs.filter(d=>d.gender==='girls'&&d.recruitable).reduce((a,d)=>a+d.teams.length,0);
-    const mBoys=bT>0?Math.max(1,Math.ceil(bT*gpt2/2/usable2)):0;
-    const mGirls=gT>0?Math.max(1,Math.ceil(gT*gpt2/2/usable2)):0;
+    const bNonRecT=bT-bRecT, gNonRecT=gT-gRecT;
     const mBoysRec=bRecT>0?Math.max(1,Math.ceil(bRecT*gpt2/2/usable2)):0;
     const mGirlsRec=gRecT>0?Math.max(1,Math.ceil(gRecT*gpt2/2/usable2)):0;
+    const mBoysNonRec=bNonRecT>0?Math.max(1,Math.ceil(bNonRecT*gpt2/2/nonRecUsable2)):0;
+    const mGirlsNonRec=gNonRecT>0?Math.max(1,Math.ceil(gNonRecT*gpt2/2/nonRecUsable2)):0;
+    const mBoys=mBoysRec+mBoysNonRec;
+    const mGirls=mGirlsRec+mGirlsNonRec;
     el.innerHTML=`<div class="cl cl-a">
       <strong>Add fields below — here is what you need based on your ${divs.reduce((a,d)=>a+d.teams.length,0)} teams:</strong><br><br>
       ${bT>0?`<strong>Boys fields needed: ${mBoys} total</strong> (${mBoysRec} recruiting + ${mBoys-mBoysRec} non-recruiting)<br>`:''}
@@ -2681,7 +2684,8 @@ function updateFieldGenderRecommendation(){
   const sh=+document.getElementById('dstart').value||8;
   const eh=+document.getElementById('dend').value||18;
   const gpt=+document.getElementById('gpt').value||3;
-  const usable=Math.floor(((eh-sh)*60)/(slotDur+buf))-1;
+  const usable=Math.floor(((eh-sh)*60)/(slotDur+buf))-1; // rec fields: minus recruiter lunch
+  const nonRecUsable=usable+1; // non-rec fields: no lunch slot, all slots available
   const boysRecTeams=divs.filter(d=>d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
   const girlsRecTeams=divs.filter(d=>d.recruitable&&d.gender==='girls').reduce((a,d)=>a+d.teams.length,0);
   const boysNonRecTeams=divs.filter(d=>!d.recruitable&&d.gender==='boys').reduce((a,d)=>a+d.teams.length,0);
@@ -2690,8 +2694,8 @@ function updateFieldGenderRecommendation(){
   const girlsTotal=girlsRecTeams+girlsNonRecTeams;
   const minBoysRec=boysRecTeams>0?Math.max(1,Math.ceil(boysRecTeams*gpt/2/usable)):0;
   const minGirlsRec=girlsRecTeams>0?Math.max(1,Math.ceil(girlsRecTeams*gpt/2/usable)):0;
-  const minBoysNonRec=boysNonRecTeams>0?Math.max(1,Math.ceil(boysNonRecTeams*gpt/2/usable)):0;
-  const minGirlsNonRec=girlsNonRecTeams>0?Math.max(1,Math.ceil(girlsNonRecTeams*gpt/2/usable)):0;
+  const minBoysNonRec=boysNonRecTeams>0?Math.max(1,Math.ceil(boysNonRecTeams*gpt/2/nonRecUsable)):0;
+  const minGirlsNonRec=girlsNonRecTeams>0?Math.max(1,Math.ceil(girlsNonRecTeams*gpt/2/nonRecUsable)):0;
   const minBoysTotal=minBoysRec+minBoysNonRec;
   const minGirlsTotal=minGirlsRec+minGirlsNonRec;
   const minTotal=minBoysTotal+minGirlsTotal;
@@ -2715,10 +2719,13 @@ function updateFieldGenderRecommendation(){
   if(boysTotal>0&&girlsTotal>0&&!totalFieldsOk) missing.push('Total fields ('+totalFieldCapacity+') insufficient — need at least '+(minBoysTotal+minGirlsTotal)+' ('+minBoysTotal+' boys + '+minGirlsTotal+' girls). Add more fields or set dedicated gender per field.');
   if(!boysRecOk) missing.push('Need '+minBoysRec+' boys recruiting fields (have '+configuredBoysRec+')');
   if(!girlsRecOk) missing.push('Need '+minGirlsRec+' girls recruiting fields (have '+configuredGirlsRec+')');
-  if(!champOk2) missing.push('Designate at least one Championship field (check Champ on a field above)');
+  if(!champOk2) missing.push('Check <strong>Champ</strong> on at least one field — needed for Day 2 championship games');
 
-  let h2='<div class="cl '+(allOk?'cl-t':'cl-r')+'">';
-  h2+='<strong>'+(allOk?'✓ Field configuration complete — ready to proceed.':'⚠ Field configuration incomplete.')+'</strong> ';
+  const majorIssue=!boysFieldsOk||!girlsFieldsOk||!totalFieldsOk;
+  const minorIssue=!champOk2||!boysRecOk||!girlsRecOk;
+  const clClass=allOk?'cl-t':majorIssue?'cl-r':'cl-a';
+  let h2='<div class="cl '+clClass+'">';
+  h2+='<strong>'+(allOk?'✓ Field configuration complete — ready to proceed.':majorIssue?'⚠ Field configuration incomplete.':'⚠ Almost ready — a few items remaining.')+'</strong> ';
   h2+='<span style="font-size:11px;opacity:.8">'+usable+' usable slots/day · '+gpt+' games/team</span>';
   if(missing.length){
     h2+='<br><br><strong>Still needed:</strong><br>'+missing.map(m=>'• '+m).join('<br>');
