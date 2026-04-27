@@ -385,9 +385,19 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <button class="btn btn-sm" onclick="addF()">+ Add field</button>
     <button class="btn btn-sm" onclick="addFs(8)">+ Add 8 fields</button>
   </div>
-  <div id="parking-status" class="cl cl-t" style="display:none;margin-top:8px"></div>
   <div id="field-gender-rec" style="display:none;margin-top:8px"></div>
   <div id="rec-field-rec" style="display:none;margin-top:8px"></div>
+
+  <div class="sec-label" style="margin-top:16px">Parking lots <span style="font-weight:400;color:var(--dark-gray)">(define lots, assign fields, set pass colors)</span></div>
+  <div class="cl cl-b" style="font-size:11px;margin-bottom:8px">
+    Each parking lot serves a cluster of fields. Define lots here — enter the lot name, total spaces, pass color, and which fields are served.
+    The scheduler routes larger divisions to fields adjacent to larger lots. Teams get passes for their specific lot.
+  </div>
+  <div id="parking-lots-list"></div>
+  <div class="btn-row" style="margin-top:6px">
+    <button class="btn btn-sm" onclick="addParkingLot()">+ Add parking lot</button>
+  </div>
+  <div id="parking-status" class="cl cl-t" style="display:none;margin-top:8px"></div>
   <div class="divider"></div>
   <div class="btn-row" style="justify-content:flex-end">
     <button class="btn btn-navy" onclick="validateAndProceed()">Pool seeding -></button>
@@ -404,9 +414,8 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="flex:1"></div>
     <button class="btn btn-navy" onclick="go('p4')">Travel tiers -></button>
   </div>
-  <div class="cl cl-a" style="margin-bottom:8px">
-    <strong>⭐ Mark recruiting divisions below</strong> — check "Recruiting division" on any division where college coaches will be evaluating players.
-    Leave all unchecked for non-recruiting events. This controls which fields are used for recruiting games and which teams get recruiter-visible time slots.
+  <div class="cl cl-b" style="margin-bottom:8px;font-size:11px">
+    Recruiting status was set in Step 1. Shown here as read-only. To change, go back to Step 1 — Upload teams.
   </div>
   <div class="cl cl-b">Snake draft distributes teams by strength tier. <strong>Drag teams between pools to override.</strong> Each pool should have representation across Elite / Strong / Mid / Lower.</div>
   <div class="cl cl-t" style="margin-top:6px"><strong>Pool seeding method:</strong> (1) Sort by skill tier — Elite > Strong > Mid > Lower, random within tier. (2) Snake draft into pools. (3) Auto-resolve region conflicts by swapping same-tier teams between pools. (4) Flag unavoidable remaining conflicts with ⚠. <strong>Day 2 standings criteria:</strong> Win=3pts, Tie=1pt, Loss=0 → Head-to-head → Fewest goals against → Goal differential.</div>
@@ -624,7 +633,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 // ============================================================
 // STATE
 // ============================================================
-let fields=[], divs=[], pools={}, sched1={}, sched2={}, practiceSlots={};
+let fields=[], divs=[], pools={}, sched1={}, sched2={}, practiceSlots={}, parkingLots=[];
 let fid=1, did=1, tid=1, rawRows=[], detCols={}, dgSrc=null, d2Warnings=[];
 const TO={Elite:0,Strong:1,Mid:2,Lower:3};
 const parkingPassColors={'Red':'#fee2e2','Blue':'#dbeafe','Green':'#dcfce7','Yellow':'#fef9c3','Orange':'#ffedd5','Purple':'#f3e8ff','White':'#f8fafc'};
@@ -695,11 +704,11 @@ function dl(fn,content,mime){
 function addF(n='',l=false,g='boys',ch=false){
   setTimeout(runCalc,50);
   const id=fid++;
-  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,parking:0,parkingPass:'',parkingLot:'',venue:'Main venue',location:'Main venue'});
+  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,venue:'Main venue',location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
-function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();runCalc();updateFieldGenderRecommendation();}
+function remF(id){fields=fields.filter(f=>f.id!==id);renderFields();renderParkingLots();runCalc();updateFieldGenderRecommendation();}
 function renderFields(){
   document.getElementById('fields-list').innerHTML=fields.map(f=>`
     <div style="background:var(--lt-gray);border-radius:5px;margin-bottom:6px;overflow:hidden">
@@ -721,25 +730,11 @@ function renderFields(){
         </label>
         <button class="btn btn-sm btn-danger" style="margin-left:auto" onclick="remF(${f.id})">× Remove</button>
       </div>
-      <!-- Venue + Parking row -->
+      <!-- Venue row only — parking moved to Parking Lots section -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 9px">
         <span style="font-size:10px;font-weight:600;color:var(--navy);min-width:36px">VENUE:</span>
-        <input style="width:130px;font-size:12px;padding:3px 7px;border:.5px solid var(--teal);border-radius:4px;background:#fff" placeholder="Venue / location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value" title="Physical site name — fields with same venue are grouped into pods. Teams never cross venues.">
-        <div style="width:.5px;height:20px;background:var(--mid-gray);margin:0 4px"></div>
-        <span style="font-size:10px;font-weight:600;color:var(--amber);min-width:54px">PARKING:</span>
-        <input type="number" min="0" max="500" step="10" style="width:64px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Spaces" value="${f.parking||0}" onchange="fields.find(x=>x.id===${f.id}).parking=+this.value;checkParkingConflicts()" title="Total parking spaces serving this field">
-        <span style="font-size:10px;color:var(--dark-gray)">spaces</span>
-        <input style="width:100px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Lot name" value="${f.parkingLot||''}" onchange="fields.find(x=>x.id===${f.id}).parkingLot=this.value" title="Lot name — teams at this field get this lot on their pass. Different lot names for different clusters at same venue.">
-        <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:${f.parkingPass?parkingPassColors[f.parkingPass]||'#fff':'#fff'}" title="Pass color for teams at this field" onchange="fields.find(x=>x.id===${f.id}).parkingPass=this.value;renderFields()">
-          <option value="">No pass color</option>
-          <option value="Red" ${f.parkingPass==='Red'?'selected':''} style="background:#fee2e2">🔴 Red pass</option>
-          <option value="Blue" ${f.parkingPass==='Blue'?'selected':''} style="background:#dbeafe">🔵 Blue pass</option>
-          <option value="Green" ${f.parkingPass==='Green'?'selected':''} style="background:#dcfce7">🟢 Green pass</option>
-          <option value="Yellow" ${f.parkingPass==='Yellow'?'selected':''} style="background:#fef9c3">🟡 Yellow pass</option>
-          <option value="Orange" ${f.parkingPass==='Orange'?'selected':''} style="background:#ffedd5">🟠 Orange pass</option>
-          <option value="Purple" ${f.parkingPass==='Purple'?'selected':''} style="background:#f3e8ff">🟣 Purple pass</option>
-          <option value="White" ${f.parkingPass==='White'?'selected':''} style="background:#f8fafc">⚪ White pass</option>
-        </select>
+        <input style="width:160px;font-size:12px;padding:3px 7px;border:.5px solid var(--teal);border-radius:4px;background:#fff" placeholder="Venue / location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value;renderParkingLots()" title="Physical site name — fields with same venue are grouped into pods. Teams never cross venues.">
+        <span style="font-size:10px;color:var(--dark-gray)">Parking lot assigned by the Parking Lots section below →</span>
       </div>
     </div>`).join('');
   checkParkingConflicts();
@@ -896,15 +891,10 @@ function importRows(rows,colMap,filename){
       +'<td style="text-align:center;padding:4px 8px">'
       +'<label style="display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;'
       +(d.recruitable?'background:var(--lt-teal);color:#085041;':'background:var(--lt-gray);color:var(--dark-gray);')
-      +'padding:4px 8px;border-radius:4px;font-size:11px;font-weight:500">'
-      +'<input type="checkbox" style="width:14px;height:14px;cursor:pointer" '+(d.recruitable?'checked':'')
-      +' onchange="var dv=divs.find(function(x){return x.id==='+d.id+'});if(dv){'
-      +'dv.recruitable=this.checked;'
-      +'this.parentElement.style.background=this.checked?\'var(--lt-teal)\':\'var(--lt-gray)\';'
-      +'this.parentElement.style.color=this.checked?\'#085041\':\'var(--dark-gray)\';'
-      +'this.nextElementSibling.textContent=this.checked?\'✓ Recruiting\':\'Not recruiting\';'
-      +'updateFieldGenderRecommendation();updateRecFieldRecommendation();}">'
-      +'<span>'+(d.recruitable?'✓ Recruiting':'Not recruiting')+'</span>'
+      +'padding:4px 8px;border-radius:4px;font-size:11px;font-weight:500" id="rec-lbl-'+d.id+'">'
+      +'<input type="checkbox" style="width:14px;height:14px;cursor:pointer;accent-color:var(--teal)" '+(d.recruitable?'checked ':'')
+      +'onchange="setDivRecruitable('+d.id+',this.checked)">'
+      +'<span id="rec-txt-'+d.id+'">'+(d.recruitable?'✓ Recruiting':'Not recruiting')+'</span>'
       +'</label></td></tr>';
   });
   tbl+='</tbody></table>';
@@ -977,6 +967,21 @@ function resetDropZone(){
   if(sub){ sub.textContent='Accepts the Adrenaline template (.csv or .xlsx)'; sub.style.display=''; }
   var inp=document.getElementById('file-inp');
   if(inp) inp.value='';
+}
+
+function setDivRecruitable(divId, val){
+  const d=divs.find(x=>x.id===divId);
+  if(!d)return;
+  d.recruitable=val;
+  const lbl=document.getElementById('rec-lbl-'+divId);
+  const txt=document.getElementById('rec-txt-'+divId);
+  if(lbl){
+    lbl.style.background=val?'var(--lt-teal)':'var(--lt-gray)';
+    lbl.style.color=val?'#085041':'var(--dark-gray)';
+  }
+  if(txt) txt.textContent=val?'✓ Recruiting':'Not recruiting';
+  updateFieldGenderRecommendation();
+  updateRecFieldRecommendation();
 }
 
 function clearUpload(){
@@ -1080,9 +1085,9 @@ function renderPools(){
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${d.name}
         <span style="font-size:11px;font-weight:400;color:var(--dark-gray)">${d.teams.length} teams * ${dp.length} pool(s) * Top ${adv} advance</span>
-        <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;background:${d.recruitable?'var(--lt-teal)':'var(--lt-gray)'};padding:3px 8px;border-radius:20px;color:${d.recruitable?'#085041':'var(--dark-gray)'};font-weight:500">
-          <input type="checkbox" ${d.recruitable?'checked':''} onchange="toggleRecruitable(${d.id},this.checked)"> Recruiting division
-        </label>
+        ${d.recruitable?
+          '<span class="pill p-ok" style="font-size:11px">⭐ Recruiting division</span>':
+          '<span class="pill p-gray" style="font-size:11px">Non-recruiting</span>'}
       </div>
       <div class="pool-grid">
         ${dp.map((pool,pi)=>`
@@ -1281,12 +1286,17 @@ function genD1(){
       const vCarsAfter=(vTeamsAlready+divTeams)*20;
       const vPeakAfter=Math.round(vCarsAfter*0.6); // stagger benefit
 
-      // Parking score: penalize venues over capacity
-      const parkingOk=vSpaces===0||vPeakAfter<=vSpaces;
-      const parkingPenalty=vSpaces>0&&!parkingOk?-1000:0;
-
-      // Score = available fields + parking bonus
-      const score=avail.length+parkingPenalty+(parkingOk?1:0);
+      // Parking score using lot-level data
+      const vLots=parkingLots.filter(l=>l.fieldIds.some(fid=>venueFields[v].all.find(f=>f.id===fid)));
+      const vLotSpaces=vLots.reduce((a,l)=>a+l.spaces,0);
+      const vTeamsAlreadyLot=divs.filter(d2=>!d2.recruitable&&dpod[d2.id]&&
+        dpod[d2.id].some(f=>(f.venue||'Main venue')===v)).reduce((a,d2)=>a+d2.teams.length,0);
+      const vPeakLot=Math.round((vTeamsAlreadyLot+divTeams)*20*0.6);
+      const parkingOk=vLotSpaces===0||vPeakLot<=vLotSpaces;
+      const parkingPenalty=vLotSpaces>0&&!parkingOk?-1000:0;
+      // Bonus for lots with more capacity headroom
+      const parkingHeadroom=vLotSpaces>0?Math.max(0,vLotSpaces-vPeakLot):0;
+      const score=avail.length+parkingPenalty+(parkingHeadroom>0?1:0);
       if(score>bestScore){bestScore=score;bestVenue=v;}
     });
 
@@ -1982,16 +1992,18 @@ function fieldNum(f){return f.name.replace(/[^0-9]/g,'') || f.id;}
 // ============================================================
 function expParkingPasses(){
   if(!divs.length){showToast('Load teams first','warn');return;}
-  // Build team -> field -> parking pass mapping from Day 1 schedule
+  // Build team -> field -> parking pass mapping from Day 1 schedule using lot data
   const teamPass={};
   Object.entries(sched1).forEach(([slot,row])=>{
     Object.entries(row).forEach(([fid,g])=>{
       if(!g)return;
       const f=fields.find(x=>x.id===+fid);
-      if(!f||!f.parkingPass)return;
-      // Assign pass to both teams based on their primary field cluster
-      if(!teamPass[g.t1n]||teamPass[g.t1n].pass===''){ teamPass[g.t1n]={pass:f.parkingPass,lot:f.parkingLot,field:f.name,div:g.divName}; }
-      if(!teamPass[g.t2n]||teamPass[g.t2n].pass===''){ teamPass[g.t2n]={pass:f.parkingPass,lot:f.parkingLot,field:f.name,div:g.divName}; }
+      if(!f)return;
+      const lot=getLotForField(f.id);
+      const passColor=lot?lot.color:'';
+      const lotName=lot?lot.name:'';
+      if(!teamPass[g.t1n]){teamPass[g.t1n]={pass:passColor,lot:lotName,field:f.name,div:g.divName};}
+      if(!teamPass[g.t2n]){teamPass[g.t2n]={pass:passColor,lot:lotName,field:f.name,div:g.divName};}
     });
   });
 
@@ -2201,6 +2213,11 @@ function loadSample(){
    {n:'2027 Girls Elite',r:true,g:'girls',t:[['Pride MD','MD','Elite'],['Spirit VA','VA','Strong'],['Grace PA','PA','Mid'],['Glory NY','NY','Mid'],['Force FL','FL','Lower'],['Quest CO','CO','Lower']]}
   ].forEach(s=>{const id=did++;divs.push({id,name:s.n,recruitable:s.r,gender:s.g,teams:s.t.map(([nm,st,ti])=>({id:tid++,name:nm,state:st,tier:ti,travelTier:'local',travelWaitlist:false}))});});
   renderFields();updL();
+  // Set up sample parking lots
+  parkingLots=[];plid=1;
+  addParkingLot('Lot A',400,'Blue',[1,2,3,4]);
+  addParkingLot('Lot B',300,'Green',[5,6,7]);
+  addParkingLot('Lot C',200,'Red',[8]);
   renderFields();
   updL();
   updateFieldGenderRecommendation();
@@ -3364,7 +3381,7 @@ function renderTrafficChart(){
   // Legend
   html2+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
   venues.forEach((v,vi)=>{
-    const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+    const vSpaces=parkingLots.filter(l=>l.fieldIds.some(fid=>fields.find(f=>f.id===fid&&(f.venue||'Main venue')===v))).reduce((a,l)=>a+l.spaces,0);
     const lot=[...new Set(fields.filter(f=>(f.venue||'Main venue')===v).map(f=>f.parkingLot||'').filter(Boolean))].join(', ');
     html2+=`<span style="display:flex;align-items:center;gap:4px;font-size:11px">
       <span style="width:12px;height:12px;background:${colors[vi%colors.length]};border-radius:2px;display:inline-block"></span>
@@ -3375,7 +3392,7 @@ function renderTrafficChart(){
 
   // Chart per venue
   venues.forEach((v,vi)=>{
-    const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+    const vSpaces=parkingLots.filter(l=>l.fieldIds.some(fid=>fields.find(f=>f.id===fid&&(f.venue||'Main venue')===v))).reduce((a,l)=>a+l.spaces,0);
     const color=colors[vi%colors.length];
     const maxLoad=Math.max(...allSlots.map(s=>(venueLoad[v][s]||0)*20),vSpaces,1);
     const lot=[...new Set(fields.filter(f=>(f.venue||'Main venue')===v).map(f=>f.parkingLot||'').filter(Boolean))].join(' / ');
@@ -3458,7 +3475,7 @@ function expTrafficFlow(){
     // Deduplicate counts (team counted once per slot)
     // Build rows
     const header=['Time',...venues.flatMap(v=>{
-      const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+      const vSpaces=parkingLots.filter(l=>l.fieldIds.some(fid=>fields.find(f=>f.id===fid&&(f.venue||'Main venue')===v))).reduce((a,l)=>a+l.spaces,0);
       const lot=[...new Set(fields.filter(f=>(f.venue||'Main venue')===v).map(f=>f.parkingLot||'').filter(Boolean))].join('/');
       return [`${v}${lot?' ('+lot+')':''} — Cars`,`${v} — Capacity (${vSpaces})`,'Status'];
     })];
@@ -3467,7 +3484,7 @@ function expTrafficFlow(){
     slots.forEach(s=>{
       const row=[fmtSlot(s)];
       venues.forEach(v=>{
-        const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+        const vSpaces=parkingLots.filter(l=>l.fieldIds.some(fid=>fields.find(f=>f.id===fid&&(f.venue||'Main venue')===v))).reduce((a,l)=>a+l.spaces,0);
         const cars=Math.round((venueLoad[v][s]||0)*20*0.6); // stagger factor
         const status=vSpaces===0?'No data':cars>vSpaces?'Over capacity':cars>vSpaces*0.85?'Near capacity':'OK';
         row.push(cars,vSpaces,status);
@@ -3478,7 +3495,7 @@ function expTrafficFlow(){
     // Summary row
     const summaryRow=['PEAK'];
     venues.forEach(v=>{
-      const vSpaces=fields.filter(f=>(f.venue||'Main venue')===v).reduce((a,f)=>a+(f.parking||0),0);
+      const vSpaces=parkingLots.filter(l=>l.fieldIds.some(fid=>fields.find(f=>f.id===fid&&(f.venue||'Main venue')===v))).reduce((a,l)=>a+l.spaces,0);
       const peak=Math.max(...slots.map(s=>Math.round((venueLoad[v][s]||0)*20*0.6)));
       summaryRow.push(peak,vSpaces,vSpaces>0?(peak>vSpaces?'Over capacity':peak>vSpaces*0.85?'Near capacity':'OK'):'');
     });
@@ -3885,6 +3902,169 @@ function expParkingLotSigns(){
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
   dl(`ParkingLotSigns_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   showToast('Parking lot signs exported — one sheet per lot');
+}
+
+
+// ============================================================
+// PARKING LOTS MANAGEMENT
+// ============================================================
+let plid = 1;
+
+function addParkingLot(name='', spaces=0, color='', fieldIds=[]){
+  const id = plid++;
+  parkingLots.push({id, name:name||`Lot ${id}`, spaces:+spaces, color, fieldIds:[...fieldIds]});
+  renderParkingLots();
+}
+
+function remParkingLot(id){
+  parkingLots = parkingLots.filter(l=>l.id!==id);
+  renderParkingLots();
+  checkParkingConflicts();
+}
+
+function renderParkingLots(){
+  const el = document.getElementById('parking-lots-list');
+  if(!el) return;
+  if(!parkingLots.length){
+    el.innerHTML = '<div style="font-size:11px;color:var(--dark-gray);padding:8px">No parking lots added yet. Click "+ Add parking lot" above.</div>';
+    checkParkingConflicts();
+    return;
+  }
+
+  const passColors = {'Red':'#fee2e2','Blue':'#dbeafe','Green':'#dcfce7',
+    'Yellow':'#fef9c3','Orange':'#ffedd5','Purple':'#f3e8ff','White':'#f8fafc'};
+
+  el.innerHTML = parkingLots.map(lot => {
+    const lotFields = fields.filter(f => lot.fieldIds.includes(f.id));
+    const demandTeams = divs.length > 0 ? estimateLotDemand(lot) : 0;
+    const peakCars = Math.round(demandTeams * 20 * 0.6);
+    const statusColor = !lot.spaces ? 'var(--dark-gray)' :
+      peakCars > lot.spaces ? 'var(--red)' :
+      peakCars > lot.spaces * 0.85 ? 'var(--amber)' : 'var(--teal)';
+    const statusText = !lot.spaces ? 'Enter spaces' :
+      peakCars > lot.spaces ? `Over capacity — ${peakCars} cars needed, ${lot.spaces} available` :
+      peakCars > lot.spaces * 0.85 ? `Near capacity — ~${peakCars} cars peak` :
+      `OK — ~${peakCars} cars peak of ${lot.spaces} spaces`;
+
+    return `<div style="background:#fff;border:.5px solid var(--mid-gray);border-radius:8px;padding:12px 14px;margin-bottom:8px;border-left:4px solid ${lot.color?passColors[lot.color]||'var(--mid-gray)':'var(--mid-gray)'}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <input style="width:130px;font-size:13px;font-weight:600;padding:4px 8px;border:.5px solid var(--mid-gray);border-radius:5px" 
+          placeholder="Lot name" value="${lot.name}" 
+          onchange="parkingLots.find(x=>x.id===${lot.id}).name=this.value;renderParkingLots()">
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" min="0" max="2000" step="10" 
+            style="width:80px;font-size:12px;padding:4px 8px;border:.5px solid var(--mid-gray);border-radius:5px" 
+            placeholder="Spaces" value="${lot.spaces||''}" 
+            onchange="parkingLots.find(x=>x.id===${lot.id}).spaces=+this.value;renderParkingLots();checkParkingConflicts()">
+          <span style="font-size:11px;color:var(--dark-gray)">spaces</span>
+        </div>
+        <select style="font-size:12px;padding:4px 8px;border:.5px solid var(--mid-gray);border-radius:5px;background:${lot.color?passColors[lot.color]:'#fff'}"
+          onchange="parkingLots.find(x=>x.id===${lot.id}).color=this.value;renderParkingLots()">
+          <option value="">No pass color</option>
+          ${['Red','Blue','Green','Yellow','Orange','Purple','White'].map(c=>
+            `<option value="${c}" ${lot.color===c?'selected':''} style="background:${passColors[c]}">${c} pass</option>`
+          ).join('')}
+        </select>
+        <span style="font-size:11px;font-weight:600;color:${statusColor};margin-left:4px">${statusText}</span>
+        <button class="btn btn-sm btn-danger" style="margin-left:auto" onclick="remParkingLot(${lot.id})">× Remove</button>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:600;color:var(--dark-gray);margin-bottom:5px">FIELDS SERVED BY THIS LOT:</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${fields.length ? fields.map(f => {
+            const checked = lot.fieldIds.includes(f.id);
+            return `<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:3px 8px;border-radius:4px;background:${checked?'var(--lt-blue)':'var(--lt-gray)'};border:.5px solid ${checked?'var(--navy)':'var(--mid-gray)'};font-weight:${checked?'600':'400'}">
+              <input type="checkbox" ${checked?'checked':''} 
+                onchange="updateLotFields(${lot.id},${f.id},this.checked)">
+              ${f.name}
+            </label>`;
+          }).join('') : '<span style="font-size:11px;color:var(--dark-gray)">Add fields above first, then assign them to lots here.</span>'}
+        </div>
+        ${lotFields.length ? `<div style="font-size:10px;color:var(--dark-gray);margin-top:5px">${lotFields.length} field${lotFields.length!==1?'s':''} assigned: ${lotFields.map(f=>f.name).join(', ')}</div>` : '<div style="font-size:10px;color:var(--amber);margin-top:4px">⚠ No fields assigned to this lot yet</div>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  checkParkingConflicts();
+}
+
+function updateLotFields(lotId, fieldId, checked){
+  const lot = parkingLots.find(x=>x.id===lotId);
+  if(!lot) return;
+  if(checked && !lot.fieldIds.includes(fieldId)) lot.fieldIds.push(fieldId);
+  if(!checked) lot.fieldIds = lot.fieldIds.filter(x=>x!==fieldId);
+  renderParkingLots();
+  checkParkingConflicts();
+}
+
+function estimateLotDemand(lot){
+  // Count teams assigned to fields in this lot via dpod (after schedule) or proportional
+  if(window._dpod && Object.keys(window._dpod).length){
+    return divs.filter(d=>{
+      const pod = window._dpod[d.id]||[];
+      return pod.some(f=>lot.fieldIds.includes(f.id));
+    }).reduce((a,d)=>a+d.teams.length,0);
+  }
+  // Pre-schedule: proportional by field count
+  if(!fields.length) return 0;
+  const totalTeams = divs.reduce((a,d)=>a+d.teams.length,0);
+  return Math.round(totalTeams * (lot.fieldIds.length / fields.length));
+}
+
+// Get lot for a given field (for parking pass exports)
+function getLotForField(fieldId){
+  return parkingLots.find(l=>l.fieldIds.includes(fieldId));
+}
+
+function checkParkingConflicts(){
+  const el = document.getElementById('parking-status');
+  if(!el) return;
+  if(!parkingLots.length){el.style.display='none';return;}
+
+  const totalSpaces = parkingLots.reduce((a,l)=>a+l.spaces,0);
+  const totalTeams = divs.reduce((a,d)=>a+d.teams.length,0);
+  const totalPeak = Math.round(totalTeams*20*0.6);
+
+  let html2='';
+
+  // Overall
+  if(totalSpaces===0){el.style.display='none';return;}
+  if(totalSpaces>=totalPeak){
+    html2+=`<div style="color:#085041;font-weight:600;margin-bottom:6px">✓ Total parking OK — ${totalSpaces} spaces, ~${totalPeak} cars at peak (${totalTeams} teams × 20 × 0.6 stagger)</div>`;
+  } else {
+    html2+=`<div style="color:var(--red);font-weight:600;margin-bottom:6px">⚠ Parking shortfall — ${totalSpaces} spaces, ~${totalPeak} cars needed at peak</div>`;
+  }
+
+  // Per lot breakdown
+  html2+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead>';
+  html2+='<tr style="background:var(--navy);color:#fff"><th style="padding:4px 8px;text-align:left">Lot</th><th style="padding:4px 8px;text-align:left">Pass</th><th style="padding:4px 8px;text-align:center">Spaces</th><th style="padding:4px 8px;text-align:center">Fields</th><th style="padding:4px 8px;text-align:center">Est. teams</th><th style="padding:4px 8px;text-align:center">Peak cars</th><th style="padding:4px 8px;text-align:center">Status</th></tr>';
+  html2+='</thead><tbody>';
+
+  parkingLots.forEach((lot,vi)=>{
+    const lotTeams = estimateLotDemand(lot);
+    const peakCars = Math.round(lotTeams*20*0.6);
+    const ok = lot.spaces===0||peakCars<=lot.spaces;
+    const tight = ok && lot.spaces>0 && peakCars>lot.spaces*0.85;
+    const status = lot.spaces===0?'<span style="color:var(--dark-gray)">No spaces entered</span>':
+      !ok?`<span style="color:var(--red);font-weight:600">Over by ${peakCars-lot.spaces}</span>`:
+      tight?`<span style="color:var(--amber);font-weight:600">Near capacity</span>`:
+      '<span style="color:var(--teal);font-weight:600">✓ OK</span>';
+    html2+=`<tr style="border-bottom:.5px solid var(--mid-gray);background:${vi%2===0?'#fff':'var(--lt-gray)'}">
+      <td style="padding:4px 8px;font-weight:600">${lot.name}</td>
+      <td style="padding:4px 8px">${lot.color||'—'}</td>
+      <td style="padding:4px 8px;text-align:center">${lot.spaces||'—'}</td>
+      <td style="padding:4px 8px;text-align:center">${lot.fieldIds.length}</td>
+      <td style="padding:4px 8px;text-align:center">~${lotTeams}</td>
+      <td style="padding:4px 8px;text-align:center">~${peakCars}</td>
+      <td style="padding:4px 8px;text-align:center">${status}</td>
+    </tr>`;
+  });
+  html2+='</tbody></table>';
+  html2+='<div style="font-size:10px;color:var(--dark-gray);margin-top:4px">Peak = teams × 20 cars × 0.6 stagger factor. Scheduler routes larger divisions to lots with more capacity.</div>';
+
+  el.className='cl cl-b';
+  el.innerHTML=html2;
+  el.style.display='block';
 }
 
 </script>
