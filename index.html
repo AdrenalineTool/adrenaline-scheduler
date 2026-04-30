@@ -533,6 +533,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="leg-item"><div class="leg-dot" style="background:var(--lt-purple);box-shadow:0 0 0 2px var(--purple) inset"></div>Day 1 rematch <span style="font-size:9px;color:var(--dark-gray);margin-left:3px">(Day 2 — drag team to swap)</span></div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--lt-red);border:1.5px solid var(--red)"></div><span style="color:var(--red);font-weight:500">Conflict</span></div>
   </div>
+  <div id="div-color-legend" style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 10px;font-size:10px;color:var(--dark-gray);align-items:center"></div>
   <div class="grid-wrap" id="grid-d1"></div>
   <div class="grid-wrap" id="grid-d2" style="display:none"></div>
   <div class="grid-wrap" id="grid-d3" style="display:none"></div>
@@ -742,6 +743,17 @@ function fmt12(h){const ap=h<12?'am':'pm';return`${h>12?h-12:h===0?12:h}:00${ap}
 function fmtSlot(s){const h=sH(s),hh=Math.floor(h),mm=Math.round((h-hh)*60),ap=h<12?'am':'pm';return`${hh>12?hh-12:hh===0?12:hh}:${mm.toString().padStart(2,'0')}${ap}`;}
 function sameReg(a,b){if(!a.state||!b.state)return false;if(a.state.includes('CA')||b.state.includes('CA'))return a.state===b.state;return a.state===b.state;}
 function pk(a,b){return Math.min(a,b)+'-'+Math.max(a,b);}
+// Stable color per division for game cells. Uses HSL with the division id seeded,
+// so the same division always gets the same color across renders. Saturation/lightness
+// chosen to harmonize with the existing teal/blue/purple/amber palette.
+function divColor(divId){
+  if(!divId)return '#9aa3ad';
+  // Avoid hues that clash with the existing type-color palette (teal ~165, blue ~210,
+  // purple ~250, amber ~35, red ~0). Sample a hue ring in 30° steps:
+  const palette=[195,135,275,15,330,75,255,105,225,45,300,165];
+  const hue=palette[Math.abs(divId)%palette.length];
+  return `hsl(${hue},65%,40%)`;
+}
 // Pool count for n teams: 1 pool until 8 teams, then 2 pools through 12, then ceil(n/6)
 function poolCountFor(n){return n<8?1:n<=12?2:Math.ceil(n/6);}
 function updL(){document.getElementById('ldesc').textContent=`Recruiting fields go dark at slot starting ${fmtSlot(rlSlot())} (nearest to ${fmt12(rl())} recruiter lunch). Non-recruiting fields run all day.`;}
@@ -847,8 +859,10 @@ function renderFields(){
       <!-- Venue row only — parking moved to Parking Lots section -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 9px">
         <span style="font-size:10px;font-weight:600;color:var(--navy);min-width:36px">VENUE:</span>
-        <input style="width:160px;font-size:12px;padding:3px 7px;border:.5px solid var(--teal);border-radius:4px;background:#fff" placeholder="Venue / location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value;renderParkingLots()" title="Physical site name — fields with same venue are grouped into pods. Teams never cross venues.">
-        <span style="font-size:10px;color:var(--dark-gray)">Parking lot assigned by the Parking Lots section below →</span>
+        <input style="width:140px;font-size:12px;padding:3px 7px;border:.5px solid var(--teal);border-radius:4px;background:#fff" placeholder="Venue / location" value="${f.venue||'Main venue'}" onchange="fields.find(x=>x.id===${f.id}).venue=this.value;renderParkingLots()" title="Physical site name — fields with same venue are grouped into pods. Teams never cross venues.">
+        <span style="font-size:10px;font-weight:600;color:var(--purple);margin-left:4px">POD:</span>
+        <input style="width:110px;font-size:12px;padding:3px 7px;border:.5px solid var(--purple);border-radius:4px;background:#fff" placeholder="auto" value="${f.podGroup||''}" onchange="fields.find(x=>x.id===${f.id}).podGroup=this.value.trim()" title="Manual pod group label (e.g. 'North 1-3'). Fields with the same pod label cluster as one division pod. Leave blank for automatic grouping by venue.">
+        <span style="font-size:10px;color:var(--dark-gray)">Parking lot assigned below →</span>
       </div>
     </div>`).join('');
   checkParkingConflicts();
@@ -1429,134 +1443,115 @@ function genD1(){
   // Group fields by venue
   const venues=[...new Set(fields.map(f=>f.venue||'Main venue'))];
 
-  // Per-venue field lists by gender
-  const venueFields={};
-  venues.forEach(v=>{
-    venueFields[v]={
-      all:fields.filter(f=>(f.venue||'Main venue')===v),
-      boys:fields.filter(f=>(f.venue||'Main venue')===v&&f.gender==='boys'),
-      girls:fields.filter(f=>(f.venue||'Main venue')===v&&f.gender==='girls'),
-      recBoys:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&f.gender==='boys'),
-      recGirls:fields.filter(f=>(f.venue||'Main venue')===v&&f.recruiting&&f.gender==='girls'),
-    };
-  });
+  // ── PHYSICAL POD GROUPS ─────────────────────────────────────────────────
+  // A "pod" is a set of physically-adjacent fields that families park near and stay at.
+  // Pods are SHARED — multiple divisions can be assigned to the same pod and they
+  // interleave games across the day based on team rest gaps.
+  //
+  // How pods are formed:
+  //   1. If JR set explicit podGroup labels on fields, those labels define pods directly.
+  //      All fields with the same (venue, gender, podGroup label) go into one pod.
+  //   2. Fields without an explicit label are auto-pooled by (venue, gender, recruiting).
+  //      Recruiting fields form their own pod (rec cluster).
+  //   3. Pods never span venues — that's a hard rule for parking continuity.
+  //
+  // Per-division grids: a division can only play on slots in its own grid. Same-pod
+  // divisions on different grids will simply use different slot times on the same fields.
+  //
+  // Only same-gender divisions ever share a pod (boys field ↔ boys division etc).
 
-  // Calculate min fields needed per group using usable slots
-  const slotDurG=+document.getElementById('slotdur').value||45;
-  const bufG=+document.getElementById('buf').value||5;
-  const usableSlotsG=slots.length-1; // minus lunch
+  const usableSlotsG=slots.length-1; // master usable slots (default grid)
   const calcMinFields=(teams)=>teams>0?Math.max(1,Math.ceil(teams*gpt/2/usableSlotsG)):0;
 
+  // Build pod groups from fields
+  const podKey=(f)=>{
+    if(f.podGroup&&f.podGroup.length>0) return `${f.venue||'Main venue'}|${f.gender}|${f.podGroup}`;
+    return `${f.venue||'Main venue'}|${f.gender}|${f.recruiting?'_rec':'_main'}`;
+  };
+  const podGroups={};
+  fields.forEach(f=>{
+    const k=podKey(f);
+    if(!podGroups[k]) podGroups[k]={key:k,venue:f.venue||'Main venue',gender:f.gender,recruiting:f.recruiting,explicit:!!(f.podGroup&&f.podGroup.length),fields:[]};
+    podGroups[k].fields.push(f);
+  });
+  // Track pod assignments (which divisions share each pod)
+  const podDivs={}; // podKey -> [divId, divId, ...]
+  Object.keys(podGroups).forEach(k=>{podDivs[k]=[];});
+
   const dpod={};
-  // fieldGrid: fieldId -> slot-minutes value that field is locked to (only set after assignment)
-  // A field can only host divisions on its own grid. Unset = available to any grid.
-  const fieldGrid={};
 
-  // Helper: filter a candidate field list down to those compatible with a given division's slot grid
-  const compatFields=(arr,d)=>{
-    const dsm=divSlotM(d);
-    return arr.filter(f=>fieldGrid[f.id]==null||fieldGrid[f.id]===dsm);
-  };
-  // Helper: lock a list of fields to a division's grid (so other-grid divs can't claim them)
-  const lockFields=(arr,d)=>{
-    const dsm=divSlotM(d);arr.forEach(f=>{fieldGrid[f.id]=dsm;});
-  };
-
-  // ── STEP 1: Assign recruiting divisions to rec field pods (per venue + grid) ──
-  // Group rec divisions by their slot-grid value so each grid gets its own rec sub-pool
+  // ── STEP 1: Assign recruiting divisions to recruiting pods ────────────────
+  // Recruiter CX promise: rec divisions concentrate on rec-flagged pods.
+  // Same-gender rec divisions share the rec pod (multiple divs interleave games).
   const boysRecDivs=divs.filter(d=>d.recruitable&&d.gender==='boys');
   const girlsRecDivs=divs.filter(d=>d.recruitable&&d.gender==='girls');
   const recIds=new Set();
 
   const assignRecGroup=(recDivs,gen)=>{
     if(!recDivs.length)return;
-    // Group by slot grid
-    const byGrid={};
-    recDivs.forEach(d=>{const k=divSlotM(d);(byGrid[k]=byGrid[k]||[]).push(d);});
-    // For each grid group, pick the venue with the most rec fields of that gender, allocate fields
-    Object.entries(byGrid).forEach(([gridKey,dList])=>{
-      const teamsInGrid=dList.reduce((a,d)=>a+d.teams.length,0);
-      const usableForGrid=Math.max(1,Math.floor(((+document.getElementById('dend').value||18)-(+document.getElementById('dstart').value||8))*60/(+gridKey))-1);
-      const minNeeded=Math.max(1,Math.ceil(teamsInGrid*gpt/2/usableForGrid));
-      // Pick venue that has the most rec fields of correct gender that are still unlocked or already on this grid
-      const sortedV=[...venues].sort((a,b)=>{
-        const aRec=(gen==='boys'?venueFields[a].recBoys:venueFields[a].recGirls).filter(f=>fieldGrid[f.id]==null||fieldGrid[f.id]===+gridKey).length;
-        const bRec=(gen==='boys'?venueFields[b].recBoys:venueFields[b].recGirls).filter(f=>fieldGrid[f.id]==null||fieldGrid[f.id]===+gridKey).length;
-        return bRec-aRec;
-      });
-      const bestV=sortedV[0];
-      let recPool=(gen==='boys'?venueFields[bestV].recBoys:venueFields[bestV].recGirls)
-        .filter(f=>fieldGrid[f.id]==null||fieldGrid[f.id]===+gridKey);
-      if(!recPool.length){
-        // Fallback: borrow from non-rec fields of correct gender
-        const fallback=(gen==='boys'?venueFields[bestV].boys:venueFields[bestV].girls)
-          .filter(f=>fieldGrid[f.id]==null||fieldGrid[f.id]===+gridKey);
-        recPool=fallback.slice(0,minNeeded);
-      }
-      // Lock these fields to the grid
-      lockFields(recPool,dList[0]);
-      recPool.forEach(f=>recIds.add(f.id));
-      dList.forEach(d=>{dpod[d.id]=recPool;});
+    // Find rec pods of correct gender, ordered by size desc (biggest pod first)
+    const recPods=Object.values(podGroups).filter(p=>p.gender===gen&&p.recruiting).sort((a,b)=>b.fields.length-a.fields.length);
+    let assigned=null;
+    if(recPods.length){
+      // Use the biggest rec pod for all rec divs of this gender
+      assigned=recPods[0];
+    } else {
+      // No rec pods configured — fall back to using non-rec pods of the same gender
+      const fallbackPods=Object.values(podGroups).filter(p=>p.gender===gen&&!p.recruiting).sort((a,b)=>b.fields.length-a.fields.length);
+      assigned=fallbackPods[0];
+    }
+    if(!assigned){
+      d2Warnings.push(`No fields available for ${gen} recruiting divisions.`);
+      return;
+    }
+    // Assign every rec div in this gender to this pod
+    recDivs.forEach(d=>{
+      podDivs[assigned.key].push(d.id);
+      dpod[d.id]=assigned.fields;
     });
+    assigned.fields.forEach(f=>recIds.add(f.id));
   };
   assignRecGroup(boysRecDivs,'boys');
   assignRecGroup(girlsRecDivs,'girls');
 
-  // ── STEP 2: Assign non-rec divisions with smart stagger ───────────────────
-  // Sort non-rec divisions largest first so they get first pick of fields
+  // ── STEP 2: Assign non-rec divisions to pods (sharing allowed) ───────────
+  // Sort largest first — they get first pick of pods. Subsequent divs that can fit
+  // into an existing pod share it; the pod's slots get split based on team rest gaps.
+  // A division's pod assignment scoring:
+  //   + bigger pod = better (more parallel-game capacity)
+  //   - more divs already on the pod = worse (slot competition)
+  //   - rec pod & has remaining rec capacity = bad (don't squeeze rec)
   const nonRecDivs=[...divs.filter(d=>!d.recruitable)].sort((a,b)=>b.teams.length-a.teams.length);
 
-  // Per venue, assign non-rec divisions to available fields
-  // Track field usage timeline to enable staggering
-  const fieldLastSlot={}; // {fieldId: last slot index used}
-  fields.forEach(f=>{fieldLastSlot[f.id]=-1;});
-
   nonRecDivs.forEach(d=>{
-    const gen=d.gender;
-    const dsm=divSlotM(d);
-    const usableForDiv=Math.max(1,getSlotsForDiv(d,+document.getElementById('dstart').value||8,+document.getElementById('dend').value||18).length-1);
     const gamesNeeded=Math.ceil(d.teams.length*gpt/2);
-    const podSize=Math.max(1,Math.ceil(gamesNeeded/usableForDiv));
-
-    // Find best venue for this division — balance fields AND parking capacity
-    const divTeams=d.teams.length;
-    let bestVenue=venues[0];
-    let bestScore=-1;
-    venues.forEach(v=>{
-      const avail=compatFields((gen==='boys'?venueFields[v].boys:gen==='girls'?venueFields[v].girls:venueFields[v].all)
-        .filter(f=>!recIds.has(f.id)),d);
-      if(!avail.length)return;
-
-      // Parking score using lot-level data
-      const vLots=parkingLots.filter(l=>l.fieldIds.some(fid=>venueFields[v].all.find(f=>f.id===fid)));
-      const vLotSpaces=vLots.reduce((a,l)=>a+l.spaces,0);
-      const vTeamsAlreadyLot=divs.filter(d2=>!d2.recruitable&&dpod[d2.id]&&
-        dpod[d2.id].some(f=>(f.venue||'Main venue')===v)).reduce((a,d2)=>a+d2.teams.length,0);
-      const vPeakLot=Math.round((vTeamsAlreadyLot+divTeams)*20*0.6);
-      const parkingOk=vLotSpaces===0||vPeakLot<=vLotSpaces;
-      const parkingPenalty=vLotSpaces>0&&!parkingOk?-1000:0;
-      const parkingHeadroom=vLotSpaces>0?Math.max(0,vLotSpaces-vPeakLot):0;
-      const score=avail.length+parkingPenalty+(parkingHeadroom>0?1:0);
-      if(score>bestScore){bestScore=score;bestVenue=v;}
-    });
-
-    // Get available fields at best venue, filtered to grid-compatible
-    const venueAvail=compatFields((gen==='boys'?venueFields[bestVenue].boys:
-      gen==='girls'?venueFields[bestVenue].girls:venueFields[bestVenue].all),d);
-    const nonRecFirst=venueAvail.filter(f=>!recIds.has(f.id));
-    const recOverflow=venueAvail.filter(f=>recIds.has(f.id)); // same-venue idle rec fields (only if grid matches)
-
-    // Pick pod: prefer fields that will be free earliest (smart stagger)
-    const allCandidates=[...nonRecFirst,...recOverflow];
-    const sorted=[...allCandidates].sort((a,b)=>(fieldLastSlot[a.id]||0)-(fieldLastSlot[b.id]||0));
-    dpod[d.id]=sorted.slice(0,podSize);
-    // Lock these fields to this division's grid
-    lockFields(dpod[d.id],d);
-
-    // Estimate when this division will finish and update field timeline
-    const slotsNeeded=Math.ceil(gamesNeeded/podSize);
-    const startSlot=(dpod[d.id].length>0?Math.max(...dpod[d.id].map(f=>fieldLastSlot[f.id]||0)):0);
-    dpod[d.id].forEach(f=>{fieldLastSlot[f.id]=startSlot+slotsNeeded;});
+    // Candidate pods: same gender, not a rec-only pod (we'll allow rec overflow as last resort)
+    const candidates=Object.values(podGroups).filter(p=>p.gender===d.gender);
+    if(!candidates.length){
+      dpod[d.id]=[];
+      d2Warnings.push(`${d.name}: No ${d.gender} fields available.`);
+      return;
+    }
+    // Score each candidate
+    const scored=candidates.map(p=>{
+      const teamsAlready=podDivs[p.key].reduce((acc,divId)=>{
+        const dx=divs.find(x=>x.id===divId);return acc+(dx?dx.teams.length:0);
+      },0);
+      // Capacity score: bigger pod and fewer competitor teams is better
+      const slots=usableSlotsG;
+      const capacity=p.fields.length*slots*2; // 2 team-slots per game-slot
+      const demand=teamsAlready*gpt+d.teams.length*gpt;
+      const utilAfter=capacity>0?demand/capacity:99;
+      const utilScore=utilAfter<=1?(1-utilAfter)*10:-((utilAfter-1)*100); // big penalty when over capacity
+      // Prefer non-rec pods for non-rec divs (avoid stealing rec slots)
+      const recPenalty=p.recruiting?-3:0;
+      // Slight preference for pods JR labeled
+      const explicitBonus=p.explicit?1:0;
+      return {p,score:utilScore+recPenalty+explicitBonus,utilAfter};
+    }).sort((a,b)=>b.score-a.score);
+    const chosen=scored[0].p;
+    podDivs[chosen.key].push(d.id);
+    dpod[d.id]=chosen.fields;
   });
 
   // ── STEP 3: Greedy slot-filling scheduler ───────────────────────────────────
@@ -1599,48 +1594,55 @@ function genD1(){
     divLunchSlot[d.id]=rlSlotForDiv(d);
   });
 
-  // Process each slot, try to fill it across all divisions
+  // Process each slot, fill across all divisions in round-robin fashion.
+  // Each round through schedOrder, every division tries to place 1 game on its pod.
+  // We loop rounds until no division can place any more games this slot.
+  // This gives divisions sharing a pod a FAIR share of slot capacity instead of
+  // letting the first division grab all available fields.
   for(let si=0;si<slots.length;si++){
     const s=slots[si],h=sH(s);
-    schedOrder.forEach(d=>{
-      if(!matchQueues[d.id].length)return;
-      // Division can only place on slots in its own grid
-      if(!divGridSet[d.id].has(s))return;
-      // Per-division lunch protection for recruiting divisions
-      if(d.recruitable&&s===divLunchSlot[d.id])return;
-      const podFields=dpod[d.id]||[];
-      const avFields=podFields.filter(f=>!sched1[s][f.id]);
-      if(!avFields.length)return;
-      
-      // Find a valid matchup for this slot
-      const queue=matchQueues[d.id];
-      for(let qi=0;qi<queue.length;qi++){
-        const [t1,t2,poolLabel]=queue[qi];
-        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){queue.splice(qi,1);qi--;continue;}
-        const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
-        if((te1==='in'||te1==='both')&&h<lc)continue;
-        if((te2==='in'||te2==='both')&&h<lc)continue;
-        if((te1==='out'||te1==='both')&&h>ec)continue;
-        if((te2==='out'||te2==='both')&&h>ec)continue;
-        const s1=tS[t1.id],s2=tS[t2.id];
-        // min-rest measured in minutes: divSlotM(d) per slot, so minRest slots = minRest*divSlotM(d) minutes between game starts
-        const restMin=minRest*divSlotM(d);
-        if(!(s1.length===0||(s2m(s)-s2m(s1[s1.length-1]))>restMin))continue;
-        if(!(s2.length===0||(s2m(s)-s2m(s2[s2.length-1]))>restMin))continue;
-        if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
-        if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-        // Place game
-        sched1[s][avFields[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
-          divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
-        tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
-        played.add(pk(t1.id,t2.id));
-        queue.splice(qi,1);
-        // Check if more fields available in this slot for another game from same div
-        const avFields2=podFields.filter(f=>!sched1[s][f.id]);
-        if(!avFields2.length)break;
-        break; // one game per div per slot (respect min rest)
-      }
-    });
+    let placedThisSlot=true;
+    let safetyRounds=0;
+    while(placedThisSlot&&safetyRounds<20){
+      placedThisSlot=false;safetyRounds++;
+      schedOrder.forEach(d=>{
+        if(!matchQueues[d.id].length)return;
+        // Division can only place on slots in its own grid
+        if(!divGridSet[d.id].has(s))return;
+        // Per-division lunch protection for recruiting divisions
+        if(d.recruitable&&s===divLunchSlot[d.id])return;
+        const podFields=dpod[d.id]||[];
+        if(!podFields.length)return;
+        const avFieldsNow=podFields.filter(f=>!sched1[s][f.id]);
+        if(!avFieldsNow.length)return;
+
+        // Try to place ONE game for this division this round
+        const queue=matchQueues[d.id];
+        for(let qi=0;qi<queue.length;qi++){
+          const [t1,t2,poolLabel]=queue[qi];
+          if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){queue.splice(qi,1);qi--;continue;}
+          const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
+          if((te1==='in'||te1==='both')&&h<lc)continue;
+          if((te2==='in'||te2==='both')&&h<lc)continue;
+          if((te1==='out'||te1==='both')&&h>ec)continue;
+          if((te2==='out'||te2==='both')&&h>ec)continue;
+          const s1=tS[t1.id],s2=tS[t2.id];
+          const restMin=minRest*divSlotM(d);
+          if(!(s1.length===0||(s2m(s)-s2m(s1[s1.length-1]))>restMin))continue;
+          if(!(s2.length===0||(s2m(s)-s2m(s2[s2.length-1]))>restMin))continue;
+          if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
+          if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
+          // Place ONE game and stop for this round
+          sched1[s][avFieldsNow[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
+          tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
+          played.add(pk(t1.id,t2.id));
+          queue.splice(qi,1);
+          placedThisSlot=true;
+          break; // only one placement per division per round
+        }
+      });
+    }
   }
 
 
@@ -1707,7 +1709,10 @@ function genD1(){
       .map(x=>x.s)
   ];
 
-  // Phase 3: Build reverse pod map — for each field, which divisions use it?
+  // Phase 3: Build reverse pod map — primary owner divisions per field.
+  // For backfill, any division of matching gender + slot grid can borrow idle
+  // slots on a field, regardless of pod ownership. This is the "cross-division
+  // fill" mechanism that gives podless or small divisions access to idle capacity.
   const fieldDivs={};
   fields.forEach(f=>{fieldDivs[f.id]=[];});
   Object.entries(dpod).forEach(([divId,podFields])=>{
@@ -1715,6 +1720,20 @@ function genD1(){
       if(!fieldDivs[f.id]) fieldDivs[f.id]=[];
       if(!fieldDivs[f.id].includes(+divId)) fieldDivs[f.id].push(+divId);
     });
+  });
+  // Add ALL grid+gender-compatible divisions as backfill candidates per field
+  // (sorted by primary-owner first, then by remaining games descending so big debts get filled first).
+  const backfillCandidates={};
+  fields.forEach(f=>{
+    // All same-gender divisions are candidates; per-slot grid filter happens in the inner loop.
+    const compatible=divs.filter(d=>d.gender===f.gender);
+    const owners=fieldDivs[f.id]||[];
+    const ownerSet=new Set(owners);
+    const others=compatible.filter(d=>!ownerSet.has(d.id));
+    backfillCandidates[f.id]=[
+      ...owners.map(divId=>divs.find(d=>d.id===divId)).filter(Boolean),
+      ...others
+    ];
   });
 
   // Run backfill over prioritized slots
@@ -1726,10 +1745,10 @@ function genD1(){
     fields.forEach(f=>{
       if(sched1[s][f.id]) return; // already has a game
 
-      // Try divisions that use this field (cross-division fill)
-      const divIds=fieldDivs[f.id]||[];
-      for(const divId of divIds){
-        const d=divs.find(x=>x.id===divId);
+      // Try divisions in backfill candidate order (owners first, then any
+      // grid+gender-compatible division to soak up idle capacity)
+      const candDivs=backfillCandidates[f.id]||[];
+      for(const d of candDivs){
         if(!d||!remaining[d.id]||!remaining[d.id].length) continue;
         // Per-division grid: skip slots not in this division's grid
         if(!divGridSet[d.id].has(s)) continue;
@@ -1767,6 +1786,71 @@ function genD1(){
   });
 
   if(backfillCount>0) console.log('Backfill placed '+backfillCount+' additional games ('+midDayGapSlots.size+' mid-day gaps targeted)');
+
+  // ── PHASE 3.5: LUNCH-SLOT RECLAIM ────────────────────────────────────────
+  // Per JR's spec: a rec field's lunch protection is wasted if no rec game
+  // runs in the slot just BEFORE lunch on that field — there's no recruiter
+  // sitting at that field for the lunch slot to protect, so the field can
+  // host any division's game in the lunch slot.
+  // For each rec field that's IDLE at the master lunch slot:
+  //   - If no rec game is scheduled in the slot immediately before lunch,
+  //     run a backfill placement allowing ANY same-gender division (rec or non-rec).
+  // We use the master rlSlot() since divisions may have their own lunch slots
+  // on different grids — but the rec field is dark when ANY rec div is paused,
+  // so we apply per-rec-division-grid logic.
+  let lunchReclaimCount=0;
+  fields.filter(f=>f.recruiting).forEach(f=>{
+    // Find the lunch slot specifically for this rec field — it's the rec lunch
+    // slot on the grid of whichever rec division is scheduled here.
+    // Take any rec game on the field to determine the relevant grid; if none,
+    // use the master lunch slot.
+    let recDiv=null;
+    for(const slot of slots){
+      const g=sched1[slot]&&sched1[slot][f.id];
+      if(g&&g.rec){recDiv=divs.find(d=>d.id===g.divId);break;}
+    }
+    const lunchSlot=recDiv?divLunchSlot[recDiv.id]:rlSlot();
+    if(!lunchSlot||sched1[lunchSlot][f.id])return; // not idle at lunch
+    // Find the slot immediately before lunch on this field
+    const lunchIdx=slots.indexOf(lunchSlot);
+    if(lunchIdx<=0)return;
+    const prev=slots[lunchIdx-1];
+    const prevG=sched1[prev]&&sched1[prev][f.id];
+    // If a rec game is scheduled in the previous slot, recruiter is there — keep lunch protection
+    if(prevG&&prevG.rec)return;
+    // Reclaim: try any same-gender division to fill this lunch slot
+    const candDivs=divs.filter(d=>d.gender===f.gender);
+    for(const d of candDivs){
+      if(!remaining[d.id]||!remaining[d.id].length)continue;
+      if(!divGridSet[d.id].has(lunchSlot))continue;
+      const h=sH(lunchSlot);
+      for(let qi=0;qi<remaining[d.id].length;qi++){
+        const [t1,t2,poolLabel]=remaining[d.id][qi];
+        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){remaining[d.id].splice(qi,1);qi--;continue;}
+        const te1=t1.travelWaitlist?'local':t1.travelTier;
+        const te2=t2.travelWaitlist?'local':t2.travelTier;
+        if((te1==='in'||te1==='both')&&h<lc)continue;
+        if((te2==='in'||te2==='both')&&h<lc)continue;
+        if((te1==='out'||te1==='both')&&h>ec)continue;
+        if((te2==='out'||te2==='both')&&h>ec)continue;
+        const s1=tS[t1.id],s2=tS[t2.id];
+        const restMin=minRest*divSlotM(d);
+        if(!(s1.length===0||(s2m(lunchSlot)-s2m(s1[s1.length-1]))>restMin))continue;
+        if(!(s2.length===0||(s2m(lunchSlot)-s2m(s2[s2.length-1]))>restMin))continue;
+        if(Object.values(sched1[lunchSlot]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
+        if(Object.values(sched1[lunchSlot]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
+        sched1[lunchSlot][f.id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+          divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
+        tS[t1.id].push(lunchSlot);tS[t2.id].push(lunchSlot);tG[t1.id]++;tG[t2.id]++;
+        played.add(pk(t1.id,t2.id));
+        remaining[d.id].splice(qi,1);
+        lunchReclaimCount++;
+        break;
+      }
+      if(sched1[lunchSlot][f.id])break;
+    }
+  });
+  if(lunchReclaimCount>0) console.log('Lunch-slot reclaim placed '+lunchReclaimCount+' games on rec fields with no preceding rec game.');
 
   // ── PHASE 4: EARLY-PACK COMPACTION ────────────────────────────────────────
   // Pull every scheduled game as far forward in time as constraints allow.
@@ -1835,6 +1919,23 @@ function genD1(){
   }
   if(compactedCount>0) console.log('Early-pack compaction shifted '+compactedCount+' games earlier ('+compactPass+' pass'+(compactPass===1?'':'es')+')');
 
+  // ── VERIFICATION: every team should have exactly gpt games on Day 1 ──────
+  // Surface any shortfalls so JR knows which teams need manual intervention.
+  // Stored on window._d1Shortfalls for the schedule report panel to display.
+  const shortfalls=[];
+  divs.forEach(d=>{
+    d.teams.forEach(t=>{
+      const games=tG[t.id]||0;
+      if(games<gpt){
+        shortfalls.push({divName:d.name,teamName:t.name,scheduled:games,expected:gpt});
+      }
+    });
+  });
+  window._d1Shortfalls=shortfalls;
+  if(shortfalls.length>0){
+    console.warn('Day 1 game-count shortfalls:',shortfalls.length,'teams missing games');
+    shortfalls.slice(0,5).forEach(s=>console.warn(`  ${s.divName} - ${s.teamName}: ${s.scheduled}/${s.expected} games`));
+  }
 
   window._played=played;window._tS=tS;window._dpod=dpod;
 }
@@ -1874,10 +1975,10 @@ function genD2(){
       const te2=t2.travelWaitlist?'local':(t2.travelTier||'local');
       if((te1==='out'||te1==='both')&&h>ec)continue;
       if((te2==='out'||te2==='both')&&h>ec)continue;
-      if(t1.id>0){const s1=tS2[t1.id]||[];if(!(s1.length===0||(s2m(s)-s2m(s1[s1.length-1]))>dRestMin))continue;}
-      if(t2.id>0){const s2x=tS2[t2.id]||[];if(!(s2x.length===0||(s2m(s)-s2m(s2x[s2x.length-1]))>dRestMin))continue;}
-      if(Object.values(sched2[s]).some(g=>g&&t1.id>0&&(g.t1===t1.id||g.t2===t1.id)))continue;
-      if(Object.values(sched2[s]).some(g=>g&&t2.id>0&&(g.t1===t2.id||g.t2===t2.id)))continue;
+      const s1=tS2[t1.id]||[];if(!(s1.length===0||(s2m(s)-s2m(s1[s1.length-1]))>dRestMin))continue;
+      const s2x=tS2[t2.id]||[];if(!(s2x.length===0||(s2m(s)-s2m(s2x[s2x.length-1]))>dRestMin))continue;
+      if(Object.values(sched2[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
+      if(Object.values(sched2[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
       const av=pool.filter(f=>f.gender===gen&&!sched2[s][f.id]);if(!av.length)continue;
       // Day 1 rematch flag: true if these two real teams played each other in pool play
       const d1played=window._played||new Set();
@@ -1887,16 +1988,30 @@ function genD2(){
         fallback:isFallback||false,
         sameRegion:sameReg(t1,t2),
         day1Rematch:isRematch};
-      if(t1.id>0){tS2[t1.id]=tS2[t1.id]||[];tS2[t1.id].push(s);}
-      if(t2.id>0){tS2[t2.id]=tS2[t2.id]||[];tS2[t2.id].push(s);}
+      tS2[t1.id]=tS2[t1.id]||[];tS2[t1.id].push(s);
+      tS2[t2.id]=tS2[t2.id]||[];tS2[t2.id].push(s);
       return s;
     }
     return null;
   };
 
-  // Helper: make a placeholder team object for bracket seeds
-  const mkSeed=(label,d)=>({id:-Math.random(),name:label,divId:d.id,divName:d.name,
-    rec:d.recruitable,gen:d.gender,travelTier:'local',travelWaitlist:false,placeholder:true});
+  // Helper: make a placeholder team object for bracket seeds.
+  // ID is stable per (division, label) so the SAME conceptual placeholder
+  // ("L SF1" in a given division) always returns the SAME id across calls.
+  // This is essential — schedG's no-double-booking and min-rest checks
+  // hash by team id, so a stable id per concept is what stops the same
+  // placeholder from landing in two games simultaneously.
+  const seedIdMap=window._seedIdMap=window._seedIdMap||{};
+  const mkSeed=(label,d)=>{
+    const key=`${d.id}:${label}`;
+    if(!(key in seedIdMap)){
+      // Use small negative integers so they're easily distinguishable from real team ids (positive)
+      // and from each other across runs
+      seedIdMap[key]=-(Object.keys(seedIdMap).length+1);
+    }
+    return {id:seedIdMap[key],name:label,divId:d.id,divName:d.name,
+      rec:d.recruitable,gen:d.gender,travelTier:'local',travelWaitlist:false,placeholder:true};
+  };
 
   // Helper: get seeded teams from a pool.
   // Pre-results (no pool.seededTeams set yet): returns placeholder team objects with seed-position labels
@@ -2218,8 +2333,29 @@ function renderAll(){
   const pw=Object.keys(practiceSlots).length;
   document.getElementById('met-row').innerHTML=[['Teams',teams],['Day 1',d1g],['Day 2',d2g],['Practice windows',pw],['Fields',fields.length]].map(([l,v])=>`<div class="met"><div class="met-v">${v}</div><div class="met-l">${l}</div></div>`).join('');
   let rh=`<div class="cl cl-t" style="margin-bottom:8px">Schedule generated. Review below. Day 2 bracket shells use placeholder seeds -- fill in with Day 1 results before TourneyMachine import.</div>`;
-  if(d2Warnings.length)rh+=`<div class="cl cl-a"><strong>Day 2 consolation notes:</strong><br>${d2Warnings.map(w=>`* ${w}`).join('<br>')}</div>`;
+  // Day 1 game-count check — surfaces any teams with <gpt games scheduled
+  const sf=window._d1Shortfalls||[];
+  if(sf.length){
+    const byDiv={};sf.forEach(s=>{(byDiv[s.divName]=byDiv[s.divName]||[]).push(s);});
+    const detail=Object.entries(byDiv).map(([dn,list])=>
+      `<strong>${dn}</strong>: ${list.length} team${list.length===1?'':'s'} short — ${list.slice(0,3).map(s=>`${s.teamName} (${s.scheduled}/${s.expected})`).join(', ')}${list.length>3?` (+${list.length-3} more)`:''}`
+    ).join('<br>');
+    rh+=`<div class="cl cl-r"><strong>⚠ Day 1 game-count shortfall — ${sf.length} team${sf.length===1?'':'s'} did not get all ${(window._d1Shortfalls[0]||{}).expected||3} games:</strong><br>${detail}<br><span style="font-size:11px">Likely causes: insufficient field capacity, slot grid conflicts, or strict travel constraints. Add more fields, lengthen the day, or relax travel constraints.</span></div>`;
+  }
+  if(d2Warnings.length)rh+=`<div class="cl cl-a"><strong>Day 2 notes:</strong><br>${d2Warnings.map(w=>`* ${w}`).join('<br>')}</div>`;
   document.getElementById('sched-report').innerHTML=rh;
+  // Render division color legend
+  const dcl=document.getElementById('div-color-legend');
+  if(dcl){
+    if(divs.length){
+      dcl.innerHTML='<strong style="margin-right:4px">Divisions:</strong>'+divs.map(d=>
+        `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:3px;background:#fff;border:.5px solid var(--mid-gray)"><span style="width:10px;height:10px;background:${divColor(d.id)};border-radius:2px;display:inline-block"></span>${d.name}</span>`
+      ).join('');
+      dcl.style.display='flex';
+    } else {
+      dcl.style.display='none';
+    }
+  }
   renderGrid(sched1,'grid-d1',true);
   renderGrid(sched2,'grid-d2',false);
 }
@@ -2239,6 +2375,10 @@ function renderGrid(sched,containerId,isD1){
       if(g){
         const ck=slot+':'+f.id;const hasConflict=window._cset&&window._cset.has(ck);
         const cls=hasConflict?'g-conflict':(g.type==='champ'?'g-champ':g.type==='bracket'?'g-bracket':(g.type==='consolation'||g.type==='nonbracket')?'g-con':g.rec?'g-rec':'g-pool');
+        // Per-division color accent — applied as a thick left border to distinguish
+        // games at a glance even when the same field hosts multiple divisions
+        const dColor=divColor(g.divId);
+        const divAccentStyle=hasConflict||g.type==='champ'?'':`border-left:4px solid ${dColor};padding-left:5px`;
         // Day 2 only: visual badges for same-region matchups and Day-1 rematches
         const showSameRegBadge=!isD1&&g.sameRegion;
         const showRematchBadge=!isD1&&g.day1Rematch;
@@ -2253,9 +2393,9 @@ function renderGrid(sched,containerId,isD1){
           (showSameRegBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--amber)" title="Same region — drag a team name to another game to swap">⚠ Same region</span>':'')+
           (showRematchBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--purple)" title="Day 1 rematch — these teams already played each other on Day 1. Drag a team to swap.">↻ Day 1 rematch</span>':'');
         t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'${dayKey}');this.classList.remove('drop-cell')">
-          <div class="game ${cls}${showSameRegBadge?' g-samereg':''}${showRematchBadge?' g-rematch':''}" draggable="true" ondragstart="dgSrc={slot:'${slot}',fid:${f.id},day:'${dayKey}'};this.classList.add('dragging')" ondragend="this.classList.remove('dragging')">
+          <div class="game ${cls}${showSameRegBadge?' g-samereg':''}${showRematchBadge?' g-rematch':''}" style="${divAccentStyle}" draggable="true" ondragstart="dgSrc={slot:'${slot}',fid:${f.id},day:'${dayKey}'};this.classList.add('dragging')" ondragend="this.classList.remove('dragging')">
             ${teamDrag(g.t1n,'t1')}<br>vs ${teamDrag(g.t2n,'t2')}<br>
-            <span style="opacity:.6;font-size:8px">${g.label||g.divName}${g.pool?' '+g.pool:''}</span>
+            <span style="opacity:.6;font-size:8px;color:${dColor};font-weight:600">${g.label||g.divName}${g.pool?' '+g.pool:''}</span>
             ${badgeHtml}
           </div></td>`;
       } else {
@@ -2400,6 +2540,7 @@ function updateConflicts(){
       Object.entries(row).forEach(([fid,g])=>{
         if(!g)return;
         [g.t1,g.t2].forEach(tid=>{
+          if(tid<=0)return; // skip Day 2 placeholders — they are scheduling artifacts, not real conflicts
           if(!tm[tid])tm[tid]=[];
           tm[tid].forEach(prev=>{
             if(prev.slot===slot){
@@ -2869,6 +3010,23 @@ function runCalc(){
         'Minimum '+minFieldsNeeded+' fields needed')+
       '. Teams/field: <strong>'+Math.round(totalTeams/(configuredFields||minFieldsNeeded)*10)/10+'</strong>'+
       '</span>';
+
+    // Pod size recommendation — separate for recruiting vs non-recruiting.
+    // A pod is a group of physically-adjacent fields shared by multiple divisions
+    // that all play within that pod (parking continuity). The recommendation is
+    // based on actual team count demand at the configured slot length.
+    if(divs.length){
+      const recTeams=divs.filter(d=>d.recruitable).reduce((a,d)=>a+d.teams.length,0);
+      const nonRecTeams=divs.filter(d=>!d.recruitable).reduce((a,d)=>a+d.teams.length,0);
+      const recPodSize=recTeams>0?Math.max(2,Math.ceil(recTeams*gpt/2/usableNonLit)):0;
+      const nonRecPodSize=nonRecTeams>0?Math.max(2,Math.ceil(nonRecTeams*gpt/2/usableNonLit)):0;
+      const fieldsAvail=configuredFields||(recPodSize+nonRecPodSize);
+      const lines=[];
+      if(recPodSize) lines.push(`<strong>Recruiting pod:</strong> ~${recPodSize} field${recPodSize===1?'':'s'} for ${recTeams} rec teams (all rec divisions share this pod)`);
+      if(nonRecPodSize) lines.push(`<strong>Non-recruiting pod${nonRecPodSize>=8?'s':''}:</strong> ~${nonRecPodSize} field${nonRecPodSize===1?'':'s'} for ${nonRecTeams} non-rec teams (sharing across pods OK)`);
+      utilNote+=`<br><span style="font-size:11px;color:var(--purple)"><strong>Pod recommendation:</strong> ${lines.join(' · ')}. `+
+        `Group physically-adjacent fields with the same <strong>POD</strong> label. Multiple divisions share one pod — they interleave games using slot rest gaps. Target: ${tpfNonLit} teams/field.</span>`;
+    }
   }
 
   document.getElementById('calc-note').innerHTML=
@@ -3119,20 +3277,8 @@ function genD3(){
 // ============================================================
 // CONFLICT HIGHLIGHTING (red cells)
 // ============================================================
-function checkConflicts(sched){
-  const tm={};let c=0;
-  Object.entries(sched).forEach(([slot,row])=>{
-    Object.entries(row).forEach(([fid,g])=>{
-      if(!g)return;
-      [g.t1,g.t2].forEach(tid=>{
-        if(!tm[tid])tm[tid]=new Set();
-        if(tm[tid].has(slot))c++;
-        tm[tid].add(slot);
-      });
-    });
-  });
-  return c;
-}
+// (checkConflicts is defined earlier in the DRAG & DROP section — it skips
+// negative team ids since those are Day 2 placeholders.)
 
 
 // ============================================================
@@ -3284,7 +3430,7 @@ function updateFieldGenderRecommendation(){
   const missing=[];
   if(!boysFieldsOk) missing.push('Need '+minBoysTotal+' boys fields (have '+configuredBoys+')');
   if(!girlsFieldsOk) missing.push('Need '+minGirlsTotal+' girls fields (have '+configuredGirls+') — set field gender to Girls');
-  if(boysTotal>0&&girlsTotal>0&&!totalFieldsOk) missing.push('Total fields ('+totalFieldCapacity+') insufficient — need at least '+(minBoysTotal+minGirlsTotal)+' ('+minBoysTotal+' boys + '+minGirlsTotal+' girls). Add more fields or set dedicated gender per field.');
+  if(boysTotal>0&&girlsTotal>0&&!totalFieldsOk) missing.push('Total fields ('+(configuredBoys+configuredGirls)+') insufficient — need at least '+(minBoysTotal+minGirlsTotal)+' ('+minBoysTotal+' boys + '+minGirlsTotal+' girls). Add more fields or set dedicated gender per field.');
   if(!boysRecOk) missing.push('Need '+minBoysRec+' boys recruiting fields (have '+configuredBoysRec+')');
   if(!girlsRecOk) missing.push('Need '+minGirlsRec+' girls recruiting fields (have '+configuredGirlsRec+')');
   if(!champOk2) missing.push('Check <strong>Champ</strong> on at least one field — needed for Day 2 championship games');
