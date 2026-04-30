@@ -1888,6 +1888,89 @@ function genD1(){
   });
   if(lunchReclaimCount>0) console.log('Lunch-slot reclaim placed '+lunchReclaimCount+' games on rec fields with no preceding rec game.');
 
+  // ── PHASE 3.7: PARITY BONUS PASS ─────────────────────────────────────────
+  // Odd-sized pools with odd gpt (e.g., 5 teams × 3 games / 2 = 7.5 → 7 games)
+  // leave exactly 1 team in each pool with gpt-1 games. To honor the "every team
+  // gets 3 games" rule, schedule a bonus game for each short team. Pick a furthest-tier
+  // (preferred different-region) opponent from the SAME pool who already has gpt games.
+  // The bonus opponent ends with gpt+1 games — but that 4th game does NOT count toward
+  // their pool standings (only counts for the short team whose 3rd game it is).
+  //
+  // The auto-pick can be overridden by JR via inline dropdown on the game cell.
+  // Bonus games are flagged with bonusGame: true and parityFor: <shortTeamId>.
+  let bonusCount=0;
+  divs.forEach(d=>{
+    (pools[d.id]||[]).forEach(pool=>{
+      // A pool is "odd parity" if (teamCount * gpt) is odd
+      if(((pool.teams.length*gpt)%2)===0)return;
+      // Find the short team — the one with gpt-1 games
+      const shortTeam=pool.teams.find(t=>(tG[t.id]||0)===gpt-1);
+      if(!shortTeam)return;
+      // Candidate opponents: pool teammates with gpt games who haven't played short team yet
+      const candidates=pool.teams.filter(t=>
+        t.id!==shortTeam.id&&
+        (tG[t.id]||0)>=gpt&&
+        !played.has(pk(shortTeam.id,t.id))
+      );
+      if(!candidates.length){
+        d2Warnings.push(`${d.name} ${pool.label}: ${shortTeam.name} couldn't get a bonus opponent (every other pool team already played them).`);
+        return;
+      }
+      // Score: furthest tier first (consistent with normal pool play tier-spread),
+      // different-region preferred as tiebreak.
+      candidates.forEach(c=>{
+        const tierDist=Math.abs((TO[shortTeam.tier]||0)-(TO[c.tier]||0));
+        const regBonus=sameReg(shortTeam,c)?0:1;
+        c._bonusScore=tierDist*10+regBonus;
+      });
+      candidates.sort((a,b)=>b._bonusScore-a._bonusScore);
+      const opp=candidates[0];
+      candidates.forEach(c=>delete c._bonusScore);
+
+      // Schedule the bonus game on any valid pod field + slot
+      const podFields=dpod[d.id]||[];
+      let placed=false;
+      for(const slot of slots){
+        if(placed)break;
+        if(!divGridSet[d.id].has(slot))continue;
+        if(d.recruitable&&slot===divLunchSlot[d.id])continue;
+        const h=sH(slot);
+        // Travel constraints
+        const te1=shortTeam.travelWaitlist?'local':shortTeam.travelTier;
+        const te2=opp.travelWaitlist?'local':opp.travelTier;
+        if((te1==='in'||te1==='both')&&h<lc)continue;
+        if((te2==='in'||te2==='both')&&h<lc)continue;
+        if((te1==='out'||te1==='both')&&h>ec)continue;
+        if((te2==='out'||te2==='both')&&h>ec)continue;
+        // Min-rest
+        const restMin=minRest*divSlotM(d);
+        const s1=tS[shortTeam.id]||[];
+        if(!(s1.length===0||s1.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin)))continue;
+        const s2x=tS[opp.id]||[];
+        if(!(s2x.length===0||s2x.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin)))continue;
+        // No double-booking either team in this slot
+        if(Object.values(sched1[slot]).some(g=>g&&(g.t1===shortTeam.id||g.t2===shortTeam.id||g.t1===opp.id||g.t2===opp.id)))continue;
+        // Find any available pod field
+        const avField=podFields.find(f=>!sched1[slot][f.id]);
+        if(!avField)continue;
+        sched1[slot][avField.id]={
+          id:`D1-G${++gc}`,t1:shortTeam.id,t2:opp.id,t1n:shortTeam.name,t2n:opp.name,
+          divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,
+          type:'pool',bonusGame:true,parityFor:shortTeam.id
+        };
+        tS[shortTeam.id].push(slot);tS[opp.id].push(slot);
+        tG[shortTeam.id]++;tG[opp.id]++;
+        played.add(pk(shortTeam.id,opp.id));
+        bonusCount++;
+        placed=true;
+      }
+      if(!placed){
+        d2Warnings.push(`${d.name} ${pool.label}: bonus game for ${shortTeam.name} vs ${opp.name} couldn't fit any slot — manual placement needed.`);
+      }
+    });
+  });
+  if(bonusCount>0) console.log('Parity bonus pass placed '+bonusCount+' bonus games for odd-pool short teams.');
+
   // ── PHASE 4: EARLY-PACK COMPACTION ────────────────────────────────────────
   // Pull every scheduled game as far forward in time as constraints allow.
   // This guarantees early time slots are filled first; idle time consolidates
@@ -1960,10 +2043,23 @@ function genD1(){
   // Stored on window._d1Shortfalls for the schedule report panel to display.
   const shortfalls=[];
   divs.forEach(d=>{
+    // Detect parity: each pool with odd team count + odd gpt has 1 team that mathematically
+    // can only get gpt-1 games (e.g. 5 teams × 3 games / 2 = 7.5 → 7 games → 1 team gets 2).
+    const pq=pools[d.id]||[];
+    const oddPools=new Set();
+    pq.forEach(p=>{
+      // A pool is "odd parity" if (teamCount * gpt) is odd
+      if(((p.teams.length*gpt)%2)===1)oddPools.add(p.label);
+    });
     d.teams.forEach(t=>{
       const games=tG[t.id]||0;
       if(games<gpt){
-        shortfalls.push({divName:d.name,teamName:t.name,scheduled:games,expected:gpt});
+        // Find the team's pool label
+        let myPool=null;
+        pq.forEach(p=>{if(p.teams.some(tx=>tx.id===t.id))myPool=p.label;});
+        const isParity=myPool&&oddPools.has(myPool)&&games===gpt-1;
+        shortfalls.push({divName:d.name,teamName:t.name,scheduled:games,expected:gpt,
+          cause:isParity?'parity':'capacity',poolLabel:myPool});
       }
     });
   });
@@ -2286,11 +2382,13 @@ function genD2(){
 // ============================================================
 function computePractice(){
   practiceSlots={};
-  // Skip practice assignment entirely if any team is short on Day 1 games.
-  // Practice is a "nice to have" that should never displace required pool play.
+  // Skip practice assignment if any team is short on Day 1 games due to capacity
+  // (not parity — odd pools mathematically can't give every team gpt games).
+  // Practice is "nice to have" and should never displace required pool play.
   const shortfalls=window._d1Shortfalls||[];
-  if(shortfalls.length>0){
-    console.log('Skipping practice — '+shortfalls.length+' team(s) still need their full Day 1 game count.');
+  const realShortage=shortfalls.filter(s=>s.cause!=='parity');
+  if(realShortage.length>0){
+    console.log('Skipping practice — '+realShortage.length+' team(s) still need their full Day 1 game count.');
     return;
   }
   // Count teams that requested practice — used to cap total practice assignments
@@ -2379,11 +2477,24 @@ function renderAll(){
   // Day 1 game-count check — surfaces any teams with <gpt games scheduled
   const sf=window._d1Shortfalls||[];
   if(sf.length){
-    const byDiv={};sf.forEach(s=>{(byDiv[s.divName]=byDiv[s.divName]||[]).push(s);});
-    const detail=Object.entries(byDiv).map(([dn,list])=>
-      `<strong>${dn}</strong>: ${list.length} team${list.length===1?'':'s'} short — ${list.slice(0,3).map(s=>`${s.teamName} (${s.scheduled}/${s.expected})`).join(', ')}${list.length>3?` (+${list.length-3} more)`:''}`
-    ).join('<br>');
-    rh+=`<div class="cl cl-r"><strong>⚠ Day 1 game-count shortfall — ${sf.length} team${sf.length===1?'':'s'} did not get all ${(window._d1Shortfalls[0]||{}).expected||3} games:</strong><br>${detail}<br><span style="font-size:11px">Likely causes: insufficient field capacity, slot grid conflicts, or strict travel constraints. Add more fields, lengthen the day, or relax travel constraints.</span></div>`;
+    const parity=sf.filter(s=>s.cause==='parity');
+    const capacity=sf.filter(s=>s.cause!=='parity');
+    if(capacity.length){
+      // Real capacity / scheduling issue
+      const byDiv={};capacity.forEach(s=>{(byDiv[s.divName]=byDiv[s.divName]||[]).push(s);});
+      const detail=Object.entries(byDiv).map(([dn,list])=>
+        `<strong>${dn}</strong>: ${list.length} team${list.length===1?'':'s'} short — ${list.slice(0,3).map(s=>`${s.teamName} (${s.scheduled}/${s.expected})`).join(', ')}${list.length>3?` (+${list.length-3} more)`:''}`
+      ).join('<br>');
+      rh+=`<div class="cl cl-r"><strong>⚠ Day 1 game-count shortfall — ${capacity.length} team${capacity.length===1?'':'s'} did not get all ${gpt} games:</strong><br>${detail}<br><span style="font-size:11px">Likely causes: insufficient field capacity, slot grid conflicts, or strict travel constraints. Add more fields, lengthen the day, or relax travel constraints.</span></div>`;
+    }
+    if(parity.length){
+      // Pool parity that the bonus pass couldn't fix (no valid opponent or no slot fit)
+      const byDiv={};parity.forEach(s=>{(byDiv[s.divName]=byDiv[s.divName]||[]).push(s);});
+      const detail=Object.entries(byDiv).map(([dn,list])=>
+        `<strong>${dn} ${list[0].poolLabel||''}</strong>: ${list.map(s=>s.teamName).join(', ')} (${list[0].scheduled}/${gpt})`
+      ).join('<br>');
+      rh+=`<div class="cl cl-r" style="margin-top:6px"><strong>⚠ Pool parity bonus failed — ${parity.length} team${parity.length===1?'':'s'} ended Day 1 with ${gpt-1}/${gpt} games:</strong><br>${detail}<br><span style="font-size:11px">The bonus-game pass for odd pools could not find a valid slot or opponent. Manual scheduling needed — drag a game into the schedule for these teams. See "Day 2 notes" below for specifics.</span></div>`;
+    }
   }
   if(d2Warnings.length)rh+=`<div class="cl cl-a"><strong>Day 2 notes:</strong><br>${d2Warnings.map(w=>`* ${w}`).join('<br>')}</div>`;
   document.getElementById('sched-report').innerHTML=rh;
@@ -2434,7 +2545,24 @@ function renderGrid(sched,containerId,isD1){
         const teamDrag=(n,side)=>`<span class="team-drag" draggable="true" ondragstart="event.stopPropagation();dgTeam={slot:'${slot}',fid:${f.id},side:'${side}',day:'${dayKey}'};this.classList.add('team-dragging')" ondragend="this.classList.remove('team-dragging');document.querySelectorAll('.team-drag').forEach(x=>x.classList.remove('team-drop-target'))" ondragover="if(dgTeam){event.preventDefault();event.stopPropagation();this.classList.add('team-drop-target')}" ondragleave="this.classList.remove('team-drop-target')" ondrop="if(dgTeam){event.preventDefault();event.stopPropagation();this.classList.remove('team-drop-target');dropTeam('${slot}',${f.id},'${side}','${dayKey}')}" title="Drag to another team to swap">${n}</span>`;
         const badgeHtml=
           (showSameRegBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--amber)" title="Same region — drag a team name to another game to swap">⚠ Same region</span>':'')+
-          (showRematchBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--purple)" title="Day 1 rematch — these teams already played each other on Day 1. Drag a team to swap.">↻ Day 1 rematch</span>':'');
+          (showRematchBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--purple)" title="Day 1 rematch — these teams already played each other on Day 1. Drag a team to swap.">↻ Day 1 rematch</span>':'')+
+          (g.bonusGame?(()=>{
+            // Bonus game: show "+1 bonus" badge with dropdown override.
+            // Dropdown lists other pool teammates that haven't played the short team yet.
+            const shortId=g.parityFor;
+            const oppId=g.t1===shortId?g.t2:g.t1;
+            const div=divs.find(d=>d.id===g.divId);
+            const pool=div?(pools[div.id]||[]).find(p=>p.label===g.pool):null;
+            const candidates=pool?pool.teams.filter(t=>{
+              if(t.id===shortId)return false;
+              if(t.id===oppId)return true; // include current opponent
+              // candidate must not have played short team
+              return !window._played||!window._played.has(pk(shortId,t.id));
+            }):[];
+            const opts=candidates.map(t=>`<option value="${t.id}"${t.id===oppId?' selected':''}>${t.name}${t.tier?' ('+t.tier+')':''}</option>`).join('');
+            return `<br><span style="font-size:8px;font-weight:600;color:var(--purple)" title="This is a bonus game added because the pool has odd size — short team's 3rd game. The bonus opponent's 4th-game result does NOT count in standings.">★ +1 bonus</span>`+
+              ` <select onchange="swapBonusOpponent(${g.divId},'${slot}',${f.id},+this.value);event.stopPropagation()" onclick="event.stopPropagation()" style="font-size:9px;padding:0 2px;margin-left:2px;border:.5px solid var(--purple);border-radius:2px;background:#fff;color:var(--purple);max-width:90px" title="Pick a different opponent">${opts}</select>`;
+          })():'');
         t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'${dayKey}');this.classList.remove('drop-cell')">
           <div class="game ${cls}${showSameRegBadge?' g-samereg':''}${showRematchBadge?' g-rematch':''}" style="${divAccentStyle}" draggable="true" ondragstart="dgSrc={slot:'${slot}',fid:${f.id},day:'${dayKey}'};this.classList.add('dragging')" ondragend="this.classList.remove('dragging')">
             ${teamDrag(g.t1n,'t1')}<br>vs ${teamDrag(g.t2n,'t2')}<br>
@@ -2726,6 +2854,59 @@ function dropTeam(toSlot,toFid,toSide,toDay){
   if(restWarnings.length){showToast(`Min-rest violation: ${restWarnings[0]}${restWarnings.length>1?` (+${restWarnings.length-1} more)`:''}`,'warn');}
   renderGrid(sched,src.day==='d1'?'grid-d1':'grid-d2',src.day==='d1');
   updateConflicts();
+}
+
+// ============================================================
+// BONUS GAME OPPONENT OVERRIDE
+// ============================================================
+// Replace the bonus opponent on a parity bonus game with a different pool teammate.
+// The short team (g.parityFor) stays — only the OTHER team changes.
+// Updates the played set and the game's t1/t2 in place. The new opponent's tG goes
+// up by 1 (their bonus 4th game), the old opponent's tG goes down by 1.
+function swapBonusOpponent(divId,slot,fid,newOppId){
+  const g=sched1[slot]&&sched1[slot][fid];
+  if(!g||!g.bonusGame){showToast('Not a bonus game','err');return;}
+  const shortId=g.parityFor;
+  const oldOppId=g.t1===shortId?g.t2:g.t1;
+  if(newOppId===oldOppId)return; // no change
+  // Validate: new opponent must exist in same pool, not the short team, and not already played short
+  const div=divs.find(x=>x.id===divId);
+  if(!div){showToast('Division not found','err');return;}
+  const pool=(pools[div.id]||[]).find(p=>p.label===g.pool);
+  if(!pool){showToast('Pool not found','err');return;}
+  const newOpp=pool.teams.find(t=>t.id===newOppId);
+  if(!newOpp){showToast('Selected team is not in this pool','err');return;}
+  if(newOpp.id===shortId){showToast('Cannot pick the short team as their own opponent','err');return;}
+  // Check the new opponent isn't already playing in this slot (would be a double-booking)
+  if(Object.values(sched1[slot]).some(other=>other&&other!==g&&(other.t1===newOpp.id||other.t2===newOpp.id))){
+    showToast(`${newOpp.name} is already playing in this slot. Pick a different opponent or move the bonus game first.`,'err');
+    return;
+  }
+  // Min-rest check for new opponent at this slot
+  const restMin=(+document.getElementById('minrest').value)*divSlotM(div);
+  const tS=window._tS||{};
+  const newOppSlots=tS[newOpp.id]||[];
+  const violatesRest=newOppSlots.some(prev=>Math.abs(s2m(slot)-s2m(prev))<=restMin);
+  if(violatesRest){
+    showToast(`${newOpp.name} has a min-rest conflict at this slot. Pick a different opponent or move the bonus game.`,'warn');
+    // Allow the swap anyway — JR may move the game next; flag conflict via updateConflicts later
+  }
+  // Update played set: remove old pair, add new pair
+  if(window._played){
+    window._played.delete(pk(shortId,oldOppId));
+    window._played.add(pk(shortId,newOpp.id));
+  }
+  // Update tS for old opponent (remove this slot) and new opponent (add this slot)
+  if(tS[oldOppId]){tS[oldOppId]=tS[oldOppId].filter(s=>s!==slot);}
+  if(!tS[newOpp.id])tS[newOpp.id]=[];
+  if(!tS[newOpp.id].includes(slot))tS[newOpp.id].push(slot);
+  // Replace the team in the game
+  if(g.t1===oldOppId){g.t1=newOpp.id;g.t1n=newOpp.name;}
+  else{g.t2=newOpp.id;g.t2n=newOpp.name;}
+  // Re-render and re-check conflicts
+  renderGrid(sched1,'grid-d1',true);
+  updateConflicts();
+  showToast(`Bonus opponent updated to ${newOpp.name}`);
 }
 
 // ============================================================
@@ -3787,6 +3968,12 @@ function computeStandings(divId){
   const d=divs.find(x=>x.id===divId);if(!d)return;
   const dp=pools[d.id]||[];
 
+  // Build a fast lookup from gameId -> game record (so we can check bonusGame/parityFor)
+  const gameByID={};
+  [sched1,sched2].forEach(sc=>Object.values(sc||{}).forEach(row=>Object.values(row||{}).forEach(g=>{
+    if(g&&g.id)gameByID[g.id]=g;
+  })));
+
   dp.forEach(pool=>{
     // Collect all results for teams in this pool
     const stats={};
@@ -3798,13 +3985,28 @@ function computeStandings(divId){
       const t1=gs.t1id,t2=gs.t2id;
       if(!stats[t1]||!stats[t2])return;
       const s1=parseInt(gs.t1score)||0,s2=parseInt(gs.t2score)||0;
-      stats[t1].gf+=s1;stats[t1].ga+=s2;
-      stats[t2].gf+=s2;stats[t2].ga+=s1;
-      if(s1>s2){stats[t1].w++;stats[t2].l++;stats[t1].h2h[t2]='W';stats[t2].h2h[t1]='L';}
-      else if(s2>s1){stats[t2].w++;stats[t1].l++;stats[t2].h2h[t1]='W';stats[t1].h2h[t2]='L';}
-      else{stats[t1].tie++;stats[t2].tie++;stats[t1].h2h[t2]='T';stats[t2].h2h[t1]='T';}
-      stats[t1].pts=stats[t1].w*3+stats[t1].tie;
-      stats[t2].pts=stats[t2].w*3+stats[t2].tie;
+
+      // Bonus game asymmetric counting: result counts for the short team (their 3rd game),
+      // but does NOT count for the bonus opponent (their 4th game).
+      const grec=gameByID[gid];
+      const isBonus=grec&&grec.bonusGame;
+      const t1Counts=!isBonus||grec.parityFor===t1;
+      const t2Counts=!isBonus||grec.parityFor===t2;
+
+      if(t1Counts){stats[t1].gf+=s1;stats[t1].ga+=s2;}
+      if(t2Counts){stats[t2].gf+=s2;stats[t2].ga+=s1;}
+      if(s1>s2){
+        if(t1Counts){stats[t1].w++;stats[t1].h2h[t2]='W';}
+        if(t2Counts){stats[t2].l++;stats[t2].h2h[t1]='L';}
+      } else if(s2>s1){
+        if(t2Counts){stats[t2].w++;stats[t2].h2h[t1]='W';}
+        if(t1Counts){stats[t1].l++;stats[t1].h2h[t2]='L';}
+      } else {
+        if(t1Counts){stats[t1].tie++;stats[t1].h2h[t2]='T';}
+        if(t2Counts){stats[t2].tie++;stats[t2].h2h[t1]='T';}
+      }
+      if(t1Counts)stats[t1].pts=stats[t1].w*3+stats[t1].tie;
+      if(t2Counts)stats[t2].pts=stats[t2].w*3+stats[t2].tie;
     });
 
     // Seed using full tiebreaker chain
