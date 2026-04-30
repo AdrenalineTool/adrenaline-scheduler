@@ -1888,89 +1888,6 @@ function genD1(){
   });
   if(lunchReclaimCount>0) console.log('Lunch-slot reclaim placed '+lunchReclaimCount+' games on rec fields with no preceding rec game.');
 
-  // ── PHASE 3.7: PARITY BONUS PASS ─────────────────────────────────────────
-  // Odd-sized pools with odd gpt (e.g., 5 teams × 3 games / 2 = 7.5 → 7 games)
-  // leave exactly 1 team in each pool with gpt-1 games. To honor the "every team
-  // gets 3 games" rule, schedule a bonus game for each short team. Pick a furthest-tier
-  // (preferred different-region) opponent from the SAME pool who already has gpt games.
-  // The bonus opponent ends with gpt+1 games — but that 4th game does NOT count toward
-  // their pool standings (only counts for the short team whose 3rd game it is).
-  //
-  // The auto-pick can be overridden by JR via inline dropdown on the game cell.
-  // Bonus games are flagged with bonusGame: true and parityFor: <shortTeamId>.
-  let bonusCount=0;
-  divs.forEach(d=>{
-    (pools[d.id]||[]).forEach(pool=>{
-      // A pool is "odd parity" if (teamCount * gpt) is odd
-      if(((pool.teams.length*gpt)%2)===0)return;
-      // Find the short team — the one with gpt-1 games
-      const shortTeam=pool.teams.find(t=>(tG[t.id]||0)===gpt-1);
-      if(!shortTeam)return;
-      // Candidate opponents: pool teammates with gpt games who haven't played short team yet
-      const candidates=pool.teams.filter(t=>
-        t.id!==shortTeam.id&&
-        (tG[t.id]||0)>=gpt&&
-        !played.has(pk(shortTeam.id,t.id))
-      );
-      if(!candidates.length){
-        d2Warnings.push(`${d.name} ${pool.label}: ${shortTeam.name} couldn't get a bonus opponent (every other pool team already played them).`);
-        return;
-      }
-      // Score: furthest tier first (consistent with normal pool play tier-spread),
-      // different-region preferred as tiebreak.
-      candidates.forEach(c=>{
-        const tierDist=Math.abs((TO[shortTeam.tier]||0)-(TO[c.tier]||0));
-        const regBonus=sameReg(shortTeam,c)?0:1;
-        c._bonusScore=tierDist*10+regBonus;
-      });
-      candidates.sort((a,b)=>b._bonusScore-a._bonusScore);
-      const opp=candidates[0];
-      candidates.forEach(c=>delete c._bonusScore);
-
-      // Schedule the bonus game on any valid pod field + slot
-      const podFields=dpod[d.id]||[];
-      let placed=false;
-      for(const slot of slots){
-        if(placed)break;
-        if(!divGridSet[d.id].has(slot))continue;
-        if(d.recruitable&&slot===divLunchSlot[d.id])continue;
-        const h=sH(slot);
-        // Travel constraints
-        const te1=shortTeam.travelWaitlist?'local':shortTeam.travelTier;
-        const te2=opp.travelWaitlist?'local':opp.travelTier;
-        if((te1==='in'||te1==='both')&&h<lc)continue;
-        if((te2==='in'||te2==='both')&&h<lc)continue;
-        if((te1==='out'||te1==='both')&&h>ec)continue;
-        if((te2==='out'||te2==='both')&&h>ec)continue;
-        // Min-rest
-        const restMin=minRest*divSlotM(d);
-        const s1=tS[shortTeam.id]||[];
-        if(!(s1.length===0||s1.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin)))continue;
-        const s2x=tS[opp.id]||[];
-        if(!(s2x.length===0||s2x.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin)))continue;
-        // No double-booking either team in this slot
-        if(Object.values(sched1[slot]).some(g=>g&&(g.t1===shortTeam.id||g.t2===shortTeam.id||g.t1===opp.id||g.t2===opp.id)))continue;
-        // Find any available pod field
-        const avField=podFields.find(f=>!sched1[slot][f.id]);
-        if(!avField)continue;
-        sched1[slot][avField.id]={
-          id:`D1-G${++gc}`,t1:shortTeam.id,t2:opp.id,t1n:shortTeam.name,t2n:opp.name,
-          divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,
-          type:'pool',bonusGame:true,parityFor:shortTeam.id
-        };
-        tS[shortTeam.id].push(slot);tS[opp.id].push(slot);
-        tG[shortTeam.id]++;tG[opp.id]++;
-        played.add(pk(shortTeam.id,opp.id));
-        bonusCount++;
-        placed=true;
-      }
-      if(!placed){
-        d2Warnings.push(`${d.name} ${pool.label}: bonus game for ${shortTeam.name} vs ${opp.name} couldn't fit any slot — manual placement needed.`);
-      }
-    });
-  });
-  if(bonusCount>0) console.log('Parity bonus pass placed '+bonusCount+' bonus games for odd-pool short teams.');
-
   // ── PHASE 4: EARLY-PACK COMPACTION ────────────────────────────────────────
   // Pull every scheduled game as far forward in time as constraints allow.
   // This guarantees early time slots are filled first; idle time consolidates
@@ -2037,6 +1954,105 @@ function genD1(){
     });
   }
   if(compactedCount>0) console.log('Early-pack compaction shifted '+compactedCount+' games earlier ('+compactPass+' pass'+(compactPass===1?'':'es')+')');
+
+  // ── PHASE 5: PARITY BONUS PASS ────────────────────────────────────────────
+  // Odd-sized pools with odd gpt (e.g., 5 teams × 3 games / 2 = 7.5 → 7 games)
+  // leave exactly 1 team in each pool with gpt-1 games. To honor "every team
+  // gets at least gpt games," schedule a bonus game for each short team. Pick a
+  // furthest-tier (preferred different-region) opponent from the SAME pool who
+  // already has gpt games. That opponent ends with gpt+1 games; their bonus
+  // 4th-game result does NOT count in pool standings (only the short team's does).
+  //
+  // Auto-pick is overridable via the inline dropdown on the game cell.
+  // Bonus games are flagged with bonusGame: true and parityFor: <shortTeamId>.
+  //
+  // Runs AFTER compaction so back-end slots (which were freed by compaction
+  // pulling games forward) become available targets for bonus games. Also
+  // widens the field search: prefer the division's pod, but fall back to ANY
+  // same-gender field if no pod field has a free slot meeting all constraints.
+  let bonusCount=0;
+  divs.forEach(d=>{
+    (pools[d.id]||[]).forEach(pool=>{
+      // Only odd parity pools need a bonus
+      if(((pool.teams.length*gpt)%2)===0)return;
+      const shortTeam=pool.teams.find(t=>(tG[t.id]||0)===gpt-1);
+      if(!shortTeam)return;
+      // Candidate opponents: pool teammates with gpt games who haven't played short team yet
+      const candidates=pool.teams.filter(t=>
+        t.id!==shortTeam.id&&
+        (tG[t.id]||0)>=gpt&&
+        !played.has(pk(shortTeam.id,t.id))
+      );
+      if(!candidates.length){
+        d2Warnings.push(`${d.name} ${pool.label}: ${shortTeam.name} couldn't get a bonus opponent (every other pool team already played them).`);
+        return;
+      }
+      // Score candidates: furthest tier first, then different-region as tiebreak
+      candidates.forEach(c=>{
+        const tierDist=Math.abs((TO[shortTeam.tier]||0)-(TO[c.tier]||0));
+        const regBonus=sameReg(shortTeam,c)?0:1;
+        c._bonusScore=tierDist*10+regBonus;
+      });
+      candidates.sort((a,b)=>b._bonusScore-a._bonusScore);
+      candidates.forEach(c=>delete c._bonusScore);
+
+      // Try each candidate in order; for each, search slots and fields for a fit.
+      // Slot search order: try LATER slots first (back-end of day is freer post-compaction
+      // because compaction pulled games forward).
+      const slotsRev=[...slots].reverse();
+      const podFields=dpod[d.id]||[];
+      const fallbackFields=fields.filter(f=>f.gender===d.gender&&!podFields.includes(f));
+      let placed=false;
+      let placedOpp=null;
+      let placedSlot=null;
+      for(const opp of candidates){
+        if(placed)break;
+        for(const slot of slotsRev){
+          if(placed)break;
+          if(!divGridSet[d.id].has(slot))continue;
+          if(d.recruitable&&slot===divLunchSlot[d.id])continue;
+          const h=sH(slot);
+          // Travel constraints
+          const te1=shortTeam.travelWaitlist?'local':shortTeam.travelTier;
+          const te2=opp.travelWaitlist?'local':opp.travelTier;
+          if((te1==='in'||te1==='both')&&h<lc)continue;
+          if((te2==='in'||te2==='both')&&h<lc)continue;
+          if((te1==='out'||te1==='both')&&h>ec)continue;
+          if((te2==='out'||te2==='both')&&h>ec)continue;
+          // Min-rest for both teams
+          const restMin=minRest*divSlotM(d);
+          const sa=tS[shortTeam.id]||[];
+          if(!sa.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin))continue;
+          const sb=tS[opp.id]||[];
+          if(!sb.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin))continue;
+          // No double-booking either team in this slot
+          if(Object.values(sched1[slot]).some(g=>g&&(g.t1===shortTeam.id||g.t2===shortTeam.id||g.t1===opp.id||g.t2===opp.id)))continue;
+          // Try pod fields first, then fall back to any same-gender field
+          let avField=podFields.find(f=>!sched1[slot][f.id]);
+          if(!avField){
+            avField=fallbackFields.find(f=>!sched1[slot][f.id]);
+          }
+          if(!avField)continue;
+          sched1[slot][avField.id]={
+            id:`D1-G${++gc}`,t1:shortTeam.id,t2:opp.id,t1n:shortTeam.name,t2n:opp.name,
+            divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,
+            type:'pool',bonusGame:true,parityFor:shortTeam.id
+          };
+          tS[shortTeam.id].push(slot);tS[opp.id].push(slot);
+          tG[shortTeam.id]++;tG[opp.id]++;
+          played.add(pk(shortTeam.id,opp.id));
+          bonusCount++;
+          placed=true;
+          placedOpp=opp;
+          placedSlot=slot;
+        }
+      }
+      if(!placed){
+        d2Warnings.push(`${d.name} ${pool.label}: bonus game for ${shortTeam.name} couldn't fit any slot/field across ${candidates.length} candidate opponent(s) — manual placement needed.`);
+      }
+    });
+  });
+  if(bonusCount>0) console.log('Parity bonus pass placed '+bonusCount+' bonus games for odd-pool short teams.');
 
   // ── VERIFICATION: every team should have exactly gpt games on Day 1 ──────
   // Surface any shortfalls so JR knows which teams need manual intervention.
@@ -2475,6 +2491,7 @@ function renderAll(){
   document.getElementById('met-row').innerHTML=[['Teams',teams],['Day 1',d1g],['Day 2',d2g],['Practice windows',pw],['Fields',fields.length]].map(([l,v])=>`<div class="met"><div class="met-v">${v}</div><div class="met-l">${l}</div></div>`).join('');
   let rh=`<div class="cl cl-t" style="margin-bottom:8px">Schedule generated. Review below. Day 2 bracket shells use placeholder seeds -- fill in with Day 1 results before TourneyMachine import.</div>`;
   // Day 1 game-count check — surfaces any teams with <gpt games scheduled
+  const gptVal=+document.getElementById('gpt').value||3;
   const sf=window._d1Shortfalls||[];
   if(sf.length){
     const parity=sf.filter(s=>s.cause==='parity');
@@ -2485,15 +2502,15 @@ function renderAll(){
       const detail=Object.entries(byDiv).map(([dn,list])=>
         `<strong>${dn}</strong>: ${list.length} team${list.length===1?'':'s'} short — ${list.slice(0,3).map(s=>`${s.teamName} (${s.scheduled}/${s.expected})`).join(', ')}${list.length>3?` (+${list.length-3} more)`:''}`
       ).join('<br>');
-      rh+=`<div class="cl cl-r"><strong>⚠ Day 1 game-count shortfall — ${capacity.length} team${capacity.length===1?'':'s'} did not get all ${gpt} games:</strong><br>${detail}<br><span style="font-size:11px">Likely causes: insufficient field capacity, slot grid conflicts, or strict travel constraints. Add more fields, lengthen the day, or relax travel constraints.</span></div>`;
+      rh+=`<div class="cl cl-r"><strong>⚠ Day 1 game-count shortfall — ${capacity.length} team${capacity.length===1?'':'s'} did not get all ${gptVal} games:</strong><br>${detail}<br><span style="font-size:11px">Likely causes: insufficient field capacity, slot grid conflicts, or strict travel constraints. Add more fields, lengthen the day, or relax travel constraints.</span></div>`;
     }
     if(parity.length){
       // Pool parity that the bonus pass couldn't fix (no valid opponent or no slot fit)
       const byDiv={};parity.forEach(s=>{(byDiv[s.divName]=byDiv[s.divName]||[]).push(s);});
       const detail=Object.entries(byDiv).map(([dn,list])=>
-        `<strong>${dn} ${list[0].poolLabel||''}</strong>: ${list.map(s=>s.teamName).join(', ')} (${list[0].scheduled}/${gpt})`
+        `<strong>${dn} ${list[0].poolLabel||''}</strong>: ${list.map(s=>s.teamName).join(', ')} (${list[0].scheduled}/${gptVal})`
       ).join('<br>');
-      rh+=`<div class="cl cl-r" style="margin-top:6px"><strong>⚠ Pool parity bonus failed — ${parity.length} team${parity.length===1?'':'s'} ended Day 1 with ${gpt-1}/${gpt} games:</strong><br>${detail}<br><span style="font-size:11px">The bonus-game pass for odd pools could not find a valid slot or opponent. Manual scheduling needed — drag a game into the schedule for these teams. See "Day 2 notes" below for specifics.</span></div>`;
+      rh+=`<div class="cl cl-r" style="margin-top:6px"><strong>⚠ Pool parity bonus failed — ${parity.length} team${parity.length===1?'':'s'} ended Day 1 with ${gptVal-1}/${gptVal} games:</strong><br>${detail}<br><span style="font-size:11px">The bonus-game pass for odd pools could not find a valid slot or opponent. Manual scheduling needed — drag a game into the schedule for these teams. See "Day 2 notes" below for specifics.</span></div>`;
     }
   }
   if(d2Warnings.length)rh+=`<div class="cl cl-a"><strong>Day 2 notes:</strong><br>${d2Warnings.map(w=>`* ${w}`).join('<br>')}</div>`;
