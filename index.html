@@ -125,10 +125,11 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 .g-samereg { box-shadow: 0 0 0 2px var(--amber) inset; border-color: var(--amber) !important; }
 .g-rematch { box-shadow: 0 0 0 2px var(--purple) inset; border-color: var(--purple) !important; }
 .g-samereg.g-rematch { box-shadow: 0 0 0 2px var(--amber) inset, 0 0 0 4px var(--purple) inset; }
-.team-drag { cursor: grab; padding: 0 1px; border-radius: 2px; }
-.team-drag:hover { background: rgba(255,255,255,.4); }
+.team-drag { cursor: grab; padding: 0 2px; border-radius: 2px; border-bottom: 1px dashed rgba(0,0,0,.35); display: inline-block; transition: background .1s; }
+.team-drag:hover { background: rgba(255,255,255,.7); border-bottom-style: solid; border-bottom-color: rgba(0,0,0,.55); }
+.team-drag:active { cursor: grabbing; }
 .team-dragging { opacity: .4; }
-.team-drop-target { background: rgba(29,158,117,.25); outline: 1px dashed var(--teal); outline-offset: 1px; }
+.team-drop-target { background: rgba(29,158,117,.25) !important; outline: 1.5px dashed var(--teal); outline-offset: 1px; }
 .g-lunch { background: var(--teal); color: #fff; text-align: center; font-weight: 600; font-size: 9px; padding: 4px; border-radius: 3px; }
 .g-tlunch { background: var(--lt-amber); color: #412402; text-align: center; font-size: 9px; padding: 4px; border-radius: 3px; }
 .g-empty { font-size: 9px; color: #ccc; padding: 3px; min-height: 26px; }
@@ -465,7 +466,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div id="util-panel"></div>
   <div class="conflict-bar">
     <span style="font-size:11px;font-weight:500">Manual adjust:</span>
-    <span style="font-size:11px;color:var(--dark-gray)">Drag any game to a new slot. Conflicts flagged instantly.</span>
+    <span style="font-size:11px;color:var(--dark-gray)">Drag any whole game to a new slot — or drag an underlined team name onto another team name to swap them between games (same division & pool on Day 1).</span>
     <div style="flex:1"></div>
     <span id="conflict-ct" style="font-size:11px;font-weight:500"></span>
     <button class="btn btn-sm" id="regen-btn" style="display:none;color:var(--red);border-color:#f09595" onclick="generate()">Clear conflicts & regenerate</button>
@@ -2559,7 +2560,7 @@ function renderGrid(sched,containerId,isD1){
         // Team-drop only consumes the event when an actual team is being dragged (dgTeam set).
         // If a game-level drag is in flight (dgSrc set, dgTeam null), the event bubbles to the cell so dropGame fires.
         const dayKey=isD1?'d1':'d2';
-        const teamDrag=(n,side)=>`<span class="team-drag" draggable="true" ondragstart="event.stopPropagation();dgTeam={slot:'${slot}',fid:${f.id},side:'${side}',day:'${dayKey}'};this.classList.add('team-dragging')" ondragend="this.classList.remove('team-dragging');document.querySelectorAll('.team-drag').forEach(x=>x.classList.remove('team-drop-target'))" ondragover="if(dgTeam){event.preventDefault();event.stopPropagation();this.classList.add('team-drop-target')}" ondragleave="this.classList.remove('team-drop-target')" ondrop="if(dgTeam){event.preventDefault();event.stopPropagation();this.classList.remove('team-drop-target');dropTeam('${slot}',${f.id},'${side}','${dayKey}')}" title="Drag to another team to swap">${n}</span>`;
+        const teamDrag=(n,side)=>`<span class="team-drag" draggable="true" ondragstart="event.stopPropagation();dgTeam={slot:'${slot}',fid:${f.id},side:'${side}',day:'${dayKey}'};this.classList.add('team-dragging')" ondragend="this.classList.remove('team-dragging');document.querySelectorAll('.team-drag').forEach(x=>x.classList.remove('team-drop-target'));dgTeam=null" ondragover="if(dgTeam){event.preventDefault();event.stopPropagation();this.classList.add('team-drop-target')}" ondragleave="this.classList.remove('team-drop-target')" ondrop="if(dgTeam){event.preventDefault();event.stopPropagation();this.classList.remove('team-drop-target');dropTeam('${slot}',${f.id},'${side}','${dayKey}')}" title="Drag this team name onto another team to swap them between games">${n}</span>`;
         const badgeHtml=
           (showSameRegBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--amber)" title="Same region — drag a team name to another game to swap">⚠ Same region</span>':'')+
           (showRematchBadge?'<br><span style="font-size:8px;font-weight:600;color:var(--purple)" title="Day 1 rematch — these teams already played each other on Day 1. Drag a team to swap.">↻ Day 1 rematch</span>':'')+
@@ -2581,7 +2582,7 @@ function renderGrid(sched,containerId,isD1){
               ` <select onchange="swapBonusOpponent(${g.divId},'${slot}',${f.id},+this.value);event.stopPropagation()" onclick="event.stopPropagation()" style="font-size:9px;padding:0 2px;margin-left:2px;border:.5px solid var(--purple);border-radius:2px;background:#fff;color:var(--purple);max-width:90px" title="Pick a different opponent">${opts}</select>`;
           })():'');
         t+=`<td ondragover="event.preventDefault();this.classList.add('drop-cell')" ondragleave="this.classList.remove('drop-cell')" ondrop="dropGame(event,'${slot}',${f.id},'${dayKey}');this.classList.remove('drop-cell')">
-          <div class="game ${cls}${showSameRegBadge?' g-samereg':''}${showRematchBadge?' g-rematch':''}" style="${divAccentStyle}" draggable="true" ondragstart="dgSrc={slot:'${slot}',fid:${f.id},day:'${dayKey}'};this.classList.add('dragging')" ondragend="this.classList.remove('dragging')">
+          <div class="game ${cls}${showSameRegBadge?' g-samereg':''}${showRematchBadge?' g-rematch':''}" style="${divAccentStyle}" draggable="true" ondragstart="if(event.target.classList&&event.target.classList.contains('team-drag')){return}dgSrc={slot:'${slot}',fid:${f.id},day:'${dayKey}'};this.classList.add('dragging')" ondragend="this.classList.remove('dragging');dgSrc=null">
             ${teamDrag(g.t1n,'t1')}<br>vs ${teamDrag(g.t2n,'t2')}<br>
             <span style="opacity:.6;font-size:8px;color:${dColor};font-weight:600">${g.label||g.divName}${g.pool?' '+g.pool:''}</span>
             ${badgeHtml}
