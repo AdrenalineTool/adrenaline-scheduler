@@ -221,6 +221,92 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 </head>
 <body>
 
+<!-- ════════════════════════════════════════════════════════════════════
+     PASSWORD GATE — Internal testing phase
+     ────────────────────────────────────────────────────────────────────
+     This is intentionally lightweight protection: a SHA-256 hash compared
+     client-side. It deters casual URL-sharing during the testing phase
+     but is NOT a real security boundary — anyone with browser dev tools
+     can bypass it. Real auth comes with Phase 2B (cloud backend).
+     ──────────────────────────────────────────────────────────────────── -->
+<div id="adrln-pw-gate" style="position:fixed;inset:0;z-index:99999;background:#1B3A5C;display:none;align-items:center;justify-content:center;flex-direction:column;font-family:Arial,sans-serif;color:#fff">
+  <div style="background:#fff;color:#1A1A18;padding:36px 44px;border-radius:8px;box-shadow:0 12px 48px rgba(0,0,0,.45);max-width:380px;width:90%;text-align:center;border-top:4px solid #78C142">
+    <div style="margin-bottom:14px">
+      <div style="display:inline-block;width:64px;height:64px;background:#1B3A5C;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto;overflow:hidden">
+        <img id="adrln-pw-logo" alt="Adrenaline" style="width:54px;height:54px;object-fit:contain" src="">
+      </div>
+    </div>
+    <div style="font-size:11px;color:#5FA32E;letter-spacing:.08em;font-weight:700;margin-bottom:4px">ADRENALINE LACROSSE</div>
+    <div style="font-size:16px;color:#1B3A5C;font-weight:700;margin-bottom:6px">Tournament Experience Tool</div>
+    <div style="font-size:11px;color:#5F5E5A;margin-bottom:20px">Internal testing — password required</div>
+    <input id="adrln-pw-input" type="password" placeholder="Password" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid #D3D1C7;border-radius:5px;font-size:14px;font-family:Arial,sans-serif;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')adrlnCheckPw()">
+    <div id="adrln-pw-err" style="font-size:11px;color:#C84A3A;margin-top:8px;height:14px;text-align:left"></div>
+    <button onclick="adrlnCheckPw()" style="width:100%;margin-top:10px;padding:10px;background:#78C142;color:#1B3A5C;border:1px solid #5FA32E;border-radius:5px;font-size:13px;font-weight:700;cursor:pointer;font-family:Arial,sans-serif">Unlock</button>
+    <div style="font-size:10px;color:#5F5E5A;margin-top:14px;line-height:1.4">If you don't have the password, contact JR.<br>Real authentication is coming with Phase 2B.</div>
+  </div>
+</div>
+<script>
+// Run this synchronously, BEFORE any other scripts, so the gate renders before the tool.
+(function(){
+  // SHA-256 of 'Redheadordead2421'. Comparing hashes (not plaintext) keeps the
+  // password out of view-source. This is still trivially bypassable with dev
+  // tools — that's acceptable for the testing phase.
+  var EXPECTED_HASH='f9fa48d67732ec3dc6e4edd2fa4db967ca974529c33524225fb951bdb17b37fe';
+  var STORAGE_KEY='adrln_pw_unlocked_v1';
+
+  // If already unlocked this session, skip the gate entirely.
+  try {
+    if(sessionStorage.getItem(STORAGE_KEY)==='1'){return;}
+  } catch(e){/* sessionStorage unavailable — fall through to prompt */}
+
+  // Otherwise, show the gate. Defer to next tick so the DOM exists.
+  document.addEventListener('DOMContentLoaded',function(){
+    var gate=document.getElementById('adrln-pw-gate');
+    if(!gate)return;
+    gate.style.display='flex';
+    // Hide the rest of the page while the gate is up
+    document.body.style.overflow='hidden';
+    // Wire the gate's logo to the same data URL used in the topbar
+    var pwLogo=document.getElementById('adrln-pw-logo');
+    if(pwLogo&&typeof ADRLN_LOGO_DATA_URL==='string'){pwLogo.src=ADRLN_LOGO_DATA_URL;}
+    // Auto-focus the input
+    setTimeout(function(){var inp=document.getElementById('adrln-pw-input');if(inp)inp.focus();},50);
+  });
+
+  // SHA-256 helper using the SubtleCrypto API
+  async function sha256(str){
+    var buf=new TextEncoder().encode(str);
+    var hash=await crypto.subtle.digest('SHA-256',buf);
+    return Array.from(new Uint8Array(hash)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }
+
+  window.adrlnCheckPw=async function(){
+    var inp=document.getElementById('adrln-pw-input');
+    var err=document.getElementById('adrln-pw-err');
+    if(!inp)return;
+    var entered=inp.value;
+    if(!entered){err.textContent='Enter the password.';return;}
+    err.textContent='';
+    try {
+      var h=await sha256(entered);
+      if(h===EXPECTED_HASH){
+        // Unlock: store flag and hide the gate
+        try {sessionStorage.setItem(STORAGE_KEY,'1');} catch(e){}
+        var gate=document.getElementById('adrln-pw-gate');
+        if(gate)gate.style.display='none';
+        document.body.style.overflow='';
+      } else {
+        err.textContent='Incorrect password.';
+        inp.value='';inp.focus();
+      }
+    } catch(e){
+      err.textContent='Browser error — try refreshing.';
+      console.error('PW check failed',e);
+    }
+  };
+})();
+</script>
+
 <div class="topbar">
   <div>
     <div class="topbar-brand">
