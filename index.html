@@ -3004,29 +3004,68 @@ function renderDay2Brackets(){
       });
     });
     if(!dGames.length)return;
-    // Sort by slot then field
     dGames.sort((a,b)=>sH(a.slot)-sH(b.slot)||a.fid-b.fid);
 
-    // Find named games
-    const sf1=dGames.find(g=>(g.label||'').includes('SF1'));
-    const sf2=dGames.find(g=>(g.label||'').includes('SF2'));
-    const champ=dGames.find(g=>g.type==='champ');
-    const third=dGames.find(g=>(g.label||'').includes('3rd'));
+    // Index games by label-pattern so the layout function can find them.
+    // Each game's label is set in the Day 2 generator (e.g. "QF1: 1 vs 8", "SF1",
+    // "Championship", "3rd Place", "Consolation (QF losers)", "Game 1",
+    // "RR Game 1: 1st vs 2nd", "Play-in: 4 vs 5", "5th Place", etc.)
+    const find=pat=>dGames.find(g=>{
+      const lbl=(g.label||'').toLowerCase();
+      const t=(g.type||'').toLowerCase();
+      if(typeof pat==='string')return lbl.includes(pat.toLowerCase());
+      return pat.test(lbl)||pat.test(t);
+    });
+    const findAll=pat=>dGames.filter(g=>pat.test((g.label||'').toLowerCase())||pat.test((g.type||'').toLowerCase()));
+
+    const games={
+      qf1: find(/^qf1\b/i),
+      qf2: find(/^qf2\b/i),
+      qf3: find(/^qf3\b/i),
+      qf4: find(/^qf4\b/i),
+      sf1: find(/^sf1\b/i),
+      sf2: find(/^sf2\b/i),
+      champ: dGames.find(g=>g.type==='champ'||/championship/i.test(g.label||'')),
+      third: find(/3rd place/i),
+      fifth: find(/5th place/i),
+      playin: find(/play-?in/i),
+      // Consolation games for QF losers (8-team) or 5th-6th (6-team)
+      consolations: findAll(/consolation/i),
+      // 2-team Game 1 (round 1, before championship rematch)
+      game1: find(/^game 1$/i),
+      // 3-team RR: 3 games labeled "RR Game 1/2/3"
+      rr: findAll(/^rr game/i)
+    };
+
+    const dColor=divColor(d.id);
     const fields=window.fields||[];
     const fName=fid=>{const f=fields.find(x=>x.id===fid);return f?f.name:'F'+fid;};
 
-    const dColor=divColor(d.id);
     html+=`<div class="bracket-div" style="margin-bottom:30px;page-break-after:always">
       <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;border-bottom:2px solid ${dColor};padding-bottom:4px">
         <strong style="font-size:16px;color:${dColor}">${d.name}</strong>
         <span style="font-size:11px;color:var(--dark-gray)">${d.teams.length} teams · ${(pools[d.id]||[]).length} pool${(pools[d.id]||[]).length===1?'':'s'} · ${dGames.length} Day 2 game${dGames.length===1?'':'s'}</span>
       </div>`;
 
-    if(sf1&&sf2&&champ){
-      // 4+ team standard bracket: SF1, SF2 → Champ (+ 3rd place game)
-      html+=renderBracketSVG({sf1,sf2,champ,third,dColor,fName});
+    // Choose layout based on which games exist
+    const has8=games.qf1&&games.qf2&&games.qf3&&games.qf4&&games.sf1&&games.sf2&&games.champ;
+    const has4=!has8&&games.sf1&&games.sf2&&games.champ;
+    const has2=!has8&&!has4&&games.game1&&games.champ;
+    const has3rr=!has8&&!has4&&!has2&&games.rr.length>=2;
+    const hasPlayin=!has8&&games.playin&&games.sf1&&games.sf2&&games.champ;
+
+    if(has8){
+      html+=renderBracket8({games,dColor,fName});
+    } else if(hasPlayin){
+      html+=renderBracket5Playin({games,dColor,fName});
+    } else if(has4){
+      html+=renderBracket4({sf1:games.sf1,sf2:games.sf2,champ:games.champ,third:games.third,fifth:games.fifth,playin:games.playin,dColor,fName});
+    } else if(has2){
+      html+=renderBracket2({g1:games.game1,champ:games.champ,dColor,fName});
+    } else if(has3rr){
+      html+=renderRR3({rr:games.rr,dColor,fName});
     } else if(dGames.length>=2){
-      // Round-robin or non-standard layout — list games in time order
+      // Fallback for any unexpected format — flat card list
       html+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
       dGames.forEach(g=>{
         html+=`<div style="border:1px solid var(--mid-gray);border-radius:6px;padding:8px 10px;min-width:180px;background:#fff;border-left:4px solid ${dColor}">
@@ -3041,43 +3080,157 @@ function renderDay2Brackets(){
     } else {
       html+='<div style="font-size:11px;color:var(--dark-gray);font-style:italic">Single Day 2 game — see grid above.</div>';
     }
+
+    // If the bracket layout shows top-bracket games, also show side consolation
+    // games (8-team has QF-loser consolations, 6+team has 5th+ consolations)
+    // separately below the bracket.
+    if((has8||has4||hasPlayin)&&games.consolations.length){
+      html+=`<div style="margin-top:14px">
+        <div style="font-size:10px;font-weight:700;color:var(--dark-gray);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Consolation games</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">`;
+      games.consolations.forEach(g=>{
+        html+=`<div style="border:1px solid var(--mid-gray);border-radius:6px;padding:8px 10px;min-width:180px;background:#fafafa;border-left:3px solid ${dColor};opacity:.85">
+          <div style="font-size:9px;font-weight:600;color:${dColor};text-transform:uppercase">${g.label||'Consolation'}</div>
+          <div style="font-size:12px;font-weight:500;margin-top:3px">${g.t1n}</div>
+          <div style="font-size:9px;color:var(--dark-gray)">vs</div>
+          <div style="font-size:12px;font-weight:500">${g.t2n}</div>
+          <div style="font-size:9px;color:var(--dark-gray);margin-top:4px">${fmtSlot(g.slot)} · ${fName(g.fid)}</div>
+        </div>`;
+      });
+      html+='</div></div>';
+    }
+
     html+='</div>';
   });
   container.innerHTML=html||'<div class="cl cl-a">No Day 2 games to display.</div>';
 }
 
-// Render a single SF/Final bracket as inline SVG. Layout is left-to-right:
-// SF1 + SF2 in left column, Final (and optional 3rd-place) in right column.
-function renderBracketSVG({sf1,sf2,champ,third,dColor,fName}){
-  const W=820,boxW=200,boxH=58,gap=20;
+// ── Bracket SVG building blocks ─────────────────────────────────────
+// Reusable game-box drawer. Returns SVG <g> markup.
+function _bracketBox(x,y,boxW,boxH,g,subtitle,dColor){
+  if(!g)return `<g><rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" fill="#f5f5f0" stroke="#ccc" stroke-dasharray="3,3" rx="4"/>
+    <text x="${x+boxW/2}" y="${y+boxH/2+4}" text-anchor="middle" font-size="10" fill="#aaa" font-family="Arial">${(subtitle||'').toUpperCase()}</text></g>`;
+  const fName=(window.fields||[]).find(f=>f.id===g.fid);
+  const fLabel=fName?fName.name:('F'+g.fid);
+  return `<g><rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" fill="#fff" stroke="${dColor}" stroke-width="1.5" rx="4"/>
+    <text x="${x+8}" y="${y+15}" font-size="9" font-weight="600" fill="${dColor}" font-family="Arial">${(g.label||subtitle||'').toUpperCase()}</text>
+    <text x="${x+8}" y="${y+30}" font-size="11" font-weight="500" font-family="Arial">${escSvg(g.t1n||'TBD')}</text>
+    <text x="${x+8}" y="${y+44}" font-size="9" fill="#888" font-family="Arial">vs</text>
+    <text x="${x+8}" y="${y+55}" font-size="11" font-weight="500" font-family="Arial">${escSvg(g.t2n||'TBD')}</text>
+    <text x="${x+boxW-8}" y="${y+15}" text-anchor="end" font-size="8" fill="#888" font-family="Arial">${fmtSlot(g.slot)} · ${escSvg(fLabel)}</text></g>`;
+}
+
+// Escape characters that break inside SVG <text> nodes
+function escSvg(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// 4-team bracket: SF1, SF2 → Champ (+ optional 3rd Place + 5th place)
+function renderBracket4({sf1,sf2,champ,third,fifth,playin,dColor,fName}){
+  const W=860,boxW=210,boxH=58,gap=24;
   const leftX=20,centerX=leftX+boxW+90;
   const sfTopY=20,sfBotY=sfTopY+boxH+gap+30;
   const finalY=(sfTopY+sfBotY)/2;
-  const thirdY=sfBotY+boxH+gap+20;
-  const totalH=third?thirdY+boxH+20:sfBotY+boxH+30;
-
-  const drawBox=(x,y,g,subtitle)=>{
-    if(!g)return '';
-    return `<g><rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" fill="#fff" stroke="${dColor}" stroke-width="1.5" rx="4"/>
-      <text x="${x+8}" y="${y+15}" font-size="9" font-weight="600" fill="${dColor}" font-family="Arial">${(g.label||subtitle||'').toUpperCase()}</text>
-      <text x="${x+8}" y="${y+30}" font-size="11" font-weight="500" font-family="Arial">${g.t1n}</text>
-      <text x="${x+8}" y="${y+44}" font-size="9" fill="#888" font-family="Arial">vs</text>
-      <text x="${x+8}" y="${y+55}" font-size="11" font-weight="500" font-family="Arial">${g.t2n}</text>
-      <text x="${x+boxW-8}" y="${y+15}" text-anchor="end" font-size="8" fill="#888" font-family="Arial">${fmtSlot(g.slot)} · ${fName(g.fid)}</text></g>`;
-  };
-
-  // Connector lines from SF boxes to Final box
+  const thirdY=sfBotY+boxH+gap+30;
+  const fifthY=third?thirdY+boxH+gap:thirdY;
+  const totalH=fifth?fifthY+boxH+20:(third?thirdY+boxH+20:sfBotY+boxH+30);
   const sfMidY1=sfTopY+boxH/2,sfMidY2=sfBotY+boxH/2;
   const finalMidY=finalY+boxH/2;
   const elbow=leftX+boxW+30;
 
   return `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:${W}px;background:#fafafa;border-radius:6px">
-    ${drawBox(leftX,sfTopY,sf1,'SF1')}
-    ${drawBox(leftX,sfBotY,sf2,'SF2')}
-    ${drawBox(centerX,finalY,champ,'CHAMP')}
-    ${third?drawBox(centerX,thirdY,third,'3rd Place'):''}
+    ${_bracketBox(leftX,sfTopY,boxW,boxH,sf1,'SF1',dColor)}
+    ${_bracketBox(leftX,sfBotY,boxW,boxH,sf2,'SF2',dColor)}
+    ${_bracketBox(centerX,finalY,boxW,boxH,champ,'CHAMPIONSHIP',dColor)}
+    ${third?_bracketBox(centerX,thirdY,boxW,boxH,third,'3rd Place',dColor):''}
+    ${fifth?_bracketBox(centerX,fifthY,boxW,boxH,fifth,'5th Place',dColor):''}
     <path d="M ${leftX+boxW} ${sfMidY1} H ${elbow} V ${finalMidY} H ${centerX}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
     <path d="M ${leftX+boxW} ${sfMidY2} H ${elbow} V ${finalMidY}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+  </svg>`;
+}
+
+// 5-team play-in bracket: 4v5 play-in → SF1 (1 vs W) + SF2 (2v3) → Champ + 3rd + 5th
+function renderBracket5Playin({games,dColor,fName}){
+  const W=1080,boxW=210,boxH=58,gap=24;
+  const playinX=20,sfX=playinX+boxW+80,finalX=sfX+boxW+80;
+  const playinY=120;
+  const sfTopY=20,sfBotY=sfTopY+boxH+gap+30;
+  const finalY=(sfTopY+sfBotY)/2;
+  const thirdY=sfBotY+boxH+gap+30;
+  const fifthY=thirdY+boxH+gap;
+  const totalH=Math.max(playinY+boxH+30,fifthY+boxH+30);
+
+  const sfMid1=sfTopY+boxH/2,sfMid2=sfBotY+boxH/2,finalMid=finalY+boxH/2,playinMid=playinY+boxH/2;
+  const sfElbow=sfX+boxW+30;
+
+  return `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:${W}px;background:#fafafa;border-radius:6px">
+    ${_bracketBox(playinX,playinY,boxW,boxH,games.playin,'Play-in (4 vs 5)',dColor)}
+    ${_bracketBox(sfX,sfTopY,boxW,boxH,games.sf1,'SF1 (1 vs W play-in)',dColor)}
+    ${_bracketBox(sfX,sfBotY,boxW,boxH,games.sf2,'SF2 (2 vs 3)',dColor)}
+    ${_bracketBox(finalX,finalY,boxW,boxH,games.champ,'CHAMPIONSHIP',dColor)}
+    ${games.third?_bracketBox(finalX,thirdY,boxW,boxH,games.third,'3rd Place',dColor):''}
+    ${games.fifth?_bracketBox(finalX,fifthY,boxW,boxH,games.fifth,'5th Place',dColor):''}
+    <path d="M ${playinX+boxW} ${playinMid} H ${sfX-15} V ${sfMid1} H ${sfX}" stroke="${dColor}" stroke-width="1.5" fill="none" stroke-dasharray="2,3"/>
+    <path d="M ${sfX+boxW} ${sfMid1} H ${sfElbow} V ${finalMid} H ${finalX}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${sfX+boxW} ${sfMid2} H ${sfElbow} V ${finalMid}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+  </svg>`;
+}
+
+// 8-team single-elimination bracket: QF1-4 → SF1-2 → Champ + 3rd
+function renderBracket8({games,dColor,fName}){
+  const W=1240,boxW=210,boxH=58,gap=18;
+  const qfX=20,sfX=qfX+boxW+90,finalX=sfX+boxW+90;
+  const colY=20;
+  // 4 QF boxes stacked vertically
+  const qfYs=[colY, colY+boxH+gap, colY+(boxH+gap)*2+30, colY+(boxH+gap)*3+30];
+  // 2 SF boxes positioned between pairs of QFs
+  const sf1Y=(qfYs[0]+qfYs[1])/2;
+  const sf2Y=(qfYs[2]+qfYs[3])/2;
+  const finalY=(sf1Y+sf2Y)/2;
+  const thirdY=sf2Y+boxH+gap+30;
+  const totalH=thirdY+boxH+30;
+
+  // Connector midpoints
+  const qfMids=qfYs.map(y=>y+boxH/2);
+  const sf1Mid=sf1Y+boxH/2, sf2Mid=sf2Y+boxH/2, finalMid=finalY+boxH/2;
+  const qfElbow=qfX+boxW+40, sfElbow=sfX+boxW+40;
+
+  return `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:${W}px;background:#fafafa;border-radius:6px">
+    ${_bracketBox(qfX,qfYs[0],boxW,boxH,games.qf1,'QF1: 1 vs 8',dColor)}
+    ${_bracketBox(qfX,qfYs[1],boxW,boxH,games.qf4,'QF4: 4 vs 5',dColor)}
+    ${_bracketBox(qfX,qfYs[2],boxW,boxH,games.qf2,'QF2: 2 vs 7',dColor)}
+    ${_bracketBox(qfX,qfYs[3],boxW,boxH,games.qf3,'QF3: 3 vs 6',dColor)}
+    ${_bracketBox(sfX,sf1Y,boxW,boxH,games.sf1,'SF1 (W QF1 vs W QF4)',dColor)}
+    ${_bracketBox(sfX,sf2Y,boxW,boxH,games.sf2,'SF2 (W QF2 vs W QF3)',dColor)}
+    ${_bracketBox(finalX,finalY,boxW,boxH,games.champ,'CHAMPIONSHIP',dColor)}
+    ${games.third?_bracketBox(finalX,thirdY,boxW,boxH,games.third,'3rd Place',dColor):''}
+    <path d="M ${qfX+boxW} ${qfMids[0]} H ${qfElbow} V ${sf1Mid} H ${sfX}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${qfX+boxW} ${qfMids[1]} H ${qfElbow} V ${sf1Mid}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${qfX+boxW} ${qfMids[2]} H ${qfElbow} V ${sf2Mid} H ${sfX}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${qfX+boxW} ${qfMids[3]} H ${qfElbow} V ${sf2Mid}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${sfX+boxW} ${sf1Mid} H ${sfElbow} V ${finalMid} H ${finalX}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${sfX+boxW} ${sf2Mid} H ${sfElbow} V ${finalMid}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+  </svg>`;
+}
+
+// 2-team format: Game 1 → Championship rematch (vertical layout)
+function renderBracket2({g1,champ,dColor,fName}){
+  const W=560,boxW=240,boxH=66,gap=30;
+  const x=(W-boxW)/2,y1=20,y2=y1+boxH+gap;
+  const totalH=y2+boxH+30;
+  return `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:${W}px;background:#fafafa;border-radius:6px">
+    ${_bracketBox(x,y1,boxW,boxH,g1,'Game 1',dColor)}
+    ${_bracketBox(x,y2,boxW,boxH,champ,'Championship (rematch)',dColor)}
+    <path d="M ${x+boxW/2} ${y1+boxH} V ${y2}" stroke="${dColor}" stroke-width="1.5" fill="none" stroke-dasharray="3,3"/>
+    <text x="${x+boxW/2+8}" y="${y1+boxH+gap/2+4}" font-size="10" fill="${dColor}" font-family="Arial">2-game series</text>
+  </svg>`;
+}
+
+// 3-team round-robin (3 RR games shown as cards in a row)
+function renderRR3({rr,dColor,fName}){
+  const W=900,boxW=270,boxH=70;
+  const totalH=boxH+40;
+  return `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:${W}px;background:#fafafa;border-radius:6px">
+    <text x="20" y="18" font-size="10" font-weight="600" fill="${dColor}" font-family="Arial">3-TEAM ROUND-ROBIN — STANDINGS DECIDE FINAL ORDER</text>
+    ${rr.slice(0,3).map((g,i)=>_bracketBox(20+i*(boxW+15),28,boxW,boxH,g,`RR Game ${i+1}`,dColor)).join('')}
   </svg>`;
 }
 
