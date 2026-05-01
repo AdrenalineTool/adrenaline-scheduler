@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Adrenaline Lacrosse -- Tournament Scheduler</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <style>
 :root {
   --navy: #1B3A5C; --teal: #1D9E75; --amber: #BA7517; --purple: #534AB7;
@@ -324,6 +328,16 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
       <input type="checkbox" id="three-day" onchange="toggleThreeDay()"> 3-day event (pool play Days 1+2, playoffs Day 3)
     </label>
   </div>
+  <div class="sec-label" style="margin-top:14px">On-site staff <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— prints on team field guides; staff wear branded shirts with nametags</span></div>
+  <div class="form-row">
+    <div class="fg"><label>Operations Manager</label><input id="staff-ops" placeholder="Name" value=""></div>
+    <div class="fg"><label>Field Manager</label><input id="staff-field" placeholder="Name" value=""></div>
+    <div class="fg"><label>Consumer Experience Manager</label><input id="staff-cx" placeholder="Name" value=""></div>
+  </div>
+
+  <div class="sec-label" style="margin-top:14px">Vendor village <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— food, apparel, equipment, and sponsor partners on-site; prints on team field guides</span></div>
+  <div id="vendor-list"></div>
+  <button class="btn btn-sm" onclick="addVendor()" style="margin-top:6px">+ Add vendor</button>
 
   <!-- FIELD & TEAM CALCULATOR -->
   <div class="sec-label">Field & team calculator</div>
@@ -538,6 +552,16 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div class="grid-wrap" id="grid-d1"></div>
   <div class="grid-wrap" id="grid-d2" style="display:none"></div>
   <div class="grid-wrap" id="grid-d3" style="display:none"></div>
+  <div id="day2-bracket-view" style="display:none;margin-top:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div>
+        <strong style="font-size:14px;color:var(--navy)">Day 2 bracket view</strong>
+        <span style="font-size:11px;color:var(--dark-gray);margin-left:8px">Visual bracket for each division — printable for on-site posting.</span>
+      </div>
+      <button class="btn btn-sm btn-navy" onclick="printDay2Brackets()">Print brackets</button>
+    </div>
+    <div id="bracket-content"></div>
+  </div>
   <div id="traffic-chart-out" style="margin-top:16px"></div>
 </div>
 
@@ -605,6 +629,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div class="exp-row" onclick="expAidan()"><div><div class="exp-name">Recruiter window report (Aidan)</div><div class="exp-sub">All recruitable games both days * lunch protection confirmed</div></div><span class="exp-badge eb-aidan">Aidan</span></div>
 
   <div class="sec-label">Print materials</div>
+  <div class="exp-row" onclick="expWelcomePackets()">
+    <div><div class="exp-name">"The ADRLN Day" team field guides (.zip of PDFs)</div><div class="exp-sub">One personalized 6-page field guide PDF per team — cover, parking pass, Day 1 schedule, Day 2 bracket shell, on-site ops (gift, roster, lounge, vendor village, staff names, support QR), and how-it-works · CX Director emails to teams pre-event</div></div>
+    <span class="exp-badge eb-aidan">CX / Teams</span>
+  </div>
   <div class="exp-row" onclick="expArrivalCards()">
     <div><div class="exp-name">Team arrival cards (.xlsx)</div><div class="exp-sub">One sheet per team — game times, field, parking lot, pass color, check-in info · Aidan emails to teams</div></div>
     <span class="exp-badge eb-aidan">Aidan / Teams</span>
@@ -653,6 +681,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 // ============================================================
 let fields=[], divs=[], pools={}, sched1={}, sched2={}, practiceSlots={}, parkingLots=[];
 let fid=1, did=1, tid=1, rawRows=[], detCols={}, dgSrc=null, dgTeam=null, d2Warnings=[];
+let vendors=[], vid=1;
 const TO={Elite:0,Strong:1,Mid:2,Lower:3};
 const parkingPassColors={'Red':'#fee2e2','Blue':'#dbeafe','Green':'#dcfce7','Yellow':'#fef9c3','Orange':'#ffedd5','Purple':'#f3e8ff','White':'#f8fafc'};
 const parkingPassBorder={'Red':'#ef4444','Blue':'#3b82f6','Green':'#22c55e','Yellow':'#eab308','Orange':'#f97316','Purple':'#a855f7','White':'#cbd5e1'};
@@ -677,6 +706,7 @@ function showDay(d){
   document.getElementById('grid-d1').style.display=d===1?'block':'none';
   document.getElementById('grid-d2').style.display=d===2?'block':'none';
   const g3=document.getElementById('grid-d3');if(g3)g3.style.display=d===3?'block':'none';
+  const bv=document.getElementById('day2-bracket-view');if(bv)bv.style.display=d===2?'block':'none';
   document.getElementById('dt1').classList.toggle('active',d===1);
   document.getElementById('dt2').classList.toggle('active',d===2);
   const dt3=document.getElementById('dt3');if(dt3)dt3.classList.toggle('active',d===3);
@@ -834,6 +864,39 @@ function resetAllDivSlots(){
   divs.forEach(d=>{delete d.slotPlay;delete d.slotBuf;});
   renderDivSlotOverrides();runCalc();
   showToast('All divisions reset to default slot length');
+}
+
+// ============================================================
+// VENDOR VILLAGE — input rows for on-site vendors
+// Each vendor: {id, name, website, category}
+// Category options: Food / Apparel / Equipment / Sponsor / Other
+// Renders as compact table on field-guide page 5 if any vendors exist.
+// ============================================================
+function addVendor(){
+  vendors.push({id:vid++,name:'',website:'',category:'Food'});
+  renderVendors();
+}
+function delVendor(id){
+  vendors=vendors.filter(v=>v.id!==id);
+  renderVendors();
+}
+function renderVendors(){
+  const c=document.getElementById('vendor-list');
+  if(!c)return;
+  if(!vendors.length){
+    c.innerHTML='<div style="font-size:11px;color:var(--dark-gray);font-style:italic;padding:6px 0">No vendors added. Click "+ Add vendor" to list food, apparel, equipment, and sponsor partners.</div>';
+    return;
+  }
+  const cats=['Food','Apparel','Equipment','Sponsor','Other'];
+  c.innerHTML=vendors.map(v=>`
+    <div style="display:flex;gap:8px;align-items:center;background:var(--lt-gray);border-radius:5px;padding:6px 9px;margin-bottom:5px">
+      <input style="flex:2;min-width:140px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Vendor name" value="${(v.name||'').replace(/"/g,'&quot;')}" onchange="vendors.find(x=>x.id===${v.id}).name=this.value">
+      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" onchange="vendors.find(x=>x.id===${v.id}).category=this.value">
+        ${cats.map(ct=>`<option value="${ct}"${v.category===ct?' selected':''}>${ct}</option>`).join('')}
+      </select>
+      <input style="flex:3;min-width:180px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="https://vendor.com (optional)" value="${(v.website||'').replace(/"/g,'&quot;')}" onchange="vendors.find(x=>x.id===${v.id}).website=this.value">
+      <button class="btn btn-sm" style="color:var(--red);border-color:#f09595;padding:3px 9px" onclick="delVendor(${v.id})" title="Remove vendor">×</button>
+    </div>`).join('');
 }
 
 function renderFields(){
@@ -2530,6 +2593,7 @@ function renderAll(){
   }
   renderGrid(sched1,'grid-d1',true);
   renderGrid(sched2,'grid-d2',false);
+  renderDay2Brackets();
 }
 
 function renderGrid(sched,containerId,isD1){
@@ -2605,6 +2669,130 @@ function renderGrid(sched,containerId,isD1){
   });
   t+=`</tbody></table>`;
   document.getElementById(containerId).innerHTML=t;
+}
+
+// ============================================================
+// DAY 2 BRACKET VIEW — visual bracket per division
+// Reads sched2 games and arranges them into a per-division bracket view.
+// Game types we recognize on Day 2:
+//   - type='bracket' label=SF1/SF2 → semifinal
+//   - type='champ'                 → championship
+//   - type='consolation' label=3rd → 3rd place
+//   - type='consolation'           → other consolation (varies by div size)
+//   - type='nonbracket'/'pool'     → 1-pool round-robin tail (3-5 team divs)
+// ============================================================
+function renderDay2Brackets(){
+  const container=document.getElementById('bracket-content');
+  if(!container)return;
+  if(!divs.length||!Object.keys(sched2||{}).length){container.innerHTML='<div class="cl cl-a">No Day 2 schedule generated yet.</div>';return;}
+  let html='';
+  divs.forEach(d=>{
+    // Collect this division's Day 2 games
+    const dGames=[];
+    Object.entries(sched2).forEach(([slot,row])=>{
+      Object.entries(row).forEach(([fid,g])=>{
+        if(g&&g.divId===d.id) dGames.push({...g,slot,fid:+fid});
+      });
+    });
+    if(!dGames.length)return;
+    // Sort by slot then field
+    dGames.sort((a,b)=>sH(a.slot)-sH(b.slot)||a.fid-b.fid);
+
+    // Find named games
+    const sf1=dGames.find(g=>(g.label||'').includes('SF1'));
+    const sf2=dGames.find(g=>(g.label||'').includes('SF2'));
+    const champ=dGames.find(g=>g.type==='champ');
+    const third=dGames.find(g=>(g.label||'').includes('3rd'));
+    const fields=window.fields||[];
+    const fName=fid=>{const f=fields.find(x=>x.id===fid);return f?f.name:'F'+fid;};
+
+    const dColor=divColor(d.id);
+    html+=`<div class="bracket-div" style="margin-bottom:30px;page-break-after:always">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;border-bottom:2px solid ${dColor};padding-bottom:4px">
+        <strong style="font-size:16px;color:${dColor}">${d.name}</strong>
+        <span style="font-size:11px;color:var(--dark-gray)">${d.teams.length} teams · ${(pools[d.id]||[]).length} pool${(pools[d.id]||[]).length===1?'':'s'} · ${dGames.length} Day 2 game${dGames.length===1?'':'s'}</span>
+      </div>`;
+
+    if(sf1&&sf2&&champ){
+      // 4+ team standard bracket: SF1, SF2 → Champ (+ 3rd place game)
+      html+=renderBracketSVG({sf1,sf2,champ,third,dColor,fName});
+    } else if(dGames.length>=2){
+      // Round-robin or non-standard layout — list games in time order
+      html+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      dGames.forEach(g=>{
+        html+=`<div style="border:1px solid var(--mid-gray);border-radius:6px;padding:8px 10px;min-width:180px;background:#fff;border-left:4px solid ${dColor}">
+          <div style="font-size:9px;font-weight:600;color:${dColor};text-transform:uppercase">${g.label||g.type||'Game'}</div>
+          <div style="font-size:13px;font-weight:500;margin-top:3px">${g.t1n}</div>
+          <div style="font-size:9px;color:var(--dark-gray)">vs</div>
+          <div style="font-size:13px;font-weight:500">${g.t2n}</div>
+          <div style="font-size:9px;color:var(--dark-gray);margin-top:4px">${fmtSlot(g.slot)} · ${fName(g.fid)}</div>
+        </div>`;
+      });
+      html+='</div>';
+    } else {
+      html+='<div style="font-size:11px;color:var(--dark-gray);font-style:italic">Single Day 2 game — see grid above.</div>';
+    }
+    html+='</div>';
+  });
+  container.innerHTML=html||'<div class="cl cl-a">No Day 2 games to display.</div>';
+}
+
+// Render a single SF/Final bracket as inline SVG. Layout is left-to-right:
+// SF1 + SF2 in left column, Final (and optional 3rd-place) in right column.
+function renderBracketSVG({sf1,sf2,champ,third,dColor,fName}){
+  const W=820,boxW=200,boxH=58,gap=20;
+  const leftX=20,centerX=leftX+boxW+90;
+  const sfTopY=20,sfBotY=sfTopY+boxH+gap+30;
+  const finalY=(sfTopY+sfBotY)/2;
+  const thirdY=sfBotY+boxH+gap+20;
+  const totalH=third?thirdY+boxH+20:sfBotY+boxH+30;
+
+  const drawBox=(x,y,g,subtitle)=>{
+    if(!g)return '';
+    return `<g><rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" fill="#fff" stroke="${dColor}" stroke-width="1.5" rx="4"/>
+      <text x="${x+8}" y="${y+15}" font-size="9" font-weight="600" fill="${dColor}" font-family="Arial">${(g.label||subtitle||'').toUpperCase()}</text>
+      <text x="${x+8}" y="${y+30}" font-size="11" font-weight="500" font-family="Arial">${g.t1n}</text>
+      <text x="${x+8}" y="${y+44}" font-size="9" fill="#888" font-family="Arial">vs</text>
+      <text x="${x+8}" y="${y+55}" font-size="11" font-weight="500" font-family="Arial">${g.t2n}</text>
+      <text x="${x+boxW-8}" y="${y+15}" text-anchor="end" font-size="8" fill="#888" font-family="Arial">${fmtSlot(g.slot)} · ${fName(g.fid)}</text></g>`;
+  };
+
+  // Connector lines from SF boxes to Final box
+  const sfMidY1=sfTopY+boxH/2,sfMidY2=sfBotY+boxH/2;
+  const finalMidY=finalY+boxH/2;
+  const elbow=leftX+boxW+30;
+
+  return `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:${W}px;background:#fafafa;border-radius:6px">
+    ${drawBox(leftX,sfTopY,sf1,'SF1')}
+    ${drawBox(leftX,sfBotY,sf2,'SF2')}
+    ${drawBox(centerX,finalY,champ,'CHAMP')}
+    ${third?drawBox(centerX,thirdY,third,'3rd Place'):''}
+    <path d="M ${leftX+boxW} ${sfMidY1} H ${elbow} V ${finalMidY} H ${centerX}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+    <path d="M ${leftX+boxW} ${sfMidY2} H ${elbow} V ${finalMidY}" stroke="${dColor}" stroke-width="1.5" fill="none"/>
+  </svg>`;
+}
+
+// Print just the bracket view (opens a new window with print-friendly layout)
+function printDay2Brackets(){
+  const content=document.getElementById('bracket-content').innerHTML;
+  if(!content){showToast('No brackets to print','warn');return;}
+  const ename=document.getElementById('ename').value||'Event';
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>${ename} — Day 2 Brackets</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 24px; background: #fff; color: #1a1a18; }
+      h1 { font-size: 18px; margin: 0 0 16px; color: #1B3A5C; border-bottom: 2px solid #1B3A5C; padding-bottom: 6px; }
+      .bracket-div { margin-bottom: 30px; page-break-after: always; }
+      .bracket-div:last-child { page-break-after: auto; }
+      .cl { padding: 8px; background: #fef9e6; border-radius: 4px; }
+      @media print { body { padding: 12px; } button { display: none; } }
+    </style></head><body>
+    <h1>${ename} — Day 2 Brackets</h1>
+    <button onclick="window.print()" style="margin-bottom:12px;padding:6px 16px;background:#1B3A5C;color:#fff;border:none;border-radius:4px;cursor:pointer">Print</button>
+    ${content}
+    </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),250);
 }
 
 // ============================================================
@@ -3010,6 +3198,500 @@ function dlXLSXMulti(filename, sheets){
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   dl(filename+'.xlsx',wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
+
+// ============================================================
+// WELCOME PACKET PDF — per team
+// One PDF per team, then bundled into a ZIP for batch download.
+// Pages: Cover · Parking pass · Day 1 schedule · Day 2 bracket shell ·
+//        Operations (gift, roster, coaches lounge) · How it works
+// ============================================================
+function expWelcomePackets(){
+  if(!Object.keys(sched1).length){showToast('Generate schedule first — there are no Day 1 games yet.','warn');return;}
+  if(!window.jspdf){showToast('PDF library not loaded — try refreshing.','err');return;}
+  if(!window.JSZip){showToast('ZIP library not loaded — try refreshing.','err');return;}
+  const ename=document.getElementById('ename').value||'Adrenaline Lacrosse Tournament';
+  const allTeams=[];
+  divs.forEach(d=>d.teams.forEach(t=>allTeams.push({team:t,div:d})));
+  if(!allTeams.length){showToast('No teams configured.','warn');return;}
+
+  showToast(`Generating ${allTeams.length} ADRLN Day field guides…`);
+  const zip=new JSZip();
+  let i=0;
+  const tick=()=>{
+    if(i>=allTeams.length){
+      zip.generateAsync({type:'blob'}).then(blob=>{
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download=ename.replace(/[^A-Za-z0-9_-]+/g,'_')+'_ADRLN_Day_Field_Guides.zip';
+        document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+        showToast(`${allTeams.length} field guides downloaded as ZIP.`);
+      }).catch(err=>{showToast('ZIP generation failed: '+err.message,'err');});
+      return;
+    }
+    const {team,div}=allTeams[i];
+    try {
+      const pdfBytes=buildTeamWelcomePacket(team,div,ename);
+      const safe=`${div.name}_${team.name}`.replace(/[^A-Za-z0-9_-]+/g,'_');
+      zip.file(`${div.name.replace(/[^A-Za-z0-9_-]+/g,'_')}/${safe}.pdf`,pdfBytes);
+    } catch(err){
+      console.error('Packet failed for',team.name,err);
+    }
+    i++;
+    if(i%10===0||i===allTeams.length){
+      setTimeout(tick,0);
+    } else {
+      tick();
+    }
+  };
+  tick();
+}
+
+// Helper: create a QR code PNG data URL using the qrious library.
+// Returns null if qrious isn't loaded.
+function _qrPng(text,size){
+  if(!window.QRious)return null;
+  try {
+    const c=document.createElement('canvas');
+    new QRious({element:c,value:text,size:size||90,padding:0,level:'M'});
+    return c.toDataURL('image/png');
+  } catch(e){console.warn('QR generation failed',e);return null;}
+}
+
+// Build a single team's "The ADRLN Day" field guide PDF. Returns ArrayBuffer.
+function buildTeamWelcomePacket(team,div,ename){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
+  const M=40;
+  const NAVY=[27,58,92],TEAL=[29,158,117],AMBER=[186,117,23],PURPLE=[83,74,183],GRAY=[95,94,90],GOLD=[180,140,40];
+
+  // Onsite staff (entered once in Event Setup, blank if not provided)
+  const opsName=(document.getElementById('staff-ops')||{}).value||'';
+  const fieldName=(document.getElementById('staff-field')||{}).value||'';
+  const cxName=(document.getElementById('staff-cx')||{}).value||'';
+
+  // Support links
+  const CHATBOT_URL='https://adrln.com';
+  const CASES_URL='https://teamcenter.adrln.com/s/contactsupport';
+
+  // Footer helper used on every page (page label + brand stamp)
+  const footer=(pageNum)=>{
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GRAY);
+    doc.text('Adrenaline Lacrosse  ·  adrln.com',M,H-26);
+    doc.text(`Page ${pageNum} of 6`,W-M-40,H-26);
+  };
+
+  // ── PAGE 1: COVER ───────────────────────────────────────────────────
+  doc.setFillColor(...NAVY);doc.rect(0,0,W,110,'F');
+  doc.setFillColor(...GOLD);doc.rect(0,108,W,3,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('ADRENALINE LACROSSE',M,40);
+  doc.setFont('helvetica','bold');doc.setFontSize(34);
+  doc.text('The ADRLN Day',M,80);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(255,255,255);
+  doc.text('Your team field guide  ·  Pre-event',M,98);
+
+  // Team header
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(24);
+  doc.text(team.name,M,160);
+  doc.setFont('helvetica','normal');doc.setFontSize(12);doc.setTextColor(...GRAY);
+  const headerBits=[div.name+' Division'];
+  if(team.tier)headerBits.push(team.tier+' tier');
+  if(team.state)headerBits.push(team.state);
+  doc.text(headerBits.join('  ·  '),M,180);
+
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text(ename,M,215);
+
+  // Voice block — quiet confident open
+  doc.setDrawColor(...GOLD);doc.setLineWidth(2);
+  doc.line(M,238,M+30,238);
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('YOUR DAY WAS DESIGNED BEFORE YOU GOT HERE',M,258);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const opener=doc.splitTextToSize(
+    "Park once. Stay close. Three games on Day 1. A bracket on Day 2. The field your team plays on, the lot you parked in, and the recruiter zone are all within walking distance — by design, not by coincidence. "+
+    "This guide tells you the four things that matter: where to park, when you play, what the weekend looks like, and who to find on-site if something goes sideways.",
+    W-2*M);
+  doc.text(opener,M,278);
+  let y=278+opener.length*13+22;
+
+  // Operator-language fact block — numbers as the claim
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('WHAT WE BUILT INTO YOUR WEEKEND',M,y);y+=18;
+  const facts=[
+    ['3-game guarantee','Every team plays at least three games on Day 1 — odd-pool math is solved by the scheduler, not by your coach.'],
+    ['Pod clustering','Your team\u2019s games sit on adjacent fields. Park once. Stay close. Walk less.'],
+    ['Showcase windows','Recruiting-eligible divisions play during protected morning and afternoon windows — never during the recruiter lunch anchor.'],
+    ['275 confirmed programs','D1, D2, D3, NESCAC, SCIAC. Western talent recruited for real, by coaches we know are coming.'],
+    ['Same-day pay','College coaches paid before they leave Day 2. They come back next year. Your player gets seen again.']
+  ];
+  doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+  facts.forEach(([n,t])=>{
+    doc.setFont('helvetica','bold');doc.setTextColor(...NAVY);doc.text(n,M,y);
+    const tl=doc.splitTextToSize(t,W-2*M-160);
+    doc.setFont('helvetica','normal');doc.setTextColor(40,40,40);doc.text(tl,M+160,y);
+    y+=Math.max(14,tl.length*12+2);
+  });
+
+  footer(1);
+
+  // ── PAGE 2: PARKING PASS ───────────────────────────────────────────
+  doc.addPage();
+  const dpod=window._dpod||{};
+  const podFields=dpod[div.id]||[];
+  const teamLot=podFields.length&&typeof getLotForField==='function'?getLotForField(podFields[0].id):null;
+  const podFieldNames=podFields.map(f=>f.name).join(', ');
+
+  doc.setFillColor(...AMBER);doc.rect(0,0,W,90,'F');
+  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('THE ADRLN DAY  ·  PAGE 2',M,38);
+  doc.setFontSize(28);doc.text('Parking Pass',M,72);
+
+  // Pass card — large, dashboard-ready
+  const cy=120;
+  const passH=240;
+  doc.setFillColor(255,250,238);
+  doc.roundedRect(M,cy,W-2*M,passH,10,10,'F');
+  doc.setDrawColor(...AMBER);doc.setLineWidth(3);
+  doc.roundedRect(M,cy,W-2*M,passH,10,10,'S');
+  // Inner divider
+  doc.setDrawColor(...AMBER);doc.setLineWidth(0.5);
+  doc.line(W/2,cy+20,W/2,cy+passH-20);
+
+  // Left side — team identity
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(10);
+  doc.text('TEAM',M+22,cy+30);
+  doc.setFontSize(16);doc.setTextColor(...NAVY);
+  const teamLines=doc.splitTextToSize(team.name,W/2-M-30);
+  doc.text(teamLines,M+22,cy+50);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(...GRAY);
+  doc.text(div.name+' Division',M+22,cy+50+teamLines.length*16+4);
+
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...NAVY);
+  doc.text('LOT',M+22,cy+135);
+  doc.setFontSize(38);doc.setTextColor(...AMBER);
+  doc.text(teamLot?(teamLot.name||'TBD'):'TBD',M+22,cy+178);
+  if(teamLot&&teamLot.color){
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(...GRAY);
+    doc.text('Pass color: '+teamLot.color,M+22,cy+200);
+  }
+
+  // Right side — pod fields + arrival
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(10);
+  doc.text('YOUR POD FIELDS',W/2+22,cy+30);
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(40,40,40);
+  const fLines=doc.splitTextToSize(podFieldNames||'Confirmed at check-in',W/2-M-30);
+  doc.text(fLines,W/2+22,cy+50);
+
+  // First-game preview if available
+  const myGamesPreview=[];
+  Object.entries(sched1).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      if(g.t1===team.id||g.t2===team.id){
+        const fld=fields.find(f=>f.id===+fid);
+        myGamesPreview.push({slot,fieldName:fld?fld.name:'F'+fid});
+      }
+    });
+  });
+  myGamesPreview.sort((a,b)=>sH(a.slot)-sH(b.slot));
+  if(myGamesPreview.length){
+    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...NAVY);
+    doc.text('FIRST GAME',W/2+22,cy+135);
+    doc.setFontSize(20);doc.setTextColor(...NAVY);
+    doc.text(fmtSlot(myGamesPreview[0].slot),W/2+22,cy+165);
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(...GRAY);
+    doc.text(myGamesPreview[0].fieldName,W/2+22,cy+182);
+    doc.setFontSize(9);doc.text('Plan to arrive 30 minutes before first whistle.',W/2+22,cy+200);
+  }
+
+  // Why this lot
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('WHY THIS IS YOUR LOT',M,cy+passH+40);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const lotWhy=doc.splitTextToSize(
+    "We assigned each team a parking lot adjacent to its pod. Lots fill in order; cones and signage match the color on this pass. "+
+    "Park in your lot — not the closest one to the gate — and three things happen: the venue stays unjammed, your family walks the shortest distance to the field, "+
+    "and you find your way back to the car at the end of the day without crossing the venue. This is the difference between a tournament that runs and one that runs well.",
+    W-2*M);
+  doc.text(lotWhy,M,cy+passH+60);
+
+  footer(2);
+
+  // ── PAGE 3: DAY 1 SCHEDULE ─────────────────────────────────────────
+  doc.addPage();
+  doc.setFillColor(...NAVY);doc.rect(0,0,W,90,'F');
+  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('THE ADRLN DAY  ·  PAGE 3',M,38);
+  doc.setFontSize(28);doc.text('Day 1 Schedule',M,72);
+
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','normal');doc.setFontSize(11);
+  doc.text(team.name,M,118);
+
+  // Find this team's Day 1 games
+  const myGames=[];
+  Object.entries(sched1).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      if(g.t1===team.id||g.t2===team.id){
+        const oppId=g.t1===team.id?g.t2:g.t1;
+        const oppName=g.t1===team.id?g.t2n:g.t1n;
+        const oppTeam=div.teams.find(t=>t.id===oppId);
+        const fld=fields.find(f=>f.id===+fid);
+        myGames.push({slot,fid:+fid,fieldName:fld?fld.name:'F'+fid,oppName,oppState:oppTeam?(oppTeam.state||''):'',pool:g.pool||'',bonus:g.bonusGame});
+      }
+    });
+  });
+  myGames.sort((a,b)=>sH(a.slot)-sH(b.slot));
+
+  doc.autoTable({
+    startY:135,
+    head:[['Time','Field','Opponent','Home state','Notes']],
+    body:myGames.map(g=>[fmtSlot(g.slot),g.fieldName,g.oppName,g.oppState||'\u2014',g.bonus?'+1 bonus game':(g.pool||'Pool play')]),
+    headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:10},
+    bodyStyles:{fontSize:10,cellPadding:6},
+    alternateRowStyles:{fillColor:[245,245,240]},
+    margin:{left:M,right:M},
+    theme:'grid'
+  });
+
+  let yEnd=doc.lastAutoTable.finalY+24;
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('WHAT TO EXPECT',M,yEnd);yEnd+=16;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const expect=myGames.length?doc.splitTextToSize(
+    `First game: ${fmtSlot(myGames[0].slot)} on ${myGames[0].fieldName}. Plan to arrive 30 minutes early. Use the parking pass on the previous page — match the color to the lot signage at the venue entrance. `+
+    `All ${myGames.length} of your Day 1 games sit on adjacent pod fields, so once you park, you stay close. Recruiter zones and refreshment stations are clustered near the recruiting fields; if you're a recruiting-eligible division, your games are inside the protected showcase windows.`,
+    W-2*M):['(no Day 1 games scheduled — confirm with your club director)'];
+  doc.text(expect,M,yEnd);
+
+  footer(3);
+
+  // ── PAGE 4: DAY 2 BRACKET SHELL ────────────────────────────────────
+  doc.addPage();
+  doc.setFillColor(...PURPLE);doc.rect(0,0,W,90,'F');
+  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('THE ADRLN DAY  ·  PAGE 4',M,38);
+  doc.setFontSize(28);doc.text('Day 2 Bracket Shell',M,72);
+
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  const d2Intro=doc.splitTextToSize(
+    `Day 2 brackets are seeded from Day 1 results. Below is the structure for ${div.name}. Where you land depends on your pool standings — see "How seeding works" later in this guide.`,
+    W-2*M);
+  doc.text(d2Intro,M,118);
+
+  const d2Games=[];
+  Object.entries(sched2||{}).forEach(([slot,row])=>{
+    Object.entries(row||{}).forEach(([fid,g])=>{
+      if(g&&g.divId===div.id)d2Games.push({...g,slot,fid:+fid});
+    });
+  });
+  d2Games.sort((a,b)=>sH(a.slot)-sH(b.slot));
+
+  if(d2Games.length){
+    doc.autoTable({
+      startY:160,
+      head:[['Time','Field','Game','Matchup']],
+      body:d2Games.map(g=>{
+        const fld=fields.find(f=>f.id===g.fid);
+        return [fmtSlot(g.slot),fld?fld.name:'F'+g.fid,g.label||g.type||'',`${g.t1n}  vs  ${g.t2n}`];
+      }),
+      headStyles:{fillColor:PURPLE,textColor:[255,255,255],fontStyle:'bold',fontSize:10},
+      bodyStyles:{fontSize:9,cellPadding:6},
+      alternateRowStyles:{fillColor:[245,243,254]},
+      margin:{left:M,right:M},
+      theme:'grid'
+    });
+  } else {
+    doc.setFontSize(11);doc.setTextColor(...GRAY);
+    doc.text('Day 2 schedule not yet published — check back at check-in.',M,160);
+  }
+
+  footer(4);
+
+  // ── PAGE 5: ON-SITE OPS — gift, roster, lounge, staff, support ─────
+  doc.addPage();
+  doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
+  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('THE ADRLN DAY  ·  PAGE 5',M,38);
+  doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
+
+  let yp5=120;
+  const opSection=(label,body)=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text(label,M,yp5);yp5+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+    const lines=doc.splitTextToSize(body,W-2*M);
+    doc.text(lines,M,yp5);yp5+=lines.length*12+14;
+  };
+  opSection('TEAM CHECK-IN',
+    "One stop, three things. Final roster verification (printed roster, jersey numbers required — players not on the verified roster cannot take the field). Free team gift pickup. "+
+    "Three coaches passes per team. Plan five minutes. The check-in desk opens 30 minutes before the first scheduled game and is at the main entrance.");
+  opSection('THE COACHES LOUNGE',
+    "Refreshments, snacks, light food, and a quiet space to review film between games. Open both days from gates-open through end of play. Pass holders only — collect your three passes at check-in.");
+  opSection('RECRUITERS ON-SITE',
+    "The list of confirmed recruiting coaches will be posted at check-in and in the ADRLN app on event morning. Coaches recruiting your division are flagged on your team roster. Recruiter zones sit on adjacent fields to your pod — they don't have to come find you.");
+
+  // ── VENDOR VILLAGE — only renders if vendors are configured ────────────
+  // Compact 3-column table: Vendor · Category · Website (clickable link)
+  const eventVendors=(window.vendors||[]).filter(v=>v&&v.name&&v.name.trim());
+  if(eventVendors.length){
+    // Page-overflow guard: if the cursor is past ~520, start a fresh page so the
+    // table doesn't collide with the staff/support blocks below.
+    if(yp5>520){
+      footer(5);
+      doc.addPage();
+      doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
+      doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+      doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+      doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
+      yp5=120;
+    }
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('VENDOR VILLAGE',M,yp5);yp5+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+    const vIntro=doc.splitTextToSize(
+      "Food, gear, and sponsor partners on-site. Stop by between games. Tap a website link below to learn more.",W-2*M);
+    doc.text(vIntro,M,yp5);yp5+=vIntro.length*12+6;
+
+    // Compact table — autoTable handles wrapping. Use didDrawCell to attach link annotations
+    // on the website column so the URLs are clickable in PDF readers.
+    const vRows=eventVendors.map(v=>[v.name||'',v.category||'Other',v.website||'']);
+    const websiteCol=2;
+    doc.autoTable({
+      startY:yp5,
+      head:[['Vendor','Category','Website']],
+      body:vRows,
+      headStyles:{fillColor:TEAL,textColor:[255,255,255],fontStyle:'bold',fontSize:9.5},
+      bodyStyles:{fontSize:9.5,cellPadding:5},
+      alternateRowStyles:{fillColor:[245,250,247]},
+      columnStyles:{0:{cellWidth:'auto'},1:{cellWidth:80},2:{cellWidth:230,textColor:PURPLE}},
+      margin:{left:M,right:M},
+      theme:'grid',
+      didDrawCell:(data)=>{
+        // Attach a clickable link to website cells (body only, not header)
+        if(data.section==='body'&&data.column.index===websiteCol){
+          const url=data.cell.raw;
+          if(url&&typeof url==='string'&&url.trim()){
+            try{doc.link(data.cell.x,data.cell.y,data.cell.width,data.cell.height,{url:url.trim()});}
+            catch(e){console.warn('Vendor link annotation failed',e);}
+          }
+        }
+      }
+    });
+    yp5=doc.lastAutoTable.finalY+18;
+  }
+
+  // ── ON-SITE STAFF BLOCK ────────────────────────────────────────────────
+  // Page-overflow guard: staff cards + support block need ~180pt; if not enough
+  // room, flip to a fresh continuation page.
+  if(yp5>540){
+    footer(5);
+    doc.addPage();
+    doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
+    doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+    doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+    doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
+    yp5=120;
+  }
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('FIND US ON-SITE',M,yp5);yp5+=14;
+  doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+  const staffIntro=doc.splitTextToSize(
+    "Three managers run the day. Each wears a branded ADRLN shirt with a nametag — find them anywhere on-site.",W-2*M);
+  doc.text(staffIntro,M,yp5);yp5+=staffIntro.length*12+8;
+
+  // Staff card row
+  const staffList=[
+    ['Operations Manager',opsName||'(named at event)'],
+    ['Field Manager',fieldName||'(named at event)'],
+    ['Consumer Experience Manager',cxName||'(named at event)']
+  ];
+  const cardW=(W-2*M-20)/3;
+  staffList.forEach((row,i)=>{
+    const x=M+i*(cardW+10);
+    doc.setFillColor(245,245,240);
+    doc.roundedRect(x,yp5,cardW,54,4,4,'F');
+    doc.setDrawColor(...NAVY);doc.setLineWidth(0.5);
+    doc.roundedRect(x,yp5,cardW,54,4,4,'S');
+    doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...NAVY);
+    doc.text(row[0].toUpperCase(),x+8,yp5+15);
+    doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(40,40,40);
+    const nameLines=doc.splitTextToSize(row[1],cardW-16);
+    doc.text(nameLines,x+8,yp5+34);
+  });
+  yp5+=66;
+
+  // Support block — chatbot QR + Salesforce cases fallback
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('QUESTIONS BEFORE OR DURING THE EVENT',M,yp5);yp5+=14;
+  doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+  const supportText=doc.splitTextToSize(
+    "Start with our chatbot — it answers most questions instantly. Scan the QR or visit adrln.com. "+
+    "If the chatbot can't resolve it, open a support case at teamcenter.adrln.com — our team responds the same day.",
+    W-2*M-110);
+  doc.text(supportText,M,yp5);
+
+  // QR code on the right (clickable to chatbot URL)
+  const qrPng=_qrPng(CHATBOT_URL,90);
+  if(qrPng){
+    try{
+      doc.addImage(qrPng,'PNG',W-M-90,yp5-12,90,90);
+      doc.link(W-M-90,yp5-12,90,90,{url:CHATBOT_URL});
+    }catch(e){console.warn('QR draw failed',e);}
+    doc.setFontSize(8);doc.setTextColor(...GRAY);
+    doc.text('adrln.com',W-M-90,yp5+92);
+  }
+  yp5+=Math.max(supportText.length*12+8,98);
+  // Clickable fallback line
+  doc.setFontSize(8);doc.setTextColor(...PURPLE);
+  doc.textWithLink('Fallback: open a support case at teamcenter.adrln.com',M,yp5,{url:CASES_URL});
+
+  footer(5);
+
+  // ── PAGE 6: HOW IT WORKS ───────────────────────────────────────────
+  doc.addPage();
+  doc.setFillColor(...GRAY);doc.rect(0,0,W,90,'F');
+  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('THE ADRLN DAY  ·  PAGE 6',M,38);
+  doc.setFontSize(28);doc.text('How It Works',M,72);
+
+  let yp6=120;
+  const sec=(label,body)=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(...NAVY);
+    doc.text(label,M,yp6);yp6+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(40,40,40);
+    const lines=doc.splitTextToSize(body,W-2*M);
+    doc.text(lines,M,yp6);yp6+=lines.length*11+12;
+  };
+  sec('POOLS',
+    "Snake-draft from strength tiers (Elite, Strong, Mid, Lower) so every pool spans the range. Same-state teams are pushed apart where roster size allows — your first three games are mostly out-of-state, by design. Pool size depends on team count: 1 pool below 8 teams, 2 pools at 8-12, then 6 teams per pool above that.");
+  sec('THREE GAMES, GUARANTEED',
+    "Every team plays at least three Day 1 games. The matchup queue is sorted by tier-spread (Elite vs Lower preferred over Elite vs Elite) and region (different states first). Your three games are different opponents from different parts of the country.");
+  sec('THE +1 BONUS GAME',
+    "Odd pools (5 or 7 teams) don't divide evenly into 3 games per team. Without intervention, one team plays 2. We don't ship that. The scheduler adds a fourth game for one volunteer opponent in the odd pool so the short team gets their third. The fourth game's result counts only for the short team's standings — not for the volunteer's. Bonus games are flagged in the schedule.");
+  sec('SEEDING',
+    "After Day 1, teams are ranked within their pool by: tournament points (Win=3, Tie=1, Loss=0) → head-to-head against tied opponents → fewest goals against → goal differential. Top seeds advance to championship brackets; lower seeds enter consolation. The bracket on the previous page is the shell — your seed determines which line you land on.");
+  sec('PARKING & TRAFFIC',
+    "(Phase 2) A traffic-flow map and venue-arrival timing recommendations will be added to this guide pre-event. The short version: arrive 30 minutes before your first game, park in the lot on your pass, walk to your pod.");
+  sec('THE WEEKEND',
+    "(Phase 2 — destination events) For destination events, a curated list of restaurants, family activities, and weekend outings will be added pre-event. The on-site Consumer Experience Manager can recommend or assist with reservations.");
+
+  // Footer with brand line
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Generated by the ADRLN Tournament Scheduler  ·  Park once, stay close.',M,H-26);
+  doc.text('Page 6 of 6',W-M-40,H-26);
+
+  return doc.output('arraybuffer');
+}
+
 
 function expTM(){
   if(!Object.keys(sched1).length){showToast('Generate schedule first','warn');return;}
@@ -4561,6 +5243,9 @@ function checkParkingConflicts(){
   el.innerHTML=html2;
   el.style.display='block';
 }
+
+// One-time initialization for elements that aren't auto-rendered elsewhere
+if(typeof renderVendors==='function')renderVendors();
 
 </script>
 </body>
