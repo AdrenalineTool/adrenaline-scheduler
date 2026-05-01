@@ -2045,29 +2045,93 @@ function genD1(){
         for(let i=0;i<n;i++){
           if(deg[i]!==targetFor(i))return null;
         }
-        return chosen;
+        return {chosen, shortIdx};
       };
       // Try N samples, keep the best. 500 samples is fast (sub-millisecond per
       // sample for typical pool sizes) and reliably finds near-optimal subsets.
       const N_SAMPLES=500;
       let bestSubset=null;
+      let bestShortIdx=-1;
       let bestScore=Infinity;
       for(let s=0;s<N_SAMPLES;s++){
-        const subset=tryRandomSubset();
-        if(!subset)continue;
-        const sc=scoreSubset(subset);
-        if(sc<bestScore){bestScore=sc; bestSubset=subset;}
+        const r=tryRandomSubset();
+        if(!r)continue;
+        const sc=scoreSubset(r.chosen);
+        if(sc<bestScore){bestScore=sc; bestSubset=r.chosen; bestShortIdx=r.shortIdx;}
       }
       // Fallback: if no valid subset found in N_SAMPLES (extremely unlikely),
       // fall back to the simple "all edges sorted" approach so the pool still
-      // gets games. Phase 5 bonus pass will handle remaining shortfalls.
+      // gets games. The bonus matchup below picks up any remaining shortfall.
       if(!bestSubset){
         console.warn(`SoS balancer couldn't find a valid subset for ${d.name} ${pool.label} after ${N_SAMPLES} samples — using full-edge fallback.`);
         bestSubset=allEdges.slice(0,targetTotal);
       }
-      // Convert chosen edges to [team1, team2, poolLabel] entries, then sort
-      // for greedy placement priority (region-different + tier-spread first).
+      // Convert chosen edges to matchup entries, then sort for greedy placement
+      // priority (region-different + tier-spread first).
       const pairs=bestSubset.map(([i,j])=>[teams[i],teams[j],pool.label]);
+
+      // ── BONUS MATCHUP (for odd pools with parity-short team) ────────────
+      // Instead of running a separate Phase 5 pass at the end of scheduling,
+      // we generate the bonus matchup HERE at queue-build time so it flows
+      // through the same Phase 1/2/4 pipeline as every other game (placed by
+      // the greedy scheduler, eligible for backfill, compacted forward).
+      // The result is a coherent schedule where bonus games sit naturally
+      // among regular pool games, not clustered at end-of-day.
+      //
+      // The bonus opponent is the SAME-pool team (with gpt round-robin games
+      // already scheduled) that is FURTHEST in tier from the short team and
+      // ideally from a DIFFERENT region. The bonus matchup is flagged so
+      // standings calc can apply asymmetric scoring (only counts for short
+      // team's record, not the opponent's — the opponent ends with gpt+1
+      // games but only gpt count toward their pool standing).
+      if(isOdd && bestShortIdx>=0){
+        const shortTeam=teams[bestShortIdx];
+        // Build deg map from chosen subset to find who already has a full gpt
+        const deg=new Array(n).fill(0);
+        bestSubset.forEach(([a,b])=>{deg[a]++;deg[b]++;});
+        // Candidates: same-pool teammates with full gpt round-robin games AND
+        // who haven't already played the short team in the round-robin.
+        const playedInSubset=new Set(bestSubset.map(([a,b])=>a<b?`${a}-${b}`:`${b}-${a}`));
+        const candIdxs=[];
+        for(let i=0;i<n;i++){
+          if(i===bestShortIdx)continue;
+          if(deg[i]<gpt)continue;
+          const key=Math.min(i,bestShortIdx)+'-'+Math.max(i,bestShortIdx);
+          if(playedInSubset.has(key))continue;
+          candIdxs.push(i);
+        }
+        if(candIdxs.length){
+          // Score candidates: furthest tier first, different region as tiebreak
+          candIdxs.forEach(i=>{
+            const tierDistB=Math.abs(tierRank(shortTeam)-tierRank(teams[i]));
+            const regDiffB=sameReg(shortTeam,teams[i])?0:1;
+            teams[i]._bScore=tierDistB*10+regDiffB+Math.random()*0.5;
+          });
+          candIdxs.sort((a,b)=>teams[b]._bScore-teams[a]._bScore);
+          candIdxs.forEach(i=>{delete teams[i]._bScore;});
+          const oppIdx=candIdxs[0];
+          // The bonus matchup: append to the pairs list with bonus flag.
+          // The 4th array element carries the bonus metadata that Phase 1
+          // placement will copy onto the scheduled game record.
+          const bonusPair=[
+            shortTeam,
+            teams[oppIdx],
+            pool.label,
+            {bonusGame:true, parityFor:shortTeam.id}
+          ];
+          pairs.push(bonusPair);
+        } else {
+          // No valid bonus opponent found — short team has played all candidates
+          // OR no other team has full gpt yet. Surface this as a warning; manual
+          // drag-drop will be needed if it actually shorts out. (In practice
+          // the SoS balancer's median-tier shortIdx pick almost always leaves
+          // at least one untouched candidate, but defensive code matters.)
+          d2Warnings.push(`${d.name} ${pool.label}: ${shortTeam.name} is parity-short and the SoS balancer couldn't auto-pick a bonus opponent. Drag a 4th game manually.`);
+        }
+      }
+
+      // Sort pairs for greedy placement (region+tier spread first). Bonus
+      // matchups sort with everyone else — they don't get back-of-line treatment.
       pairs.forEach(p=>{
         const regBonus=sameReg(p[0],p[1])?0:10;
         const tierDist=Math.abs((TO[p[0].tier]||0)-(TO[p[1].tier]||0));
@@ -2081,6 +2145,27 @@ function genD1(){
 
   // Schedule order: rec divs first, then non-rec
   const schedOrder=[...divs.filter(d=>d.recruitable),...divs.filter(d=>!d.recruitable)];
+
+  // Per-team game cap. Default = gpt. If a team is a bonus opponent in any
+  // matchup (their 4th-game role for a parity-short teammate), their cap is
+  // gpt+1 to allow the bonus placement. The short team's cap stays at gpt
+  // (their gpt-1 regular games + 1 bonus = gpt total). This map is consulted
+  // by Phase 1 placement, Phase 2/3 backfill, and Phase 3.5 lunch reclaim
+  // wherever they reject matchups for "team already at game cap."
+  const gameCap={};
+  divs.forEach(d=>d.teams.forEach(t=>{gameCap[t.id]=gpt;}));
+  Object.values(matchQueues).forEach(queue=>{
+    queue.forEach(pair=>{
+      const opts=pair[3];
+      if(opts&&opts.bonusGame){
+        // The bonus opponent (whichever team in the pair is NOT the parityFor team)
+        // gets cap +1. The parityFor team itself stays at gpt.
+        const t1=pair[0],t2=pair[1];
+        const oppId=(t1.id===opts.parityFor)?t2.id:t1.id;
+        gameCap[oppId]=gpt+1;
+      }
+    });
+  });
 
   let gc=0;
   // Pre-compute per-division grid slots and lunch slots for fast lookup
@@ -2113,15 +2198,18 @@ function genD1(){
         const avFieldsNow=podFields.filter(f=>!sched1[s][f.id]);
         if(!avFieldsNow.length)return;
 
-        // Sort queue: (1) under-gamed teams first (starvation prevention),
+        // Sort queue: (1) most under-gamed teams first (starvation prevention),
         // (2) within same starvation level, prefer different-region + different-tier pairs.
+        // "Under-gamed" measured as deficit-from-cap so bonus opponents (cap=gpt+1)
+        // who already have gpt games still appear as "1 game short" relative to
+        // their actual target.
         matchQueues[d.id].sort((a,b)=>{
-          const aMax=Math.max(tG[a[0].id]||0,tG[a[1].id]||0);
-          const bMax=Math.max(tG[b[0].id]||0,tG[b[1].id]||0);
-          if(aMax!==bMax)return aMax-bMax;
-          const aMin=Math.min(tG[a[0].id]||0,tG[a[1].id]||0);
-          const bMin=Math.min(tG[b[0].id]||0,tG[b[1].id]||0);
-          if(aMin!==bMin)return aMin-bMin;
+          const aDef=Math.min(gameCap[a[0].id]-(tG[a[0].id]||0),gameCap[a[1].id]-(tG[a[1].id]||0));
+          const bDef=Math.min(gameCap[b[0].id]-(tG[b[0].id]||0),gameCap[b[1].id]-(tG[b[1].id]||0));
+          if(aDef!==bDef)return bDef-aDef; // larger deficit = more starved = first
+          const aMaxDef=Math.max(gameCap[a[0].id]-(tG[a[0].id]||0),gameCap[a[1].id]-(tG[a[1].id]||0));
+          const bMaxDef=Math.max(gameCap[b[0].id]-(tG[b[0].id]||0),gameCap[b[1].id]-(tG[b[1].id]||0));
+          if(aMaxDef!==bMaxDef)return bMaxDef-aMaxDef;
           // Tier + region tiebreak: more spread = better
           const aScore=(sameReg(a[0],a[1])?0:10)+Math.abs((TO[a[0].tier]||0)-(TO[a[1].tier]||0));
           const bScore=(sameReg(b[0],b[1])?0:10)+Math.abs((TO[b[0].tier]||0)-(TO[b[1].tier]||0));
@@ -2131,8 +2219,9 @@ function genD1(){
         // Try to place ONE game for this division this round
         const queue=matchQueues[d.id];
         for(let qi=0;qi<queue.length;qi++){
-          const [t1,t2,poolLabel]=queue[qi];
-          if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){queue.splice(qi,1);qi--;continue;}
+          const [t1,t2,poolLabel,bonusOpts]=queue[qi];
+          // Per-team game cap (gpt for regular teams, gpt+1 for bonus opponents)
+          if(tG[t1.id]>=gameCap[t1.id]||tG[t2.id]>=gameCap[t2.id]){queue.splice(qi,1);qi--;continue;}
           const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
           if((te1==='in'||te1==='both')&&h<lc)continue;
           if((te2==='in'||te2==='both')&&h<lc)continue;
@@ -2147,9 +2236,17 @@ function genD1(){
           if(!s2.every(prev=>Math.abs(s2m(s)-s2m(prev))>restMin))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-          // Place ONE game and stop for this round
-          sched1[s][avFieldsNow[0].id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+          // Place ONE game and stop for this round.
+          // If this matchup carries bonusOpts (parity-short team's 4th game),
+          // copy the flags onto the game record so standings calc + UI badge
+          // know to treat it asymmetrically.
+          const gameRec={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
             divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
+          if(bonusOpts&&bonusOpts.bonusGame){
+            gameRec.bonusGame=true;
+            gameRec.parityFor=bonusOpts.parityFor;
+          }
+          sched1[s][avFieldsNow[0].id]=gameRec;
           tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
           played.add(pk(t1.id,t2.id));
           queue.splice(qi,1);
@@ -2173,27 +2270,32 @@ function genD1(){
 
   let backfillCount=0;
 
-  // Build remaining matchups per division
+  // Build remaining matchups per division. We use whatever matchups are still
+  // in matchQueues — Phase 1 spliced placed entries out, so what remains is
+  // exactly what didn't fit. This crucially preserves the bonusOpts marker on
+  // any unplaced bonus matchup so backfill knows to set the bonus flags when
+  // it places the game. Partition into diff-region/same-region for ordering;
+  // bonus matchups inherit whatever region category their teams produce.
   const remaining={};
   schedOrder.forEach(d=>{
     remaining[d.id]=[];
-    (pools[d.id]||[]).forEach(pool=>{
-      const diffReg=[],sameRegPairs=[];
-      for(let i=0;i<pool.teams.length;i++){
-        for(let j=i+1;j<pool.teams.length;j++){
-          const key=pk(pool.teams[i].id,pool.teams[j].id);
-          if(!played.has(key)&&tG[pool.teams[i].id]<gpt&&tG[pool.teams[j].id]<gpt){
-            const pair=[pool.teams[i],pool.teams[j],pool.label];
-            if(sameReg(pool.teams[i],pool.teams[j])) sameRegPairs.push(pair);
-            else diffReg.push(pair);
-          }
-        }
-      }
-      // Shuffle within each partition (different-region first, same-region last)
-      for(let i=diffReg.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[diffReg[i],diffReg[j]]=[diffReg[j],diffReg[i]];}
-      for(let i=sameRegPairs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[sameRegPairs[i],sameRegPairs[j]]=[sameRegPairs[j],sameRegPairs[i]];}
-      remaining[d.id].push(...diffReg,...sameRegPairs);
+    const leftover=matchQueues[d.id]||[];
+    const diffReg=[],sameRegPairs=[];
+    leftover.forEach(pair=>{
+      const t1=pair[0],t2=pair[1];
+      // Only include if neither team has hit their per-team cap. This still
+      // lets bonus opponents (cap=gpt+1) participate even at gpt games.
+      if(tG[t1.id]>=gameCap[t1.id]||tG[t2.id]>=gameCap[t2.id])return;
+      // And don't include matchups already played (bonus is a fresh pair so
+      // played.has won't fire for it; this only excludes round-robin pairs
+      // that were already placed).
+      if(played.has(pk(t1.id,t2.id)))return;
+      if(sameReg(t1,t2))sameRegPairs.push(pair);else diffReg.push(pair);
     });
+    // Shuffle within each partition (different-region first, same-region last)
+    for(let i=diffReg.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[diffReg[i],diffReg[j]]=[diffReg[j],diffReg[i]];}
+    for(let i=sameRegPairs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[sameRegPairs[i],sameRegPairs[j]]=[sameRegPairs[j],sameRegPairs[i]];}
+    remaining[d.id].push(...diffReg,...sameRegPairs);
   });
 
   // Identify mid-day gaps per field (slots between two occupied slots)
@@ -2270,22 +2372,23 @@ function genD1(){
         // Per-division lunch protection
         if(d.recruitable&&s===divLunchSlot[d.id]) continue;
 
-        // Sort remaining: (1) under-gamed teams first, (2) tier+region tiebreak
+        // Sort remaining: (1) most under-gamed teams first (deficit-from-cap),
+        // (2) tier+region tiebreak. See Phase 1 sort for rationale.
         remaining[d.id].sort((a,b)=>{
-          const aMax=Math.max(tG[a[0].id]||0,tG[a[1].id]||0);
-          const bMax=Math.max(tG[b[0].id]||0,tG[b[1].id]||0);
-          if(aMax!==bMax)return aMax-bMax;
-          const aMin=Math.min(tG[a[0].id]||0,tG[a[1].id]||0);
-          const bMin=Math.min(tG[b[0].id]||0,tG[b[1].id]||0);
-          if(aMin!==bMin)return aMin-bMin;
+          const aDef=Math.min(gameCap[a[0].id]-(tG[a[0].id]||0),gameCap[a[1].id]-(tG[a[1].id]||0));
+          const bDef=Math.min(gameCap[b[0].id]-(tG[b[0].id]||0),gameCap[b[1].id]-(tG[b[1].id]||0));
+          if(aDef!==bDef)return bDef-aDef;
+          const aMaxDef=Math.max(gameCap[a[0].id]-(tG[a[0].id]||0),gameCap[a[1].id]-(tG[a[1].id]||0));
+          const bMaxDef=Math.max(gameCap[b[0].id]-(tG[b[0].id]||0),gameCap[b[1].id]-(tG[b[1].id]||0));
+          if(aMaxDef!==bMaxDef)return bMaxDef-aMaxDef;
           const aScore=(sameReg(a[0],a[1])?0:10)+Math.abs((TO[a[0].tier]||0)-(TO[a[1].tier]||0));
           const bScore=(sameReg(b[0],b[1])?0:10)+Math.abs((TO[b[0].tier]||0)-(TO[b[1].tier]||0));
           return bScore-aScore;
         });
 
         for(let qi=0;qi<remaining[d.id].length;qi++){
-          const [t1,t2,poolLabel]=remaining[d.id][qi];
-          if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){remaining[d.id].splice(qi,1);qi--;continue;}
+          const [t1,t2,poolLabel,bonusOpts]=remaining[d.id][qi];
+          if(tG[t1.id]>=gameCap[t1.id]||tG[t2.id]>=gameCap[t2.id]){remaining[d.id].splice(qi,1);qi--;continue;}
           const te1=t1.travelWaitlist?'local':t1.travelTier;
           const te2=t2.travelWaitlist?'local':t2.travelTier;
           if((te1==='in'||te1==='both')&&h<lc)continue;
@@ -2296,20 +2399,21 @@ function genD1(){
           const restMin=minRest*divSlotM(d);
           // Rest check against ALL of the team's existing games. Backfill
           // processes slots in priority order (mid-day gaps first), so tS is
-          // not guaranteed to be time-ordered. Checking only s[length-1] gave
-          // both false-positives (rejecting valid placements when the most-recent
-          // push was an out-of-order earlier slot) and false-negatives (allowing
-          // placements that violate rest with an in-between game). This bug
-          // surfaced as 16+ team-game shortfalls on 90-team test data.
+          // not guaranteed to be time-ordered.
           if(!s1.every(prev=>Math.abs(s2m(s)-s2m(prev))>restMin))continue;
           if(!s2.every(prev=>Math.abs(s2m(s)-s2m(prev))>restMin))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
           // Gender check
           if(f.gender!==d.gender) continue;
-          // Place game
-          sched1[s][f.id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+          // Place game (carry bonus flags if present)
+          const gameRec={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
             divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
+          if(bonusOpts&&bonusOpts.bonusGame){
+            gameRec.bonusGame=true;
+            gameRec.parityFor=bonusOpts.parityFor;
+          }
+          sched1[s][f.id]=gameRec;
           tS[t1.id].push(s);tS[t2.id].push(s);tG[t1.id]++;tG[t2.id]++;
           played.add(pk(t1.id,t2.id));
           remaining[d.id].splice(qi,1);
@@ -2360,8 +2464,8 @@ function genD1(){
       if(!divGridSet[d.id].has(lunchSlot))continue;
       const h=sH(lunchSlot);
       for(let qi=0;qi<remaining[d.id].length;qi++){
-        const [t1,t2,poolLabel]=remaining[d.id][qi];
-        if(tG[t1.id]>=gpt||tG[t2.id]>=gpt){remaining[d.id].splice(qi,1);qi--;continue;}
+        const [t1,t2,poolLabel,bonusOpts]=remaining[d.id][qi];
+        if(tG[t1.id]>=gameCap[t1.id]||tG[t2.id]>=gameCap[t2.id]){remaining[d.id].splice(qi,1);qi--;continue;}
         const te1=t1.travelWaitlist?'local':t1.travelTier;
         const te2=t2.travelWaitlist?'local':t2.travelTier;
         if((te1==='in'||te1==='both')&&h<lc)continue;
@@ -2376,8 +2480,13 @@ function genD1(){
         if(!s2.every(prev=>Math.abs(s2m(lunchSlot)-s2m(prev))>restMin))continue;
         if(Object.values(sched1[lunchSlot]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
         if(Object.values(sched1[lunchSlot]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-        sched1[lunchSlot][f.id]={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
+        const gameRec={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
           divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
+        if(bonusOpts&&bonusOpts.bonusGame){
+          gameRec.bonusGame=true;
+          gameRec.parityFor=bonusOpts.parityFor;
+        }
+        sched1[lunchSlot][f.id]=gameRec;
         tS[t1.id].push(lunchSlot);tS[t2.id].push(lunchSlot);tG[t1.id]++;tG[t2.id]++;
         played.add(pk(t1.id,t2.id));
         remaining[d.id].splice(qi,1);
@@ -2456,118 +2565,11 @@ function genD1(){
   }
   if(compactedCount>0) console.log('Early-pack compaction shifted '+compactedCount+' games earlier ('+compactPass+' pass'+(compactPass===1?'':'es')+')');
 
-  // ── PHASE 5: PARITY BONUS PASS ────────────────────────────────────────────
-  // Odd-sized pools with odd gpt (e.g., 5 teams × 3 games / 2 = 7.5 → 7 games)
-  // leave exactly 1 team in each pool with gpt-1 games when the round-robin
-  // completes cleanly. Schedule a bonus game for every short team — pick a
-  // different-tier (preferred different-region) opponent from the SAME pool
-  // who already has gpt games. The bonus opponent ends with gpt+1 games; their
-  // bonus 4th-game result does NOT count in pool standings (only the short
-  // team's does).
-  //
-  // Also runs when MULTIPLE teams in a pool are short (e.g. round-robin didn't
-  // complete due to capacity) — in that case it pairs short teams with each
-  // other for their missing games AND tries unfinished pool matchups before
-  // giving up. Auto-pick is overridable via the inline dropdown on the cell.
-  // Bonus games are flagged with bonusGame: true and parityFor: <shortTeamId>.
-  //
-  // Runs AFTER compaction so back-end slots (which were freed by compaction
-  // pulling games forward) become available targets. Field search prefers the
-  // division's pod, then falls back to ANY same-gender field with a free slot.
-  let bonusCount=0;
-  divs.forEach(d=>{
-    (pools[d.id]||[]).forEach(pool=>{
-      // Find ALL teams short of gpt games in this pool. In a healthy round-robin
-      // odd pool this is exactly one team, but if capacity issues left multiple
-      // short, handle that case too rather than silently giving up.
-      const shortTeams=pool.teams.filter(t=>(tG[t.id]||0)<gpt);
-      if(!shortTeams.length)return;
-
-      shortTeams.forEach(shortTeam=>{
-        // Re-check after each placement — earlier iterations may have given this
-        // team its bonus already (when paired short-with-short).
-        if((tG[shortTeam.id]||0)>=gpt)return;
-
-        // Candidate opponents: any pool teammate who hasn't played the short team.
-        // Don't restrict to "already has gpt games" — accept any opponent who
-        // could fairly receive an extra game OR is also short. The asymmetric
-        // standings rule means the non-short team's record isn't affected.
-        const candidates=pool.teams.filter(t=>
-          t.id!==shortTeam.id&&
-          !played.has(pk(shortTeam.id,t.id))
-        );
-        if(!candidates.length){
-          d2Warnings.push(`${d.name} ${pool.label}: ${shortTeam.name} has already played every other team in the pool — cannot place a bonus game. Drag a Day 1 game manually if needed.`);
-          return;
-        }
-        // Score: prefer (a) opponents who are ALSO short (mutual benefit),
-        // (b) furthest tier from short team, (c) different region.
-        candidates.forEach(c=>{
-          const tierDist=Math.abs((TO[shortTeam.tier]||0)-(TO[c.tier]||0));
-          const regBonus=sameReg(shortTeam,c)?0:1;
-          const mutualShort=((tG[c.id]||0)<gpt)?100:0; // big bonus for pairing two shorts
-          c._bonusScore=mutualShort+tierDist*10+regBonus;
-        });
-        candidates.sort((a,b)=>b._bonusScore-a._bonusScore);
-        candidates.forEach(c=>delete c._bonusScore);
-
-        // Slot search: try LATER slots first (back-end is freer post-compaction).
-        const slotsRev=[...slots].reverse();
-        const podFields=dpod[d.id]||[];
-        const fallbackFields=fields.filter(f=>f.gender===d.gender&&!podFields.includes(f));
-        let placed=false;
-        for(const opp of candidates){
-          if(placed)break;
-          for(const slot of slotsRev){
-            if(placed)break;
-            if(!divGridSet[d.id].has(slot))continue;
-            if(d.recruitable&&slot===divLunchSlot[d.id])continue;
-            const h=sH(slot);
-            const te1=shortTeam.travelWaitlist?'local':shortTeam.travelTier;
-            const te2=opp.travelWaitlist?'local':opp.travelTier;
-            if((te1==='in'||te1==='both')&&h<lc)continue;
-            if((te2==='in'||te2==='both')&&h<lc)continue;
-            if((te1==='out'||te1==='both')&&h>ec)continue;
-            if((te2==='out'||te2==='both')&&h>ec)continue;
-            const restMin=minRest*divSlotM(d);
-            const sa=tS[shortTeam.id]||[];
-            if(!sa.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin))continue;
-            const sb=tS[opp.id]||[];
-            if(!sb.every(prev=>Math.abs(s2m(slot)-s2m(prev))>restMin))continue;
-            // No double-booking either team
-            if(Object.values(sched1[slot]).some(g=>g&&(g.t1===shortTeam.id||g.t2===shortTeam.id||g.t1===opp.id||g.t2===opp.id)))continue;
-            // Try pod fields first, then any same-gender field
-            let avField=podFields.find(f=>!sched1[slot][f.id]);
-            if(!avField){
-              avField=fallbackFields.find(f=>!sched1[slot][f.id]);
-            }
-            if(!avField)continue;
-            // Determine if this is a parity-only short (the canonical 1-team case)
-            // or a fill-in-the-gap game (when multiple are short due to capacity).
-            const oppAlsoShort=(tG[opp.id]||0)<gpt;
-            sched1[slot][avField.id]={
-              id:`D1-G${++gc}`,t1:shortTeam.id,t2:opp.id,t1n:shortTeam.name,t2n:opp.name,
-              divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:pool.label,
-              type:'pool',
-              // Only mark as bonus if the opponent already had gpt games (true parity case).
-              // If both teams are short, this is a "make-up" pool game — counts normally.
-              bonusGame:!oppAlsoShort,
-              parityFor:!oppAlsoShort?shortTeam.id:undefined
-            };
-            tS[shortTeam.id].push(slot);tS[opp.id].push(slot);
-            tG[shortTeam.id]++;tG[opp.id]++;
-            played.add(pk(shortTeam.id,opp.id));
-            bonusCount++;
-            placed=true;
-          }
-        }
-        if(!placed){
-          d2Warnings.push(`${d.name} ${pool.label}: bonus game for ${shortTeam.name} couldn't fit any slot/field across ${candidates.length} candidate opponent(s) — manual placement needed (drag a game in the Day 1 grid).`);
-        }
-      });
-    });
-  });
-  if(bonusCount>0) console.log('Parity bonus pass placed '+bonusCount+' bonus/make-up games for short teams.');
+  // (Former Phase 5 "parity bonus pass" was removed. Bonus matchups for
+  // odd-pool parity-short teams are now generated at queue-build time and
+  // flow through Phase 1/2/3 placement and Phase 4 compaction like any other
+  // matchup. This eliminates the late-day clustering of bonus games that the
+  // separate-phase approach produced.)
 
   // ── VERIFICATION: every team should have exactly gpt games on Day 1 ──────
   // Surface any shortfalls so JR knows which teams need manual intervention.
@@ -3020,12 +3022,13 @@ function renderAll(){
       rh+=`<div class="cl cl-r"><strong>⚠ Day 1 game-count shortfall — ${capacity.length} team${capacity.length===1?'':'s'} did not get all ${gptVal} games:</strong><br>${detail}<br><span style="font-size:11px">Likely causes: insufficient field capacity, slot grid conflicts, or strict travel constraints. Add more fields, lengthen the day, or relax travel constraints.</span></div>`;
     }
     if(parity.length){
-      // Pool parity that the bonus pass couldn't fix (no valid opponent or no slot fit)
+      // Pool parity short — bonus matchup couldn't be placed for some reason
+      // (extreme constraints; very rare under the new queue-build approach).
       const byDiv={};parity.forEach(s=>{(byDiv[s.divName]=byDiv[s.divName]||[]).push(s);});
       const detail=Object.entries(byDiv).map(([dn,list])=>
         `<strong>${dn} ${list[0].poolLabel||''}</strong>: ${list.map(s=>s.teamName).join(', ')} (${list[0].scheduled}/${gptVal})`
       ).join('<br>');
-      rh+=`<div class="cl cl-r" style="margin-top:6px"><strong>⚠ Pool parity bonus failed — ${parity.length} team${parity.length===1?'':'s'} ended Day 1 with ${gptVal-1}/${gptVal} games:</strong><br>${detail}<br><span style="font-size:11px">The bonus-game pass for odd pools could not find a valid slot or opponent. Manual scheduling needed — drag a game into the schedule for these teams. See "Day 2 notes" below for specifics.</span></div>`;
+      rh+=`<div class="cl cl-r" style="margin-top:6px"><strong>⚠ Bonus game placement failed — ${parity.length} team${parity.length===1?'':'s'} short on Day 1:</strong><br>${detail}<br><span style="font-size:11px">The auto-generated bonus matchup for the odd-pool short team couldn't fit any slot/field within rest, travel, and pod constraints. Manual scheduling needed — drag a game into the schedule for these teams.</span></div>`;
     }
   }
   if(d2Warnings.length)rh+=`<div class="cl cl-a"><strong>Day 2 notes:</strong><br>${d2Warnings.map(w=>`* ${w}`).join('<br>')}</div>`;
