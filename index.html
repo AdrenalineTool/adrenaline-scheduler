@@ -696,6 +696,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div><div class="exp-name">Team arrival cards (.xlsx)</div><div class="exp-sub">One sheet per team — game times, field, parking lot, pass color, check-in info · Aidan emails to teams</div></div>
     <span class="exp-badge eb-aidan">Aidan / Teams</span>
   </div>
+  <div class="exp-row" onclick="expScoreSheets()">
+    <div><div class="exp-name">Field score sheets (.zip of PDFs)</div><div class="exp-sub">One PDF per field per day — every game on the sheet with score boxes and a head-coach signature block · Field staff record final scores, both coaches sign, runner returns to the booth · Branded for live event use</div></div>
+    <span class="exp-badge eb-eric">Eric / Field staff</span>
+  </div>
   <div class="exp-row" onclick="expFieldSigns()">
     <div><div class="exp-name">Field schedule signs (.xlsx)</div><div class="exp-sub">One sheet per field — full day schedule in large print · Print and post at each field entrance</div></div>
     <span class="exp-badge eb-eric">Eric / Ops</span>
@@ -4242,6 +4246,208 @@ async function buildTeamWelcomePacket(team,div,ename){
     console.warn('Field map merge failed for '+team.name+', returning packet without map:',err);
     return baseBytes;
   }
+}
+
+// ============================================================
+// FIELD SCORE SHEETS — one branded PDF per field per day
+// Generated bundle: ZIP organized by day (Day1/, Day2/) with
+// one PDF per field. Each sheet has a row per game with empty
+// score boxes + a HEAD COACH signature block at the bottom for
+// both teams to verify all scores recorded on the sheet.
+// Built on the same jsPDF + JSZip toolchain as the field guides
+// so branding (logo, navy/green palette, hairline) matches.
+// ============================================================
+function expScoreSheets(){
+  if(!Object.keys(sched1).length&&!Object.keys(sched2).length){
+    showToast('Generate schedule first — there are no games to score yet.','warn');return;
+  }
+  if(!window.jspdf){showToast('PDF library not loaded — try refreshing.','err');return;}
+  if(!window.JSZip){showToast('ZIP library not loaded — try refreshing.','err');return;}
+  const ename=document.getElementById('ename').value||'Adrenaline Lacrosse Tournament';
+  const edate1=document.getElementById('edate').value||'';
+  const edate2=document.getElementById('edate2').value||'';
+
+  // For each (field, day) combination that has at least one game, build a sheet
+  const sheets=[]; // {day, dateStr, field, games[]}
+  const collectFor=(sched,dayLabel,dateStr)=>{
+    fields.forEach(f=>{
+      const games=[];
+      Object.keys(sched).sort((a,b)=>sH(a)-sH(b)).forEach(slot=>{
+        const g=sched[slot]&&sched[slot][f.id];
+        if(g)games.push({slot,g});
+      });
+      if(games.length)sheets.push({day:dayLabel,dateStr,field:f,games});
+    });
+  };
+  collectFor(sched1,'Day 1',edate1);
+  collectFor(sched2,'Day 2',edate2);
+
+  if(!sheets.length){showToast('No games scheduled — nothing to print.','warn');return;}
+
+  showToast(`Generating ${sheets.length} score sheet${sheets.length===1?'':'s'}…`);
+  const zip=new JSZip();
+  sheets.forEach(({day,dateStr,field,games})=>{
+    try{
+      const pdfBytes=buildScoreSheetPDF({day,dateStr,field,games,ename});
+      const safeField=(field.name||('F'+field.id)).replace(/[^A-Za-z0-9_-]+/g,'_');
+      const folder=day.replace(/\s+/g,'');
+      zip.file(`${folder}/${safeField}_${folder}_ScoreSheet.pdf`,pdfBytes);
+    }catch(err){
+      console.error(`Score sheet build failed for ${day} / ${field.name}:`,err);
+    }
+  });
+
+  zip.generateAsync({type:'blob'}).then(blob=>{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=ename.replace(/[^A-Za-z0-9_-]+/g,'_')+'_Field_Score_Sheets.zip';
+    document.body.appendChild(a);a.click();a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`${sheets.length} score sheet${sheets.length===1?'':'s'} downloaded as ZIP.`);
+  }).catch(err=>{showToast('ZIP generation failed: '+err.message,'err');});
+}
+
+// Build a single field/day score sheet PDF. Returns ArrayBuffer.
+// Landscape letter — gives wide table for team names + score boxes.
+function buildScoreSheetPDF({day,dateStr,field,games,ename}){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter',orientation:'landscape'});
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
+  const M=36;
+  const NAVY=[27,58,92],GRAY=[95,94,90],GREEN=[120,193,66];
+
+  // Logo helper (same source as field guides)
+  const drawLogo=(x,y)=>{
+    const size=28;
+    if(typeof ADRLN_LOGO_DATA_URL==='string'){
+      try{doc.addImage(ADRLN_LOGO_DATA_URL,'PNG',x,y-5,size,size,undefined,'FAST');}
+      catch(e){
+        doc.setFillColor(...GREEN);doc.roundedRect(x,y,44,18,2,2,'F');
+        doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(10);
+        doc.text('ADRLN',x+22,y+12,{align:'center'});
+      }
+    }
+  };
+
+  // ── HEADER ─────────────────────────────────────────────────────
+  doc.setFillColor(...NAVY);doc.rect(0,0,W,80,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,78,W,3,'F'); // green hairline
+  drawLogo(M,16);
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(10);
+  doc.text('ADRENALINE LACROSSE',M+44,32);
+  doc.setFont('helvetica','bold');doc.setFontSize(20);
+  doc.text('FIELD SCORE SHEET',M+44,56);
+  // Right side: field + day badge
+  doc.setFontSize(11);doc.setFont('helvetica','normal');
+  doc.text(ename,W-M,28,{align:'right'});
+  doc.setFont('helvetica','bold');doc.setFontSize(18);
+  doc.text(field.name,W-M,52,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(10);
+  const dayLine=day+(dateStr?'  ·  '+dateStr:'');
+  doc.text(dayLine,W-M,68,{align:'right'});
+
+  // ── INSTRUCTIONS BAND ──────────────────────────────────────────
+  doc.setFillColor(245,245,240);doc.rect(0,80,W,32,'F');
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(9);
+  doc.text('INSTRUCTIONS',M,96);
+  doc.setFont('helvetica','normal');doc.setTextColor(60,60,60);doc.setFontSize(9);
+  doc.text('Record the final score for each game. After the last game on this field, BOTH head coaches must sign at the bottom to verify all scores. Runner returns the signed sheet to the booth.',M+90,96,{maxWidth:W-2*M-90});
+
+  // ── GAME TABLE ─────────────────────────────────────────────────
+  // Build rows: Time · Division · Pool · Team A · Score A · Team B · Score B · Final?
+  const rows=games.map(({slot,g})=>{
+    const fmt=(typeof fmtSlot==='function')?fmtSlot(slot):slot;
+    const div=g.divName||'';
+    const pool=g.pool||(g.label||'').replace(/\s*Pool\s*/i,'')||'—';
+    return [fmt,div,pool,g.t1n||'',' ',g.t2n||'',' ',' '];
+  });
+
+  if(window.jspdf&&doc.autoTable){
+    doc.autoTable({
+      startY:124,
+      head:[[
+        {content:'Time',styles:{halign:'left'}},
+        {content:'Division',styles:{halign:'left'}},
+        {content:'Pool / Round',styles:{halign:'left'}},
+        {content:'Team A',styles:{halign:'left'}},
+        {content:'Score A',styles:{halign:'center'}},
+        {content:'Team B',styles:{halign:'left'}},
+        {content:'Score B',styles:{halign:'center'}},
+        {content:'Final?',styles:{halign:'center'}}
+      ]],
+      body:rows,
+      headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:10,cellPadding:6},
+      bodyStyles:{fontSize:10,cellPadding:8,minCellHeight:30,lineColor:[200,200,195],lineWidth:0.4,valign:'middle'},
+      alternateRowStyles:{fillColor:[247,250,242]},
+      columnStyles:{
+        0:{cellWidth:62},
+        1:{cellWidth:78},
+        2:{cellWidth:64},
+        3:{cellWidth:'auto'},
+        4:{cellWidth:60,halign:'center'},
+        5:{cellWidth:'auto'},
+        6:{cellWidth:60,halign:'center'},
+        7:{cellWidth:54,halign:'center'}
+      },
+      margin:{left:M,right:M},
+      theme:'grid',
+      didParseCell:(data)=>{
+        // Make score cells visually obvious as fillable boxes (light yellow tint)
+        if(data.section==='body'&&(data.column.index===4||data.column.index===6||data.column.index===7)){
+          data.cell.styles.fillColor=[255,252,232];
+        }
+      }
+    });
+  }
+
+  let yEnd=doc.lastAutoTable?doc.lastAutoTable.finalY+24:300;
+
+  // ── SIGNATURE BLOCK ────────────────────────────────────────────
+  // Two side-by-side coach signature areas, plus an overall verification line.
+  if(yEnd>H-130){
+    // Page-overflow guard — push to a new page if no room left
+    doc.addPage();
+    yEnd=M+10;
+  }
+
+  doc.setFillColor(...GREEN);doc.rect(M,yEnd,W-2*M,2,'F'); // green divider
+  yEnd+=12;
+  doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('HEAD COACH SIGN-OFF',M,yEnd);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(60,60,60);
+  doc.text('Both head coaches sign below to verify ALL scores on this sheet are correct as recorded. Runner returns to the booth.',M,yEnd+13);
+  yEnd+=32;
+
+  // Two-column signature blocks
+  const colW=(W-2*M-20)/2;
+  const sigBlock=(x,label)=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...NAVY);
+    doc.text(label.toUpperCase(),x,yEnd);
+    // Printed name line
+    doc.setDrawColor(120,120,115);doc.setLineWidth(0.5);
+    doc.line(x,yEnd+30,x+colW,yEnd+30);
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GRAY);
+    doc.text('Printed name',x,yEnd+40);
+    // Team name line
+    doc.line(x,yEnd+60,x+colW,yEnd+60);
+    doc.text('Team',x,yEnd+70);
+    // Signature line
+    doc.line(x,yEnd+90,x+colW,yEnd+90);
+    doc.text('Signature',x,yEnd+100);
+    // Date line (right side of column)
+    doc.line(x+colW-90,yEnd+115,x+colW,yEnd+115);
+    doc.text('Date',x+colW-90,yEnd+125);
+  };
+  sigBlock(M,'Coach 1 — Team A');
+  sigBlock(M+colW+20,'Coach 2 — Team B');
+
+  // ── FOOTER ─────────────────────────────────────────────────────
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  adrln.com  ·  Field score sheet',M,H-22);
+  doc.text(`${field.name}  ·  ${day}${dateStr?'  ·  '+dateStr:''}`,W-M,H-22,{align:'right'});
+
+  return doc.output('arraybuffer');
 }
 
 
