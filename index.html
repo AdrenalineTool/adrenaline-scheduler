@@ -3,15 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Adrenaline Lacrosse -- Tournament Scheduler</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<title>Adrenaline Lacrosse Tournament Experience Tool</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <style>
 :root {
   --navy: #1B3A5C; --teal: #1D9E75; --amber: #BA7517; --purple: #534AB7;
+  --adrln-green: #78C142; --adrln-green-dk: #5FA32E; --lt-adrln-green: #ECF7DD;
   --lt-blue: #E6EDF4; --lt-teal: #E1F5EE; --lt-amber: #FAEEDA; --lt-purple: #EEEDFE;
   --lt-gray: #F1EFE8; --mid-gray: #D3D1C7; --dark-gray: #5F5E5A;
   --red: #C0392B; --lt-red: #FCEBEB;
@@ -21,8 +23,9 @@
 body { font-family: var(--font); background: #f5f4f0; color: #1a1a18; font-size: 13px; }
 
 /* ── TOP BAR ── */
-.topbar { background: var(--navy); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-.topbar-brand { color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+.topbar { background: var(--navy); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; border-bottom: 3px solid var(--adrln-green); }
+.topbar-brand { color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .02em; display: flex; align-items: center; gap: 12px; }
+.topbar-logo { display: inline-block; height: 30px; width: 30px; object-fit: contain; vertical-align: middle; }
 .topbar-sub { color: rgba(255,255,255,.55); font-size: 11px; margin-top: 1px; }
 .topbar-badge { background: rgba(255,255,255,.12); color: #fff; font-size: 10px; padding: 3px 10px; border-radius: 20px; }
 
@@ -30,8 +33,8 @@ body { font-family: var(--font); background: #f5f4f0; color: #1a1a18; font-size:
 .steps { background: #fff; border-bottom: .5px solid var(--mid-gray); padding: 0 20px; display: flex; overflow-x: auto; }
 .step-btn { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--dark-gray); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: var(--font); }
 .step-btn:hover { color: var(--navy); }
-.step-btn.active { color: var(--navy); border-bottom-color: var(--navy); }
-.step-btn.done { color: var(--teal); }
+.step-btn.active { color: var(--navy); border-bottom-color: var(--adrln-green); border-bottom-width: 3px; }
+.step-btn.done { color: var(--adrln-green-dk); }
 
 /* ── LAYOUT ── */
 .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
@@ -55,6 +58,8 @@ body { font-family: var(--font); background: #f5f4f0; color: #1a1a18; font-size:
 .btn-navy:hover { background: #0f2640; }
 .btn-teal { background: var(--teal); color: #fff; border-color: var(--teal); }
 .btn-teal:hover { background: #0f6e56; }
+.btn-green { background: var(--adrln-green); color: var(--navy); border-color: var(--adrln-green-dk); font-weight: 600; }
+.btn-green:hover { background: var(--adrln-green-dk); color: #fff; }
 .btn-sm { padding: 5px 10px; font-size: 11px; }
 .btn-danger { color: var(--red); border-color: #f09595; }
 .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -218,7 +223,10 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 
 <div class="topbar">
   <div>
-    <div class="topbar-brand">Adrenaline Lacrosse -- Tournament Scheduler</div>
+    <div class="topbar-brand">
+      <img class="topbar-logo" id="brand-logo" alt="Adrenaline Lacrosse" src="" onerror="this.style.display='none'">
+      Adrenaline Lacrosse Tournament Experience Tool
+    </div>
     <div class="topbar-sub" id="topbar-event">No event loaded -- load sample data or upload teams to begin</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
@@ -233,8 +241,9 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <button class="step-btn" id="sb3" onclick="go('p3')">3 -- Pool seeding</button>
   <button class="step-btn" id="sb4" onclick="go('p4')">4 -- Travel tiers</button>
   <button class="step-btn" id="sb5" onclick="go('p5')">5 -- Schedule</button>
-  <button class="step-btn" id="sb6" onclick="go('p7')">6 -- Day 1 results</button>
-  <button class="step-btn" id="sb7" onclick="go('p7')">7 -- Exports</button>
+  <button class="step-btn" id="sb6" onclick="go('p6')">6 -- Event experience</button>
+  <button class="step-btn" id="sb7" onclick="go('p7')">7 -- Day 1 results</button>
+  <button class="step-btn" id="sb8" onclick="go('p8')">8 -- Exports</button>
 </div>
 
 <!-- ════════════════════════════════════════════════════
@@ -484,8 +493,9 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div style="flex:1"></div>
     <span id="conflict-ct" style="font-size:11px;font-weight:500"></span>
     <button class="btn btn-sm" id="regen-btn" style="display:none;color:var(--red);border-color:#f09595" onclick="generate()">Clear conflicts & regenerate</button>
-    <button class="btn btn-sm btn-navy" onclick="go('p6')">Day 1 results -></button>
-    <button class="btn btn-sm btn-navy" onclick="go('p7')">Exports -></button>
+    <button class="btn btn-sm btn-navy" onclick="go('p6')">Event experience -></button>
+    <button class="btn btn-sm btn-navy" onclick="go('p7')">Day 1 results -></button>
+    <button class="btn btn-sm btn-navy" onclick="go('p8')">Exports -></button>
   </div>
   <div id="conflict-detail" style="display:none;margin-bottom:8px"></div>
   <!-- WEATHER DELAY PANEL -->
@@ -570,11 +580,60 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 ═════════════════════════════════════════════════════ -->
 
 <!-- ════════════════════════════════════════════════════
-     PAGE 6 -- DAY 1 RESULTS
+     PAGE 6 -- EVENT EXPERIENCE (CX Manager owns)
 ═════════════════════════════════════════════════════ -->
 <div class="page" id="p6">
   <div class="btn-row">
     <button class="btn btn-sm" onclick="go('p5')">← Schedule</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-navy" onclick="go('p7')">Day 1 results →</button>
+    <button class="btn btn-sm btn-navy" onclick="go('p8')">Exports →</button>
+  </div>
+  <div class="cl cl-t" style="margin-bottom:12px">
+    <strong>Event Experience inputs.</strong> The CX Manager owns this step. Everything here flows into "The ADRLN Day" team field guides — the welcome message, the recruiters list, the tourist attractions, the hotel block, and onsite logistics. JR's job is the schedule; this step is about what families and coaches see when they read the field guide.
+  </div>
+
+  <div class="sec-label">Welcome message override <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— optional · replaces the default cover-page intro on team field guides</span></div>
+  <textarea id="welcome-override" placeholder="Leave blank to use the default opener (&quot;Park once. Stay close. Three games on Day 1...&quot;). Override here if this event has a unique angle: a destination weekend, a partnership, a milestone — write 2-4 sentences in ADRLN voice." style="width:100%;min-height:90px;padding:10px;border:.5px solid var(--mid-gray);border-radius:6px;font-family:var(--font);font-size:12px;line-height:1.5" oninput="welcomeOverride=this.value"></textarea>
+
+  <div class="sec-label" style="margin-top:14px">Recruiters on-site <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— prints on team field guides; coaches recruiting each division get flagged</span></div>
+  <div id="recruiters-list"></div>
+  <button class="btn btn-sm" onclick="addRecruiter()" style="margin-top:6px">+ Add recruiter</button>
+
+  <div class="sec-label" style="margin-top:14px">Hotel partner <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— optional · negotiated room block link for visiting families</span></div>
+  <div class="form-row">
+    <div class="fg" style="flex:2"><label>Hotel name</label><input id="hotel-name" placeholder="e.g. Hilton Garden Inn — Anaheim Resort" oninput="hotelPartner.name=this.value"></div>
+    <div class="fg"><label>Negotiated rate</label><input id="hotel-rate" placeholder="e.g. $129/night" oninput="hotelPartner.rate=this.value"></div>
+    <div class="fg" style="flex:2"><label>Booking link</label><input id="hotel-link" placeholder="https://..." oninput="hotelPartner.link=this.value"></div>
+  </div>
+
+  <div class="sec-label" style="margin-top:14px">Tourist attractions <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— for destination events; family activities near the venue</span></div>
+  <div id="attractions-list"></div>
+  <button class="btn btn-sm" onclick="addAttraction()" style="margin-top:6px">+ Add attraction</button>
+
+  <div class="sec-label" style="margin-top:14px">Field map (PDF) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— inserted between the parking pass and Day 1 schedule on every team's field guide; first page only</span></div>
+  <div id="field-map-upload" style="background:var(--lt-gray);border:1.5px dashed var(--mid-gray);border-radius:6px;padding:14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s" onclick="document.getElementById('field-map-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--adrln-green)';this.style.background='var(--lt-adrln-green)'" ondragleave="this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)'" ondrop="event.preventDefault();this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)';handleFieldMapDrop(event)">
+    <div id="field-map-state" style="font-size:12px;color:var(--dark-gray)">
+      <strong style="color:var(--navy)">Drop a field map PDF here</strong> or click to choose a file<br>
+      <span style="font-size:10px">Supported: .pdf · First page is inserted as page 3 of every team's field guide</span>
+    </div>
+    <input type="file" id="field-map-input" accept="application/pdf,.pdf" style="display:none" onchange="handleFieldMapInput(event)">
+  </div>
+
+  <div class="sec-label" style="margin-top:14px">Onsite logistics <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— locations families ask about repeatedly</span></div>
+  <div class="form-row">
+    <div class="fg"><label>Lost & found location</label><input id="logistics-lostfound" placeholder="e.g. Main entrance tent, near check-in" oninput="logistics.lostFound=this.value"></div>
+    <div class="fg"><label>First aid location</label><input id="logistics-firstaid" placeholder="e.g. Center field, by Field 4" oninput="logistics.firstAid=this.value"></div>
+    <div class="fg"><label>Restrooms</label><input id="logistics-restrooms" placeholder="e.g. Permanent at clubhouse + portable units near parking" oninput="logistics.restrooms=this.value"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     PAGE 7 -- DAY 1 RESULTS
+═════════════════════════════════════════════════════ -->
+<div class="page" id="p7">
+  <div class="btn-row">
+    <button class="btn btn-sm" onclick="go('p6')">← Event experience</button>
     <div style="flex:1"></div>
     <button class="btn btn-navy" onclick="applyDay1Results()">Apply results & seed Day 2 →</button>
   </div>
@@ -591,8 +650,8 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div id="day1-mobile-out" style="display:none"></div>
 </div>
 
-<div class="page" id="p7">
-  <div class="btn-row"><button class="btn btn-sm" onclick="go('p5')">← Schedule</button></div>
+<div class="page" id="p8">
+  <div class="btn-row"><button class="btn btn-sm" onclick="go('p7')">← Day 1 results</button></div>
   <div class="cl cl-b" style="margin-bottom:14px">All exports are generated from the live schedule. Schedule files are Excel (.xlsx). The TourneyMachine import file is formatted for direct import -- no reformatting needed.</div>
 
   <div class="sec-label">TourneyMachine</div>
@@ -630,7 +689,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 
   <div class="sec-label">Print materials</div>
   <div class="exp-row" onclick="expWelcomePackets()">
-    <div><div class="exp-name">"The ADRLN Day" team field guides (.zip of PDFs)</div><div class="exp-sub">One personalized 6-page field guide PDF per team — cover, parking pass, Day 1 schedule, Day 2 bracket shell, on-site ops (gift, roster, lounge, vendor village, staff names, support QR), and how-it-works · CX Director emails to teams pre-event</div></div>
+    <div><div class="exp-name">"The ADRLN Day" team field guides (.zip of PDFs)</div><div class="exp-sub">One personalized field guide PDF per team — pulls from Step 2 (fields, staff, vendors) and Step 6 (welcome message, recruiters, hotel partner, attractions, field map, logistics) · CX Director emails to teams pre-event</div></div>
     <span class="exp-badge eb-aidan">CX / Teams</span>
   </div>
   <div class="exp-row" onclick="expArrivalCards()">
@@ -681,7 +740,20 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
 // ============================================================
 let fields=[], divs=[], pools={}, sched1={}, sched2={}, practiceSlots={}, parkingLots=[];
 let fid=1, did=1, tid=1, rawRows=[], detCols={}, dgSrc=null, dgTeam=null, d2Warnings=[];
+// Adrenaline shield logo — base64 PNG with transparent background.
+// Used in topbar header and PDF field guide page headers.
+const ADRLN_LOGO_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAABa5ElEQVR42u29eXxdVbk+/rxrrb3PlDlNOg9poS1tGVtmaFIGRUHQCyd4vQiK3qI4Xb3q9fPzyknQO+H3ylWuIjhcJlFyEAUFFSnNKVAotNBCW+hA5zadMudMe++13t8f+5w2BYSkbdKTct6PJSXEk73XWs96p+d9X6AoRSlKUYpSlKIUpShFKUpRilKUohSlKEUpSlGKUpSiFKUoRSnK+06ouARHYQ0ZYAANDZBoqEcDAP8fwyitQCsAIIEGwDQ3gfvtLhe3qQiQoV2nGKgeEA2oP3D4ZzfU8rXiYc1cuOdPCMJ3Fs1XB3DUCtSuTXC8BSa3+0XwFAEyuDWJRiFmzaonNORBENfvgoGyU+vLxdkNF6ply1ZeOKFuohpfV4Lxk6oQCISsF55ddXkwYllWGECZi5KSEoRKggiFA1CWPOR88ntskAAhk/GQTmXQ15dCsjfJ2TZBikM7Zs6a9PzmzduweeM2WNbYV0f1VuyOx58SAPoAuO/4ooJwSw48ra1AAxKmuRlcBE0RIOh3Kqm+qV425MDQSHH9TiCYcd6MsWWTek89v/50097ecV55VWjC6HHVctf+7fMj5UEVLg0LZlOmbIIICEhLAhJgMmAYAATBBCb//BlokPCPIg9wo4gZgDjwhwAYZggIsAe4WQ3PNYAD1zi6r7vTFca1d4cioVVbN20TlWH5XFdHaufqZam96X2nrtq66tEUAOetv6uFo3JN615qbQUSTQn9ftY070eAUDQaFbNu3ktNDa2aiN668WUnfXjMaWfPP2lCT1/yw3UzKyPpbN8FkYpwuV1mW4GIgggAnsgCxCBHwhiGNh6YjGYYZi3BLMBggAwYDMECSkuAOHdF88EtIALY/847bkjuvxNz7q904Pue8PEsiEEkQEQgdpSQgBQWJCn/eyDAMNw0w+lWcFK6K5vM7mbBr7VtSe6AZz2/7/X0a4lHVuwC0PNOmqa1FUggYdAMUwTIcSSxGARQL2Y3vV1DnHbBaTUTTrPPP+Hk2joZpvkeZ88PVoqacIUFK2hBCwPPGBg3C2UczzMMwwQmCYYAjCdBlFtIovyiCgaYKHfxEgADQwYE8k8XHfTwmfP/z34/3u8rE0BMfjQAdIhBJow65N8ZALNghgCgwWSYBBtDBE0KShhI1tKSIKkEjFCQxobuI7hd7PZ19HYFZPi5nVs6Nif79JLUlsnP/Tke7+pvpjEzNbU2yLX7ajneGDfHs3ah41dL+H5EU9NbtEQlyv/+cxecJkr5qspx9hl2hTqtpCxYHigRMMqF62VhPGKjoRkGvhJgmbvp83cxAAIxYIT2l5EPGEJg8s8MHbBNCILzJhKBiXInikDQg9gq0e8s9gMEHbqdxOwD75Dt5YOoYwL7uGSSxjAYQgoQkVKWglAMYSS8XgWni3p69nW29XVml2c7yv/08rLVy9ct3rXurSbZj5v20vGoXY4rgESjkLNurqdbL17isTmIiXlXTplxwuzaD9dMHX2hVepcEK4RNaFyCbBBVjswntHa5EBkjKQcEA45XAcONQ41yVm8w5L+LXOJ3vFnB7dd/DYnCocoHzoUDIdoHH7LcxD6PyiDOefmaIAhCCQlSdtSICHhpAnJfY6jMqEXOramV+zYsPvZJ36xPwHsau+vXeLxRtF4nGiWkQ+QGEQM9eItmiIw74qZ50w5NXzV+JMqzrDK1LlVo4K2JQXSnEHGyzIzaaklGWbRTy0U5a3wY/9/RGQUGRKSpWUrSLKR7PHQ2+Z1OEn6a2o3HnvyV2tX7Fp3ULsc0CzNCT1SwTJSjwVFW6IiGgX6+xQzr5hSf8nl485gJRdW1JTNLBttwbGySHoujNGe8hwyHBAgRZINBAwMRBEFA42iGcCQYSOM0aRYSIssZWRAaYg0o3sbZ7v2mGV7d/Q+/Hoi+eAbL73R3h8s8UYgHo/rIkCG2NluvjXh5e+jcaeMmn7hR2ZdMfbEyJVWJdWXjicweXAzGTbsaDKShA4KhiJP0gFnl+CA4IGhUIx2D+yoMAQIBgSGZAYzw4PNTJ4R0rClhLJsC5yR6N2t29MdzqK9G5K//c1taxYBve15E6wx3ihGinM/Ik5GNBqV0ZZDtIX1iVh9fdk49Y8l1fLy6rHhCOwMUlmXXRPQrI2Qwgg/XpR3WAWYJADPjyOxzDm9pnj2B3lc/PC1zsXjBMAWwBIGmlk4BsKCpYQM24DusbB3m9ee7sg8uGVp98N/bXllSf6jYrfUq+YCd+wLGSAUbYmKlmiLyfsWF1xcN33iebWfGz+75EPhMWqmqmB4GQPP9TwYJoKUlIv0MMgHAQFMvglMnLMTGACKADkMjwSAyF05wg/swc1F4gwACWLp6xh/C7QQTHYA0hI2+toEOvenl2xe1fPwn//npV8CSObNrzVNcW4uQKAUIkBELHaoGXXlP827ZOL0yD+Wjy67vHScjDhWEtkUM3m2YeGKgyGnIkNieMGCd4iUvcNPGjCENkqRsO0IIRVGcrdev2l92+Mv/mXdTzc/u3/9AfOrkUQ8Dl0EyDtEo1qaotTPjIp87Gtzbjxh7uhrQjXW/OAoiV7Hhatdj4wRASOEZIJHRSd7ZBhnBDIMVzqapUEwEJQWLPRuySST7fzLLa/1/uSP/7viDR8oMdHY2EyFABQqNGCUjsP0j33zrMtrxo76XPV4ms6hNJIpMGtpJLNgIf3gPbkAeYCxi072CIGIAQHCgNiAjDaCyMAOqqBtIbU763Rt5/iqZW0/e/b/VicKBShUKMCYeUHp9HlXnPbF6gnhG0efyBFXOMhmobURkGxLwQZEjm8DswBDwmf7ucWzNyBz6NhfIgcoM5xLPDH5YWNyjVJShq0S9OxJo21jz1Orn9n/X8sf2fAUAMQW16vm1mPjzNMxB8aHSqdfeMmZX6yeJG4smxyIZAygs65HmgVLJRgaRBkwEQyCIHgQnCOYsnwLnWIoFoYPOv25AMBBZi1y34PvpFI+h54jKh5KneKDlJQ8TcSA3poJJ4BZ9MtcHiBtwZAhypmUxNSPZpLPofufL9h/RpMjeBnyQ9vSeAc/k/yfNTR8IKV+fzPEADFs7a+tR4YNw1iWokCgRPTuJnRuSj34/OOv/vS1v7Q9AwAtLVE53Bn64QQItbRERWOjD4xTLh43ff5Vs79YMi50Y+WEQCTNnXBcx4MOShKgYxld8sGYp20Q8pwpgusDgnOcKwCAy8wEIjIgyWACCwMin54ihAQxEwOSpZ9JIKJcBCgfCcIhtHdmzv17jjDFBmQICuQZJjAbsOmHNWLAaElgEDE49ws4R53k/HuwOPjL8ke1wOIa7INWW5agoBUQvZsFunZ6d/zq7iV39L7eu4EIuOaaqByuhONwAIRisXrZ3JzwAGDq2aNOvODj075UO6XkxuqJkYiTceBoz2MYSWR8YLDqdzMfA7uTPF8jMAGQMBBgNgyhfWosCZBQAIRUkkgJghQM4WdbwMaC8QTcrAvtAMYTsITqcbJZ4zoetDZwXAPPcQEWB29WZgghISyCVAK2klCWpFA4yJ7nRYwylrQAFSRICyDBkKz9sKshuJrhGYZH0NowC2MgmCGMEQZEWokco0znPQKQKbxEqWQGQ8MVWisrKAJ2mPa/0ZVKbdH/+rNvP3sXgBRzTBCa+RAVPNIAEovFxK23NhtmYCzGhi/53ozvjT7Bvqn8BDvseGl4rvaYjSQESLAFQPvON9Ox2zTfbmEW0IJ8TSBAkixJsCUsFpAacFNZOH0uTMbu7NyXEeFw2Sonk969e+ceUTlq1NJgOLRj0/oNtGdHJ3fuhveRCz/4TPsW29uyciW2bOnC1u6t7/oY5eXlmDKlAhMmzKFL5s3jxzY+PnpPdtMpkyZX8aRpY6hyVLX1+subL6+aELKqR9eo9r3dF5ZUSlVaFRZK6rJASEHaFrQ00NDQngdkHWYibQzl7RwBUXg8tFxBAAxJMBuAHC9oW8riMux+w1uzc23XV377/WcXAX4SeSi1CQ0x+BhA5LP/77IbR09TXyoZTydmXCCrs54wRgoCafIr7UTOpjbEBxZouABhmBmCDRGxIJIUlCQsCaVtuCmDVLeDVE+qyzJy1f62nr1h1DyfaU/veG3lur2jSnevfCoOAaDzqOzA4d+HZeXlENd+Zq5as7Nz/tkXnCHb2neeVznZHm+Ee3IoIscEI5GKUJkFGQQ84cLTLjhDbJj9kmIDQSCfzHwMc0p501AYCWKCYAGHPHYCRlcoS3GXxr433Qef/t2eb615cs32WAxiqJKMQwKQaBSypQXmQzedfM2cC6b8W/mJODFrpaBTrEmzEIKICTCwfBMAHggeDAloKBAf4YMRH7S5AV8z+VUZuYIiMBMbCGYJlrZlk1IBwBPo7krC6+B9FkLPtW3t2ORqeuHlZ7fsfePPO1YB6PpbMX7DhppaG2T+e23r+6hzV5o2tYW4ZN0Kbm2FpsGuOh/80tQEam2FeKeuKQNoHmFPPvXUcM2s7lPPOn/WaO2lz7Yj8kwrzHOC1aoyXG5DKECzB8fNQBtoZsk5xrvIhQPeocaE0J+CzzmHhvjIjhb54S4w6dyl6S+rMgyPYaRtOGSXydRu2rHl6c6vnVia+O3a2VGKNx59TTIkAIktrlfNCxLe53550R9POKfy8q7O3RlHR2yLIYB8JEX2W24+/Eci0y/ClN8sP8rlR4NEjnZimMgzJIhJkLKDAYAZTjujb5+7z/TJZ3v28jMb39iy4pkHN6wC0P12B5IPgODduoPEYjHR3Nx84EYbpugL5Z3chga/xj4PorfWx/Qz4ypOvaz25HkXnjQpa3o/FKgW84Ll1tTAKGUJG9CuB9fRrMGaNJNiEixAnFtz/xwfStdh8gvJjo7zz/1KVvzP9S84ApPOVlSXBHYuzzz+o089eUX+zB3tRVVDuWHVY0oyyXTGwJNKksiBQ7wt7HckOOV+Ydb8OZVGgnw3j43QhkWApbRVIKAkZQ1625xsssd7YcfW7pdT++nRP97xwsq3AqJ/44LatQmOx5HnhHnvccVQDhy11y78aOlfH16yr7Ex3jNM3lOudDfhJRIAmvs9JQPRxoPdWnL1+F1LHup+ZslDGwDgVwCsBTcumDptFuaFw96HSmswT5aZGaHKkNKSkM1qGM0eaUMEI6TwCHD9oApbECz8JhW5Ovyjgnl+O5HF3wYhnYxrSmvDmaF0FYbig4mImJnLP3PX+RsnnVExyu3tY60CJPjom4l+3bdBnrkLBjwowwImKKFCVhDGEejcnsp27c2+sHen++iqJVv/tPX5tjfeBoimvbQ2B4bDue2jLZDxRugLPnlC9MyG6XdXToHV151OJXcGH/jxl0q+EYvFucDa6hwoTZ7d9I5mmn3J52eeWzUueNW4aeVnBCPhc8pGI8B2GhkHcFzLk8YjQEiQBMHzc1Zs+wzfIXxNY5hDJRZtWd63/5eff/YEIupmv5sFFzxA/Icsr7j53lO21JxUUq6TGdZSkuChuDYFiDTAmsFkFNlAWEghJFI73WxyN7+wc0PPoy882vantvVb33irubT2J7Ucjx8V84diHKNm+mnoC3fNfn3SeaGJ7b3tCKgwylUtVjy1/vZff/Plrw2VKXD0QvKgAw0uRFz3X5W5V0yfedJZFR8qGRO4qnRU6TnlY+2AVGkknQw7JLTRUii2hWSd8/uGUF0aZjsiac/r2e47b1g5BejuwuBrmI8BQPxeBVx/6lUVZ97Stzk0wapAymFPEgmmo45FAzDINUqSDNklyCYJyR2Z9bs39fzxzdf7fvb8r1cfCoqmBjlENQgEgMtxcuWn7xu9pWw6Sp2MYGZGKELc86ZMPdG8v+6NdS+156zLkUA99jXMzfVva5E0vX7szLMWjPlQ7eQxVwUrrfrwBAOPHbgZ0qwNACP8aNhQAQSsQqDUTtH10q2husSqR7vyZ6+gfZA8u+K0j05BKLwexnhgkhCDaM/p55v96BZAYFZ+pxDSMPlHNoaJWKsAqZAVkck27e7ckUxs3LT3Z3+5bfXjyNUaMDM1NDXIBBKGiMzbfIijLN14jR1vjJYkyOYsPAnKesqrqCmPnDi/o/6NN/BIfaxeJpoLVoscshXxODTiCTSDDlR05ur/31ifaHsDwO2nffSE+lPPHXvl6CmRKyJjMV2WAekMoD2pSZOwRJYYLjRZoBw9iIUBoCGMPKx7mvy4CwLhAE776GlIrHp0SBhnQ+akT5lSgT5lIQ0XhgiK+7eneS+/IhdWNMJvkSM0wALCKLDIMJOlbTuoghZUz/ZMcud+/Yu9G7I/iX9/8bqcE4Rbnp6v0Do8oHircel4GUEUgWG/6h1kwIZFKuWMaNqxn2tImOZmemuzjMTK329MALil/sY5N06fW3HN6AmVZ1eMRyClk8h6lgenTCowQfb5RVZsAybsJ4YP99JnwLIUpkypGLJ3VkN6/eQ4RYM9FQIewAKalM9HIhdMBlpbOihtGbak2r/ZSW7bhV+ufWrLHcse37Qhry3y9c7Hws6nXBs47WZdolIYVjAiayLKku27urcsenzLU8xMRKQx0qUZpjkHlgPtli5KJBO/XH1H4pe4I/q5eTNqTw3dHKi2P1NVF464KgvHcTw2EIICQjAAco8o2sUAzBAbqkMGkEw6SHlS3qAPWp6pmm++ppURFiEYDsr0dpPcvq7vl0//YfX/5ivR8iWbOW1xrA4f3/L0fNW8INEz/sTKZ0D4GBRpRQQ7U6raNm29DZ2d3U2tDWrYNNowSd4Mw6Fl0usAfGXUaaP+9wNXTPlSbV3oxprZpRFPGKTcjNYaQkAekV9KAAQBmXRmyDTzkDECP/SxDzmgw0wXsU+gI3Ih2HCpXSFkZ0jsfKH7V0t+u+2MX/xL65c3P7t/fQtHJWIQjRTXBVTPzCyUCygwuyZsKblnbWpH/NZt98U4JpoXJDSOX+F4Y1wTEcdiEC0clftX7t/w4PeWf/l//mnlGZuecb+W3RZYXyZLZciyiLTAkeXAABDxhz72IWfEAKSpyX/jr3795gmeMTblCiMGc1Hkf9bAGNtS6N6ZWrLkkdcv+ekXEtc9e/+r62OL61UeGIXYESPTkyYmAyiA+2xau3Lr14E9ybXxtSMlenVU/JVGimvEIFpaohK9vet/8Y2/3v7v1zx6xtZl2S9zp709EHAMsz6S9WBttH3z12+e0P/sFTRAWlv9z9ywZeNcx/UigqAJTDwIZZLvvQSyjBCC9u3v/a/WX65ftHz5QisWg2hekPAKuVWM221IGwfhYMje+EKy5ck71zzU0hKVQ8EVGgm+Sq4GSMRi9Yo5lr77K0/esW9TzzMiGBZGiMNdEyJB2nXdyLYtG+f2P3sjwgcRJI6K2mNmhMJWaTQalX/4w7qCbA3zVtmfcty68GhsemHnhntvf/krOS7W+73limluTpi2cX1WLFYv2i22wUcnLHu0ztqw+iBay6NQZ5CrvjNsRlLLSitA4Y5NLnYuz1yGfanda9bEfTJ5UTB2egk3Nyc8GOajkUckANBy5DnpzPx+azVCzQsSXlVVVdnocNWHd7y55+eP3Ll808K75lrNzUVwvM0M9Tw/DXAUdMhQnjUxdB8s3KNE6RwRUh+rlwDQcN2Jl1aUl1g9nam7wKDOp1YUwfG37/6jEbNgAeGOGIC0tvp5iMZrGp8J2VaPBhRDsBhE+4yDtGafTgCn8K2rhgb/a+W08Ke6O9Mdv21+ZRWDUUhdAgtJhAn1m2VyeMCAYRWw7J6rr2l8pv/ZGxEaZMakWtcv3znSO4IBXfBnjG69aIlXVYWy8urAh9Iw94Hg9q8wLMrfuAWPfOl5xqQZI0eD5CWVTB8VXiWPACOtPlYvmRnzrq67tGy0JZe9tPlJsF91WJShl1QyNfJ8kIqKCuRr/+kI0CGEgG2HRoR5NfW0uqs7d2X1sh++9gIRITdZqSjv5oIc6ccQARVDaAoO1QevXLkSjueC6EgUSX4VC/ucNTW0agBWVU3JxV17nT8B6Lzl6fkKxXbzQ3b08vXFrudiy8otIwcg+SO9snULnFQWJITfCOwwqCZgBksBGcppkIaCNK9UY2Oj+Pi/X3CGXW7Vbn1z3z05h7Eo7yLScg92fDxMhJAAshkXK3MAoZEAkPxTrly5EtmUyyAB4sFVtB4yi5UAWWIXrKHQ2vQFjsfjevxo+x+693WgtWXNX4vm1XuLso/8SBMRMmmXV7auxFAhZEhMLCKgu7ubkr2OLSnfFmbwv4qZQQSEI+FCNFUIABM1yvNuPGtBpEJ+QqWdn6EDPUXz6r3Ftm3giJp4MARJJHuydnf31iEr7h0SgBjDBMCxrOAOIQiAYTrMZCcRkE6lC0qFxGIQJIjDNeExn/rvhhULrqt7miqp+pVnNzwEAlpbE0UEvJcGsdQRUZGYwEIQlLJ3AHByZ25EAIRz8f9k5diSFUSAEMYc1q8igMng1cTGywtpc9fOjhIbtj793fo7Zi6onIPIziwHBAfHTPgMGKidHR0e7cEHWrePOCkrjThHQk8jIkMkUDOucgWAZO7M8UgAyAHZs6XbAjT0IMekHeK6MRAIomA0SCxWr+KNcf2P/33BP44/w7qmO9nriKQdIOGY0z8w6e8vW3j6xQ9fG9fRluiQJgn9mQs+RJiZYovrld9UobBldkMtA7Dau9MT/BuQD9tLJwb2bdtjDammG8oP79qWtaecF4ErLASNhh5s3wmWYCJEymXBNFpDU4NBcyJcXlX6VVdmjTakAqSQ9Xo4UlnKdTMnfp75lUWzavYOaWNwIuIZM2aUzpw5UxJRF3JlvMxHGFkf4vW7VjysAZTt2t8xt8yUgwwLiMOpy/bnq3Ru77JHLEAqq6sTpOVVBH2YvEU/y1haXlYoG8xobZUAMk4ar1qspkmR0sZYAhyUKSfF1XWll5zykdF1zQsSmxGDONqFXdEoZDwOveD6uR8484rJD1iBTjHz41eu3rNVv7z9le0/JXp1/VD0hzqKKwgAHI5IxzAiOFJHxAttGsrHHRKVnM8BCIUtXjbfVX3g2oPYn1/nd4DXiJSECmazc+9mXl+54zemT5IU/hgzhiLP80xoQrb8rA/M+BgAxBrqj+76xiAefhh6yrzqGadfMrGlZEa6xow21WUnmPqTLra/ek50yitXf/GsC0H+3IzCxAcD5YAVJDLm8OnuRATPMag7Yay/I60jCCD5h129Yj25KcNC+E2NB+uH5GvZwyWlFgpkDFKiOaGZQSue3vmXzl3JdZa0pUfaCABSC+GRi1BF4PMArFyG/ahJPeoFM3Dhh888pXoql6dSvY7ORjjZ5+huvSdj18qwJ6yJAHjvrL1UgOgAAFzygbkcDluHz7NjgAQhm3XxwjNrS4cQH0OlQfwk2ewTJy4RLHvArHiQHYwYAGuWxmi0bd93IYCyWy9a4hUAULiptV52bOzocd3sqnAkBFbaARtWxhLZrKfLJwamXv2Nc+cTER9NZz3P+fIimbMo6LHKBkSA+yjAWhKHVdp1uL13l4MClfwBmDpxuhWKBMhwjks16E8hzjmoSeXJ5QDQgIQZMQDJv/JTf9zupjqSsKQHw9YgHkrDI+X7bsZAlRsL5RBcGNReal6Q8M48c2a1CtgXr3u+jSKiMigDggxchvbYLmNRNsG+GQANgbNOtWOsk7TIEhODEfCDWR4QChNOmTtd+Aem8KShwS8qe2rlsgs9I8oE3EFcePkJwwYeLJACZXszrnFO2QkAzU1D43MNjYlF/s2wacUm9LRnHUsqmEEdbgKTH+Q3GiipjJh//ux1ziHX0DGSfOXg7MtDlwRlSXX8x6svaltB/6P3yXTQ8sjosMi4wNjxZfWXXDK3rHlBwjtKuQrKadBSr886G4bBbCSTgkNhGJVm4zBtWdPlDaXJcWQI8b/MmDXJVrbI+SCDsilyeDJQJNG7P+0l4nF1uA0Kjx1Acl0GAfSUllUsFSQh5MDbbRoAIAMBhtbMdkjZqztXTQCAWNOxNbHyZk5ZbehT6b7U2u5VycV3fvGRr/7uByvP3LdO7AyGibJet1s2RlSPOS/0Cf+Z6+VRXNNeETC/EWSDSWgmhif7vNKSkLV/k3jmiTuX/SnaEpWFyAXLa7V550/JBMKAGZRRxAenjQqtlZCorRy9BED3UFJ7hjqxxHu39/YJHmySMz8UhwlQGkpHVChzun8z1h/LZBjduiDhYXJ5hV1SfqmbTt2DGMQ/33dp5PXFe9Zsey37PelGSACsgy7KxtrXAxCzZ9cenc3z1QJHwvZfjUcgoWCMwxHLUjtf0Omnf/PGt4mQRjxeALr2byNk/cY1DcLSIKZB+yAMAgkNxRI7N3YMeSO+IT9soydUPGH04Fzrg+MzGMyAHZKYc8qMY25b18fqJQP4u3848cJApETuepNb0Ayz7Q8VmVgsJl59bPevO7clO4IqaCddmPKxOO30D9RMjUbjZhBZbqqPQdXH6lU0inecDdDblQ6zJgBswuEA9r9pvfyb/1h86ut/2fAMM0Sh18GXVVkTIDw//D9g0/ugicVwQZqQ6nY2D/WzDhlA8rmQ9S/uNl7aBQ1i/gGBIZhhCCBjQEJiw/6dH8YxRkjevJp0csXlfV7vG4/89/Pboi25Od0NrWLTpk09HW3tiyIiyNpz3choOzjupMlXEIE7qi6zBgBABYATzfASzQkvHkd+aM0hCxe2KzOCGBAuwwvRjlXOz/ZvwoaFd821UMD9t3I0E7u80qoxRkCDacDTPsmA2J8bQ8JC1nEQiuD5/mdtRAEkH3br3Y5XOIM+AkkecOSbQCzAJA7MTB9dV10yHBrv3aSpIaEBKCGD0bZtexYD4HyUKrdJ3LY69bDbAyIB4ZA0p8wv/9pHPntW3R1f+XO25W+HfImZKdGc8CZMmBC6aOGEj175z3OvObfxxPnMB4b9Uf5y2L5l+4VCCkghAru3dLa/8vNNv47FYuLum1YUctd4aqS4rsaMgJs1Z2jtV1QPzEI6aFH4ORBBmQyc11fu2gf4Q1ZHHEBywyrx6nO9uzr3Z9mSigaeGSIAEoCA0UYak4VJ63MBhG69KHFMciHRlqgkAjf+5/nzrJCs6ljXcR8ArP2Jvzn5BOJLj+76c7IzudmygqrPTXLpBDPx9A+PWzLz8skfb2yM65yWeCs4QER81ddO+dJn7z531YUfP+V3p39oYvyyG05O3PSDBS+feE7VeGZGW2kfARDVk8QMD4ClFIJCLNnUuakHDa0CBVyD4s8+BKZcYY0vryknTzssBlxRyAByw5QAFmCZ6aKs2DnpZQCItwyd1hzSG5mZqb19HWd6sdMSCjxYfhD7Y+y1drhiVKBk+rmTJzIDiA0/QPKaomZU+PrerlTHUz/fupyZqZ+97ycQOzp6uvd6v48ISVJI7k4GTXBCdsLl/3DSr+s/evYFieaE1w8ktPCuuYqIxD9855z7zv5YzY94VPeJqaCrnXC79io63OkXV80558qZ3yEiumvucg+ojogAzXONB2KFvvaUixFQnJUPrkyapebICJVoGC3yU6sHBJH8vHvmgBJwUmLn0qVLOcdqHpFOer4upM9xnNUCBBIDRfrBKakEQcaQDpbK8ITZwTkAUH8MTK0cbUSJMF+b7XVbAHhv7XvV3JowzKBnf7v7fzvW9aZLpSWkMNSbSXtVM9hccMPEe0+JnlK35NYlXjQalbFYvbz7phXuJ2MN3z/1itpPpu1M1klpIz0hpWNJ15Wy3es0VeMjjSdPmlTe1NQg511WPbO8tqQ6y1mXhEQ66Y6IepC8/zZ+UvlEKyLhsedv4iChTQJGSgazWg2gb6jqQIYtigUAbOylg6quJEZ/501rRiBMqDuxeqK/2PXDa15FIYmIP/iFOWeGywNVbfv23NPfvDqIEJim1nr52qINmzp3eN8OshFQaU1Eqqs3i8ik7NQL6scvYubRjzzyW93U1Kov/+Lc6Kz5JV/uMV1uNlNhW7CEZQDBNiRbZFyNytoSe9blk0uamxPerPNGfSNSZStoNhJAJuNgJAkrOs9IF8Qqd6oHhm9/sGtOjEJ72/7tw/G8QwqQfHShbXPndjfpQQyU98/C/3MALwRSBp6i847Fps66uZ4AYMJJo/6+d7ern4i9voqIEI+/XSM2L0joGMfEkz/BnT3bxWbbtqVmYQJkib5Utzv1LLvuk/9W/2OtjU1ENHHOqNup1EjtaKmgyR/66UATgaUm5bocKOFIb1nqtk//26X/OeP8UdE+N2mECUpmxghpbEo5DRxGUM5hdkGeJbTQGNTcGH/AIbIZhYgILB3qCNaQAyQfydq0bs9qt49SgkjyYRSGMLPQzAiXlM4BEM4tNg3z5lplkcDf93U6TwBw3iV7y213/1Fu3ZrIbHkj/TsbNkHAaCGgCVaX26VPPL/m6i/cc8Ur33rko0+NnRka35tJGxJBwRAg8kDw/Mm4UNBsyZTuw5kfrPv41AWl/5IJdhhjjDACcKSAZlH48PBJiTzn7LNLI5HQRNfzckngQX4ICCSJnD44y59dP+QRrCEHSHMzmIjQ/WTb9p69Tq+yFB0O4ZBA5HoakXIxsW5OXSkRDVvf+FgsRkTEn7j5w+PCVsmo7Zt2/xqAebeba+yuFRoAurfiTrfdOEp6gg1D6RDYI5kVnWbMbJ4VmZhZkBWdbAjCsMrR8TjHQzP+MFOyoYULJ9Che9HlGa2EpS1Y2kCyBrMpeAe9Pke1GTOze164gkIe2CMCDca7FmxgmBlCyr79Xja9IeJHsOJDm/cZcqrJLU/PV3uAtCBruZAEEoMfgUwAacALVSM04VSaBwD1DRiWgqDm5mYDgNx9HXuX/XXVuXvWvPGHfFj3XS4GE22Jyj/8IrFpzwZnaUSFhICnhREQbIHYiHSq16TTGQ0CEUtIZgAOmAgGNpgMCC6kIQACpI20XKXIBMEECLhQhpBO6sCIcdCnl88MlEF4WvsB3sG0NicDEBlhC4DlqnXr1uXzSiObapJ3qzq7et44bKuIAM8zCJaymDKteuYxcNQ5Hn8h/dS9G19Ym0BfP53/nu+96fWeJq/b9qQiaJmFFgxDBJAlyISk0DakkRAwAPnz4fO5QYILwYDUFpQRkOzCCBeOcuFIwCCASLjizZHioJeUqnNIubkpxoOpJqT8FyYi9HR3bwTgrKkZ+qKwIQdI3hRJd4sXdMoAOcqJGNSocAYZCWFpBGv4nJyDM+zyt7hR7yTxxrgBgD/fufOlzh1ep7CF5JxPSiz8smLywMQwpH07gWXuHBgfKJAwZGAEQwsBLQBlDKS2AbJgPA+z6qY96y904QIj58PZdllktjYa0gkJQRkwBPyEML/n/gujwNIDOwIhbSeG652HHCB5R/311/audvo4JUCSCTzoEomco15SXj4bgH20y1kHdOj9pOCA2XWxxfUKaMsIZZ5T0noH85Lf+aY8tPlqzjPJRfdAAGtIYjgpxyQWraDhiOYcvhMHQUR84vwTpwXLrWmO67AgFofeMzSAKxKQQpDby84bq3dsBIC1Q+ygDwtAmpv9cMXqR7q3J3d7vQFl0cH2P4yBcnEIEK7DHCgJTDtx/uRpRMQYAX2gAJg9u/c7YHWEcTfONbEQYPJYEqtMt5Pu6cg+AwCJ1sLsBVyfy6DPOa9yTrgKtmajfVNS9mNtD2ARAZZCyfRezrqrR60ChpZiMpw+CN+yuF4Be9LCFcullGDJ2kANgmjg/6hrWIdHkX3qhZVz+i9+oUvX/jQJc6SPmr9UJJgMB2QAmW6xY+WfNyaHmm5xNBz02jGBuSLC8IzKRegGRx3TZIySFpQjVy1dutR30IehtdFwHjCzZ2fHesEEQwwmGlTXdwZDg2BFDGrHj57bf/ELXdJJcYRL3a8+BhIsYAQFUBKsWg4gNdR0iyOR2ftqGYAKR0LzNRkwB3LhXZELY/GA3h6CWJBE577OYXPQhw0gefs4leFFqVTWWEJCGJNz0sQAH5RBGuQSIVCSnQ9A5Ra/8IUJR5byZhgogAVsbSDZAsjDtk1tJYX93qDGxriunROpVqXeydo1EMYIJr+XGA0mJ0YM42iYvuFz0IcNIIkm3z7etbZjeabbTSsm5U8fHISJBQ3BEFmHEYqIk88+e051Y2Ncj4TmzZaNQVEq/tYtKnK3raYsGB5KApGlhfze+QThafUzziypCYS1Np4gQzzIPpvMYCVIOkmd2r+pN/fOCXPcACTHUqZlf9jcm9qHnQFLQZPhgcfCc11OhCFjXC9SVRqevmDimf03oZDFDuBA4dfhLqCAC8Agowhka8rs19i+et+zwDuQJgvM/xg3uWR+oDQkjD68NWBm2FJRzx7T+/yT23bmgz/HD0AOUt9TulcsVSTAgsxgPMsDzE/NEBGI0klO/UjxQ8KRIHCkGiTXZE2Tp0tVldy30Wl94p7lL7S0RGWh1qDnTGCrZJS8wBMeDlvbS2glJUzWXr5nz560Hz4/vgBywGZ00/sTxnHBgt7Kah+Am68ALYQrMjAy+zEAgWORDxmslJeW4shKxdk/JSw4HGBObyO94sndMSKYuN/BpGD9j/q5c8sjZdbJaZ0GWIjDfXvBwJ4de9ZjmGvuhw0g+aTOqy/sfTPZZTwlfbbRQGNYBgpMBpIhMq7hijGBCed9cMYUIuJCn4sRqrRgjvDC07BglKuDJqReS+z60UuPvb7kllvqVaFqjwMExcvo4shoO6w9n6A44LuQDmpOKQjZPjbpzvSi/kGf4wogedbli4/OeTm137QHJEkXzANTIQyGAksHggw8o3S4VgVOqR93Vm47ChogJaOlMUIAhz0ljMEMXRIMqM3Lu5c8evvL34gtrlfNBTwoNG/6lowKX45SFsIbuKvot1T1CfHEhqWE6ttP6U1PRZb3D/ocXybWAerFX9Nu2rxkCQtCeHqgTrpghtS5xzUOZACQZYHLAYiCbESLA21uBLsygiPoK8wMDgeZOt7Q6Sd//8o/koBGa2Jwo4OHWXKmb6C6OnyWcQwY7oDPmmCCYgPBgJGesWwBrfXLq1cvax+uBOGxAMgB7en0RZYIT/ok9gHHcQwE+10whGbpuC5EBV+MGoSPVaeTga5xNu2Ecyf9sJ6RBWlbSOF0Ot/ZvKh3/S2L6lVzc+H2v8qXKJ/TOHVeoIqmG1drgh7wWfN7mHgAEzyhWUKhfXvmTQDecCUIjwlA1v7ET+x1tuFZt9e4SliDKCzTPquVCIokGQ+6YoJVft3CC09hBqIt0YIzs9a07iUAXnl1ZK+P8sMLZQkBZFOEvdt7t4BBBUtMzEm+RPnkBXVnBWsVsecyaODDzDhfAQQJlhImJeHtt4Y1QXhMABKPxw0RIf7/lr22d1dHt5K2NAPNGRH7FBX41EX2JNulsEprQ9cAB9vyFKJk0ll52IO8GRCCyclIZ/2a9H4QuHZtoqAZBLnwrlAB72pPMsCa/BqQAZoYwg/LMBOEDMruPansiifWPA8AzcOUIDxWJlauQ/m+VO8eWiwtCUgzMDuLJcgofyQCDAyzMOwBFd6VKPBwb9eenkHpDs518ycmeMQMxTKzP5MOP181LGWmRyQxiMbGuJ694IS6kkp7npfVrBGUGMSEMWIDAwUjtA5Jm3r3usvXvbZrfQtHJZpxXAPkwIy/fW1OXKccI6Q5rOgOAcLNerqqNlx3aePseUTEuYKmgpO9O3qzZAbDJ/T9byIDIm1CsgR9HZkNS9uXZls4WrDERB8ffkRx1jljrqwcqwKe9rQ/K9YbxN7m6l6kw9JV6O3O/BYA50xWHNcAyddyv/zHXYs7NyezthSKD2fDCTAaXDLKiDEnh67ub/sWjOTs5TE1E/8Ed+BDXvJBGgMNJQjcGTIdu7L/D4BTqHnBA+ZVk29eVY8JXo1AGoaZCAKD0yD+CigJmdrN2U0rk4/565kwxz1AAHALR2Xb+rbuzm3O8wEVAsiYw7HR2UC45CI8NlyQZlben1y/cnOf2+exkDTAq4D8kltiHQoE5da17S/E/3PZQy0tURlvjBcucyAG0UhxPXFuTV3ZWDkv7RgmGAl4ufqPgQKEYUA6YIcpvZ+XL31ozeaWlqg8FpG7YxL5+XHTXgLgJnvEjzNpA5J0WN1rBFhkXNLlE8J1FzROLTgzqzWX0Cqzy5eya3ooNwTivZHv12ozSYYWSPe6v2EGrSngQER/82reJZOurBgvA44b1kQaIBcY1IxKA5Bi9gLoae/9LQBzrN79mAAkb2Y9/9jaRO8Opz1gCeVB+QUf+brrgdw0JMCe4UgtibqzagrOzMorxaceX+P0dXpGSoEBJQzJ9Rt3k4WMp2Es3kEELvTwbm6SlhhVF74aQQa5mogHf1/5TZCVTO5xspte3nvMzKtjBhDksuq73uht797pJmwpQcrVyDtnA9SkDAYZFhoalTVVVwKTg4VmZhEROjd1ip52xxZCYGDEmry/okESsGRAocAllotenbdgdl11bem8VMZlCSMPXngDP99MrIMBUM/uzPLFx9C8OpYAwdpcNWBvu/qJ1y2NEClio/wEEQ20s6gBIISbNnrUWKpr/GroNH82ecGYWfyQuUYC6KuoLlshBIEGVBiSm5nDGdhKoKa2QgEFTu1v8M2rky6JXFk+RgSMZg1xOMqcQAIsXMa+bWnfvFpz7EzLYwaQeGNcM4Me+o/OJb27xeagZUuGNnxIx5MBLCYANsx2lRY102uuB4BZNYVjZuVCk25pWWiHn9x474wI52eCM4ME0NW+76NAYVdO5jR3UFUGvqAtB2wO72wxM5SUsmc7ua88vf0xYPiTgwUBEABoaq2XwAq3fbf7mKISkMz6CzFgh04CMCCjZcYFAmXqE+PGlVbfuqDwuFmZVHbALUL9IKcBs5Jpj1E2Sl4ydWplWW4EXMEBJc+9uuSGmaeNmlpel3ZZC9DhnS0y2goq2r9TLtm4dPvmY5EcLBiA5EtF31ix67epfZ4RyiKC9LubD8BSR85WlzCU9eBVTQqXfeBzp9cz/Im0hXSIApFAduA/bXKVZIo8z3hVU8NV59x0wt8TgWOLC6/EOBcYoSlzyq6PjDJCe4IHXgnHuQGd0teYEuz1Sd7f3vsTACYX8cT7EiDxODQz07MPrlretTm5SVmlkg0ZAXcA1Zl50omAYgLYIx0BVYyJ3AxAfGF2YXQ8yVHerY5kaoLfHfG9aQN0oFqfIFxPODLLtXUl/1o1ITQ+F80pJGIm3XpRwqucOrWspLb8Ey6nIIyRAy1jADGYPAASxB7bFlT3RvQs+uUrCaJ3bxJ+3APEN7MaJIBsZ7t7pzJZsPKM4dCAKP8EhoD2qw1Zyqyb1uFacfEZH5l8VmNjXBdAToSupYc1gJLert65RnPewRhMFEy4Wa3HTC4ff9lnzvh2czNMbHHhFIjFYvWSGaj/aOUnaqcFytIuPIhBZH1ZgVjBkIanHK1UGMku/WDvrt72W54evtrzggVIcy6+/cwftvwuuTPVbdtKaKYBsk/8xmMGCkQGnsdcMoEx+/xx1wOgY54TYT8UfcHlJ6N6bMTRWg+qm+QB0ZAZ0atHzwpdP/6kUSc2X5TwCqXtaj73MX5a9fUm0kdaD5gucOCaE4bA0BCWotRuYdas2nHIBOH3NUDg34hq24t7NndvM08FhC1Yaj1wX1TAkIAgF5ajpKs1KsaXfmLq1Kllx7qQKr+73/n5N5xgiQIbc1gPQ4IomzVcNT4QOe8jJ5wHPpi1PtbOeWNjXJ8XnXZ21RR1VtIxWhklBQ+8WyaTlw9K6KBVKpNt5sXn7n3txWiBdGspiFsonxPZ+aa+M92TNVJyv0Kq91hslr69zh4stsjNCq/mBLvstOuqP8EMHEuntrHRX99/ven/m+vpbAn8JPHhAdYoWLZgO+J9AAAKocw4r6FPn193XWSMKzw3yP6w5oFf/EzaN5WFYDiK92zruA+AKZT6noIAiJ8TYXr0R88v2bc1sylkWZJZGEBAsQbBwJB8ZycPBgIumINwpQtjHCLbpUnTKq7vD75jIXv35sAQ0BME2DrcikLfXddwpKGxs8oLw/+IQdx6UcKbcvqUyXaN9amUyZiQYyQAeINgLUttw2PByibVvjnds+zx1x8E+cNQiwB5u7Pudmw3dwpjw1hZo0XOv2CB9+5t6ycXiUimM66uGhs66+qvzGiIH0tnPTcFq3bMKEcpBR5ct9VDjBFiQ34rHGscAOtY9yWOoV4wg+acX/svoyaVhLOOMSBBfojaDBj4TAQjtQ5KCz179YObVnT2xArAOS84gDS3JgwIeP63237XsS3TbdkkDHvMuaFOg2ndaTyCVZ0VlXW1MQAiGo0e03crH1VFQokjaWwCNiTYY3TtT80FUNJ4bfxYJg3p1luXeJWVlWUTTwl/Qqs+hlbSkH+RCQYGGuY10JBKUl+bxuqlb94HgAuplWrhxNObYWJP16ttr27bvGtd71MRqhKCPA3iXGR04GdBMsukm9ajppY2nH7FtLOPVcg37yaUlIdyk8aOdN8ZwYjtAOV8LO9XP7TLuODTJ3xi7Kyysqyb1BKSjD9oEwOmCvmj+HQ4EJE9u8WiF1u2vlhorVQLqhNI/uZ45bk9d/btFAgqScRe7jEH/qgKGo4b5tIJAvUfrLmuv0N5LKSqqgpCEfgIAEIgGAaUrWjy5CnHeKcaDAB7bF3lN8gmgiOFNJyb7S5z9SwDA7xFijMpB5vXdd8JwPx4TWHVvBQUQOJx6JaWqHz9z5sWdbbtWWQHQtKFpX21PfBLRQuG0AGZcdImMiHwqbOvmjGluSGhhz13kFMhFZUBVsS5Ucb+HyMYRtCgAKK0hmQCKioGFOAbCom2RGVzc7O54T/OP2/iHHtyJpvURFIwiVyvZf6bYPAHJ/kltcQEw8aokCU7N6Y2//H/LX0qFouJRIF1iyy4XlL5G2TD6l13Ol0KwjLsUxEGLoYUBDnkOTClE8vCJ583/psgcKzh2OQO+rJsE9TBzixGQRoacEMXgOAJF9rOAspAqr5jbqNXja2KyVIj2GgwYUDUIILfsJyJ/XEWig2Mos6t3h0AutHQKlBgDSkKDiCJ5oSOxWLiyR9vfGrv631bIgFPuqSNGYQLQUZBIAMYkinXNdV1oetn1E+e0tTQqo9FBnrZklcvY/I8pqzWAmBIEFPOmR2QKcJSWITecnjtIamwy8JA/eCjrD3i18b11d8+taFigmlIZVxNkHJgEAekIRAYTAYGmoO2EPvXp1J/+NXGR5lBzQsSBdfOqBCbPjPQKgB071q/9zZkwkRKmEGfBjKQJMnxXFM+VUXOumLSN4nomGgR6WFUeTCigsFQgIULV2XhSoJH9gCgAQgF9rqU+/TPNly/5L7XL+pMexkcKyOLQeOmVcdkVRaeN7hAmg8On4YpIHWAysTejd33dm/Yu8kvfUARIAMKaOW0yO9/uOa+3VvMlqAVkmx4EH1jXJCxfb/FsMx4aTNpaun1p501adZwapF8q1Xpqf/bu9qK066a39nJUmMzg+GA3zZhi/AO08mYiIRCoPeZX6194JWl65bve31f37HwPeKNcf0P3z67vnpKsKEvzVqCJHig5dH+SANDADNxUEZEx7Zscs0L229jBjW3JgqyGV6hjg3gnD2a7N6Xus3SFpHSJmfFIl9D8LduL38Gnl//LYnIddiUTxSREy8d/10i4uHiMcXjfouex+9+Md788V813nLVg3+X3OYtiwQirAxrQW5umGXe9MiALU2GmAFz8G1ZswggeNENp82KxSBitwz/vuUySVbNjJJmq9xlcm1/qs0gFDsT+z2vCNq2bNG5K3nfqr/s2dLUWn9Mi6JGIkDQvCChYzGINbetv7d7q7dVhaCYjSEWByru/qYCYQUm7Q9hYQIZlj0mZaafN/riBVfOm9HU5H/2cL1LLAYR+7/6IHNMrFu76YGsq0giyEyAFtqvxDWAlBZMd6kWXpggPD+0S0QQrpbwwi56Tmpuhmkd5n2rj9Wrxsa4XvCZ0z5bPiUyP5PO6IAxUtPAm2Jy3j4zYGmz6NybTO15Ln0bClh7FDRAfC1SL1a0taU2r+r6VUhH2Kis0ULDwPLLcskbkBlOBPKygstqTfmUecGfEoFnz44Om4vb3AzT/OlEtqkJ+ONvuu/p3t67ORAkZbQyymgYygKWZdzOcm/ZI/s+0LU5/YeSUAQeHE3wmQF2SQBTT5o4HgAachSWYRKq9SntkZPPGf9NETTsaSUM+fywAX8IaX+cgTI6aAepZzfd8+hDy7bEClh7FDpA0LwgoZlBm//Sdtv+9V5PQIWkYY+ZBMAKYhBuiWAhU163nnhGpOH8f5jdcO21cT3M3U98s7GtLbXjjf2/E2SDSBphLBhmlgESHTv2pxf//Pmn1z63/edep4K0hd+E0whwAEAQlw73nsVi9TLeGNfXfve862tnW1NSTp8mUsIQ+xbWQDtF5pwrpWzq3Wbo6YdXP0BUuBN6RwRAAHBTa71csWJTz96t2e8HUE5SGk3k5lS7GMSLMjxHwB5n+LT5E5qZYUUxvBytnClBK5/Z8uPdu1JJpSCZJTMJCCYYY7iqqqpsZeveRPt2p1MoW8EQkyaZYQclVdY8AOFbL1oyXHUuAk0NpuqcqvETT6r5tqfSRmgjAAMjDIjVAB+DAVYwZHSJLJUdG7yH3vjL1mUPPVS4E3pHCkDQvCBhmIGH733+nq4t2Z0RyxLMjsmRpQd8TgQAYZTszXp6/Ew1/7LPnPLZxsa4ro/VD19TNn+2N29YpPYluzxXKI8MNMgICLbhebbT0dGhOjd1dvf0pBcpaYMFayJJrpfVFbXB6vnR009mZkSjQ793C++aK5up2Vx+xYxvV9SJ8emMNpKlIDa5OYLvtv6MfsO7YViytCWldmeS7eucrxPBrFkT50I/fwUPEACmqbVepjekd7758o57GSFhyDIHzKsBlli4wqd32BkWbiTD0xdM+CYwIdTa1GAwjCk3v0l3u7QzrI0iGDJQZGltZTF1WvkzADoBILnZbTG9DC/gP55yNEcqLFU9254PALNmDS23LBaD+NnnVrhXRufNmHZKzfVp062lgWSSACSEAfJjGt4erfInRBE8CBYQxp/1EbZKROfmzH2/+3lixy1PF/YYuZEEEDQvSOhoNCqf+fOuf2/f7G2J2JY0lDZ+lGpwryDIEqmsq8eeUD7lH75d929EzWYYqw5zA4TQbavA0wFhgSQ0g0EEZNIZFwALQXjut2sWte/qaQ9KS4ENMzNgeageWzIXwJBXFM6eHSVmWOMvCN8dGouISbsY6BhngslVetowBHgiywHbFb1bveRLi7bfxswFHbkacQABwLNm7aU9r+5J7nyt5zbblURSG7/+YGAaJF+jYCABrWSa203dvLLPL4jOm3HrRUuGrwlCq/8+7TuzcU5KSMr1rWWJ3g6HAOD2Nz4Y2LGjpyMUCS+xhYIUWjMxeSKLyopIDQAr105oSCQf1r3sMyd8dswZJfM73T7PMnLAlwix758wbBhhYKSjIyos2tbuv2/Zo+u2NLU2FHTkaiQCxM+uc0w89G9L79uxpndHyC6XMMYMnG3hX35aGEhIcp0sRyYiOP2CUXczszVcFJT8bPPFD725qHN7ut1WSgEewwh0tafo0M2RLkAw5EEbKYwh7N3Vfi6A0mvFw0NVMEUNTQ1mwoRzQqddNOWbJshsPEtgMFy4A3rEAOxyWJaKves4/cIfXh9R2mNEAQQAr42vJQDJN9emvu6liCzp8cBfgXweELlQhmGZoExm0u7EM6z5H/nS2Z9tXpDwYsPjsHNscb3asXZHh5dxEtKyANJGkEB3V9rp/4PJZEoCDC0MjLCNJBuVYwLLAPTmmmIfdS0SW1wvm6nZXPEN+W+lMyJTsmlX2+wKPZhWV7k/glxIcnWAS8Qbq9p/um5Z94jSHiMNIIg3xnVLS1T+6YfLH9q/PtsaDAeER0YLo3wKg9C58C+947b59Qrk84GIobWQJpjVsxvGfnvWh2eNWTu7loeT7dv2Zg8JI8GwANY4Ze60xwEAG08EAPRu9TICGh4CEEKzhED71vQWAO5QzOuLtkA2X5TwFtx84vwxM8q/nHazHkFLc2BdBwiQnJPuQRsrVCb3bOzasurBtm/HOCYKpRnDcQkQAIgjDmbQa8/tak7tEaQsA0M6F3YcQKsgFjninIGEEOmkQXmdO/7ci2t/GG+M64Xj5g5b8pA4uMXnYSmwcaGzWQcANmIDAMA2gb8ahwGyIQnIdrq85dX2J4ADw1CP6uNEEQUYwZPPnHR3oDIgdcYVICZmhcH0YzGQYHKhpDCctenVl3betmPHjnRrU+HVexx/AGmEjsejInHvmta21dmHSqyI9GRGa8EQxoIwgzEFDCSR7Mv0epPPCDV+5J/ObLz7phXucOVGzv/AKQnkSri11mjv6iAA2L1sGwPAyhVvbEp3s6sEUYACqmtXuueZP6x/CqCj3rN24V1zVWNjXP/Dv5//72Nnl87ozfR4QhkhGJC5CsCBryvBgHV5ICDb1/UseeqO13/e0hKVieaEN9LO24gDCAA0rokzM9NLf1z39c71Jh2yI9DwWOQGjDMNbLYISIPhQWcqBZdqfdIFtT+cdMGkqa1Nw0OJ7+7qCzAzCH69unb8M185LsQA0Pd65pVkt9tHMFIJoGefw+iFJ46ycRWNQt590wr36s+ddOHUeRVf7uGkB/L8jnwQQP8+fgNZWfJgiwpOtYFeXbQ5RgQ3XujjeY8ngKAZpqmpQb6W2LmjcyO+bZlySdLVgr1++dv3vucYAkYwLNIinTSomIoxDVdMvoeIRC6qNaTJOPkWp9Ycck0T1q7dZ2d7XZJCw5AHYUkMwTOJaEsU4ZrwmAnnTbxHVmnhZbUASSKWICOhhV/HMXAby9Eh21YbXu5tSfxqa+tIoJQcXwDBwbDvz2554qe71nWsKw0EpUHWgExuEP1AMJLrliJ6IUCyL510Z1xQdeGV3zj9y7mo1pD6I+UVJVmQP1XJJgu1tTXZ/gCeMWOGGy6NsAHDsIYdzv0XPnpmfGxxvWikuP67r8/64ag5amoqxdpmIcjIQzXHe2plAiDBbEwkFET3zt6dzy3b9pUYx0TjCKCUHHcAwcGwb3r/ax2f444wsa2YWQ7YoSQwhBEwsPwaE0cpR6X07PPG/vsHb5w349Zbl3hDVjcSg3jmyZUNvlPLsAVh3+6+aQAwdtdUAkCzL6qpCVUFbM+QIQZCEUb5JNDROm3RlqhsXpDwPvrP598w/ewJjZlMyrM1lK/I8uWxDMGco5a8U8RKQLAfHtFEEJK15ZTKzS/2/NvWJ7buRlOrGElh3eMJIAfCvg/994rWza8mH7JDlZKZtThMbU4C5KQNlUwUwRPODT3KzNbspigdNbMmBhGL1auPNMwgNMP0derxgiWYPHjKQ09314XRaFSWnNdlERFziXOVVeZFwJ5nPIlIeYT/9Xv/7LxXoG5AjxKDePjah/W8K6fMmHlm4Gci6GmdKZMksv4Y6oGO4ubcCArhQFPGRIIl1oZlnese+o+l9/nTaRN6JJ+xEQ0QAGhs9B32Jx/b/vW9b3SnI2EPrNVhHx8hhOhOZ/SEM+wZn/6vs37WSHF9FLha1NLiz9prbk548+hud8p5U2aMPsmMZySZYUiTjcnTJ+t4PK6/8cG/JplZja4r/RKkw/C0AkkNgZL77n9oLgBEG49o72h2U5SY2TrtkimPVp1AVm86RaSy5IfLB9Mal8EkYGA4aNkm2ab0que2LCRCMueY80g+XwojX0xTU4Pamdi4Y8up6tvjJk7/gbGyHhlWh3fxMyxDsjcrvCnnjL4h+q3zFzcvSNxbH6tXAwxTUv6GjzZGxayb91LzRQmvsTGuR9WNmn7F5+dcUTvBXClUxbmhMWk7mellMkHLOBJJr/PSWVdN/sQ5F86sCZeLa0bPCNSl+7pYCCEc0p5lw6qZUDqJGTTvprkCvOKtA0cGdBgX3jVXNVLc/cStF/3ihLPLZ3T1dWsphQRlwMbK3ZsDs4r8mnkBwNJhVKq1r+y5/aVHtiyJLa5XzQtGXlj3nTdz5AvFFtfL5gUJvuFHFz19woWB+aluRwtBcrD3FwMIsEGaLBZhYcR2bbYuSs25/8fPro9G8bZoTCwWE7kGE5jdUMvXiof1253oseHPxmZ8r2yWuqlsalmYZQ+QLIHWfWykR2QCfnsG7oVxqlBSpuAJg0ymi6UJkqEsPGV5pSak2ldELr/9n379xKFhVf8ftyyaf8iFN3tfLTc2xg953vrF9SqxIOF9/JZzbph1Sc09WdntwQ0riAyYgwAMiFyAB6hFiKG1ZSIltti7Nr3ujhv+elpLS9RtbIybka49jieAIBqFfPi3pE+YO37+x74282l7WpCzmZQMa0lMBq70HfIBLQoxDCQ0e6YqbGP/64Etd3/3z5f+0/pvbUFTM96jjqEMgLjs05dZKWvXhWMmVVwwaUb4ilGTAidmOIWsazwYImIhBBkCPBxgkZNmKZV2jQE0iIgk5WamM4wuUZXy5T/v+vUEceqXS9Fpfv/7F82qVT0MdBKAJAD33d4rrwVnXFZ3zZWfmxMvGdflZVNKEil/bAFEv6AzDXCdNLMd1nYP0Su/X3/RY3duWBK9BiM2rHvcAsS/zetVc3PCu/pf5n517pXjftCFlKeMq4RRueq3QYwmhgUWHoCkVxmsVeuXJp/52Veemp8zHXS0JSrijXF9xZfO/cKpH6y+wCWplZCBtk17LgiX2qqiMiiEJaoC5QJZ2YeM62SFF5QHp4fnDyH1O48EGD50jmGuy5ERHiA8qGREBXRJp+M6OpXuJSerTDqVJaVoz+hJVa/2dPbJdFfWZHtTom93etNvn15zC1bAi0YhZrWA/+/M2inX/NMpS6tmhGvSvSmQZMGHewyYoKXwysJQ6xb13X7vN5/72vFiWh2XAOlvan3+f+qfnnRBZH57plvbJiKFMQPOBhO5YLZhSAAiC4LnlVs16rW/7Ln3gVuWfmrhXXMtALj7phXul2770BdOvdr63w6XIAgQxoH2QtCcAWsP2mUQB0FCAOQgP9s9j1Xuh493urf5wFcCSELAg5AGRhBYECyhISAgSPjVigZgIxAK2dj1chd+dONT1T096Mgf3K/87ANLxpwhLuxOd3mWV64MMQ53Mpxh8k2r1V3rfvSp544r0+p4ctIPPU+tCUOCzLOPbl344dppr4WnlYtM2mWbcjyUAeoPkAviIFiHwWxUD3V7JzWMuuFzP7h88U9vevzeL/3wsgAAbFj15ovj5sz+tRsIGTftSu1p4XoWtAcADhEJCFaQBgCs/iFlSCkhpDn4W4mgpPU2H1lKCSkkCBIMF0yGGb5WzCB7AFiSoLdv7jilL5UabdsSpgubQ1NGZ7tX7SYi8j7/o4b7xp1uXdiZSnqSg8qQd1CLDX6lORgk4+4x/MqTHQtByMTjcXk8geN41CC+P5Jrkxn953NumHNl7T0pu8eTmaAiMTDNz0QAtE+PhwLDwJBhZQtt9QTUC7/ffv0TP3n1/gI1JywAkdzfU7HF9aZ5QcK79utn3XPa1eNu6DQ9nvKglAnClQ4IPCgion9oCFoYLxIIqVd/v/v2ln9f/rW8eXu8naXjEiAAkD+8n/nvsx+atqCisbtXezaTMgQIeGBieKTwzm2xc2Ww+bs51+ZUa8mhsDCpNsin7n09uuJ32x6OxmbZ0abZeijqMw5HvnvxkgOHVOuHJFGjXviDy2+YfIa5J2O5ruuRJWEgWEILM4i0vP96RjowmnVVqExuWdm35M6FrRfFFtdTrs6Dj7dzpI5XgDQvSJiWlqj81Bce/8rnaufPq55h1fUlswbCFsIQBBuQkHjn4aB8qOnBCoAHJV3qywgqG6fM5dfN+9+Tpp664oHmP2zeixpVQFRuAoBobJZF1OhE/+msT06YLe7JBNOezgilcnUzhsygOCsEA4aApwNcEhLYvz7rPvvrtoVEpNGaEMcjOABA4vgVBtaKVS+5vWXlZa+MnVR6gyw3Jms8QZAkjfT5VwM8JZSb/81CUNZLc8koq9Qq4yvdzuxjS3/5akd9rF5tTWwtCM7RwrvmWvd//VX3guunXzfv8on3ozqlnYyRgo6MKM/kQamQlumAenXx7s8885vXFkVbovInX1xrjtdDdDwDBGvXghcunGu1/OLlzeGqQMW0OePPdyjpgT2/RQe5gxgQKvx+wBCAUJT2Urq0RlSNG1Nx5fZdqcdefXBNQYBk4cK51t3NK9zTP1J33UWN0++3J2Z0Ki2FIpvoSDiD/mgor8Im9eri7fc+8h+vNMcW16ufXPGEPp7P0HENEABYsaKNY4vr1c+/8NKT00+ZNmvMtNKTM7rHIw7k4v8DvVQFWAAEDcESkm2RdTNe2cRQ9YRxtVfufmPHY68+sqmjvh5q69Zjw15duHCudffdK9w5H6677gOfnHl/WZ2n+1IslJDkF5MN5rEODTpraF0WKVdbnu9Yf++/LP9QC0fpi3VPmOP9/Agc/8JoTRhmNvf9cPEX96zu2lQaLBeOEcYn5dGh/gb4XQ6MByIPgjUEMyQHVWfS9cafruo+8s9nLyo/hesSCXj19cPv2x0Ax6Xjr/vAdSfcXz6VdF/SERYpEkwgkR6kG6NygDIwDBMKBkX3tsye1YkdH4pxTK9pig+8Nq2oQQpbEglwa2uz2rDS7TVu5pWxU0bdaNcwa0eDBAhEBzBC7xLgo3xRENGBWgmLpejzMl7t5NLqEyZNurJtXftjr76cHVZza+FdB82qS66feX/ViUon+7JCSosOUkcGsdUH/DIJNsRWUGjqDmB5fOeNT/9m3XMA5L3NW/X74ey8LwACAFu3wtTH6tXSn63eMnpa+abxU0qv0jYMNBORJspfhkSgAZtdDIIDIhJpN+2NGVtVPXH66Cs7Ovsee/m+4fFJFt4117r7phXueR+vu+6ia0+8v3Iq6b6+jJBS0eFe8AIujHTgcQmkhFeCkPXcYzt/+Oe7Xr594V1zrUe+/rz3fjk37xuAAMDWxFaz8K651gPfevmV2rqaiskzKs/3dNYjQB4cZCwHARBAgAC2wRAiZXq8yomh6inTRl9ZXVH12JO3L+2IxepVYohAEo1F7fu//pT7kS/Ou+6sKyfeH5pkdF/KFUrKI4pW+U0kQjCq16sMRKytL7j3/7ppyRcW3jVX3X3TCu/9dGYI7z+h3Eab6//z/MWzLx5zYV+yx2XhWn4gV+Wq5Ab6aQYwAYAMWDjwwF55KKiyO8o3v7ksfcWv/uOxtUOQcacWjopGiusbvvvBT0453bqPalydzDjCIot8C+lwMekTNQ3Dqywh1faa+8ztn35qPnNMEDW/L/yO95uT/rYTMHbXCs3M5r7/eO5T61/evbkkEra0Ie2bV4OL9DB5gMhCwIUwBrYJqK4+19jju+qmzDPLL/30qdc1L0h4scVHqddWDII5Ro0U1zf9x4e/OvU8+z6qTpl0xhEKYRKsB1Uye7CT7kFfxeGsKSnRonOjtem3P371UzGGaGpqxvsNHO87E6u/0w40iyVPosPL9Dw26cSaK0OjA1XpjDEBeORPYqUBHS5igXwaMV9PoYgp4xhjVyl7XF3V35140qQtt9/w9CstHJVxrCUkDu+gxWIxseTWhGlqSvB13zv//hPrS7/hWn3acUhIQUSDqOU4+PwSglwQPAAWPCYTiTC6N4bM1me985Y+umpj7eyoOJ6TgUWA/A2Q1Mfq1Yu/XNdx2plzHwtHMh8PlopI2rPYb884mBv40FCxZIAQpIzncKA0Y2rHVPxd1biyqc2XPvkILSGORqNy7dq1PDhw1Kvm5ns1QqEJX//FpXdNOTf0iR7juOySEtSfQz84di6RAyYDIAyjbVahJLAvLJ55ZNMNf/rF84tjsXr1ky8+od+v5+R9C5ADTvvCudad//lUuyXVlvFTaq+lyoxxXSaFw6dlHHDyJcjjrNB2UtfNHH367LPrZr7w3IZla1es7R6M877wrrnWD77+vHfpdafUXXnzjNbRpwQv7M6kPBhtiSNyJRkQBsxhaHY5EHA9lS6n9c+3f+rxO155ILa4XjV/OuG9n88IoSgHmL+f+Hb9J2csCN3HEdfNpqFEPkcy6EX1z73JlcQbMEhqrzQcVjtWpDaveKzzihcfW7k25/iad/M3Wpqi1EhxfdmXT//4GZdO+37J2OSEnnS3p3RYKWPDle4RuAYMQMCYIKxA0gnroL12cfZr992y6PZobJYdb17rvN/PRhEg/W7pu29a4X75Pz9yQ805dE/GTnqcJUXicI6d9Ckp0DkmsJ9Y1OR5JeGg6tikUxue2/35x3746n0tLVG5Zk2c31rn3r+Lyke/de4PTr6o7KuqgpDpM0YoVzAUmAXEEZV+E2AIFEi7IYy2lsa33v/47S99euFdc0UunMtFgBTlgCxeXK8WLEh4n/6vi78645zyH6SsLs/xjFIQIGPB0EAPo++sE3TO3CIwGMwSGp4JBSG4twSvLN1636OxVTcAB4u8cDAM7ZZPH113zc0zfzHt7PIFKe4zxtEQZAtmBSMcgDCIbvbCJ2aKDIgZxDbYEHTAccup0nrlibYHWr77wieZWRARF8FRBMi7guSqr86955xram9Iket6jm1Jkcn1fzp88Yt+NVgzKxnksB0Wu1/vXPzk/W9+ce3T29a2cFReKx/WbBjnNk7++PlX1X2/dkZ4Qk/Kc42Wll8ROdhIVT/QkgcmD2zCIAak1eOGrNHWa3/pfODX32n9ZAu3yEZqNEVwFAHyrmuSv8Gv/Pqp951z1ZRPpmXSdTzPUqyOaKmZCATX1yeGQCR1uETK9g2Z1JsvpG7+/f+8dC+A0NX/eu73Zp1T9bVQbS9602FPsFCQvX5C8rBFA2RgEIBhhpLGLbEi1rq/dj5wz78+88kWjspGihfBUQTIwNaFOSqI4vryr5163wVXj/1kGo7nOUKR4MNeNr/02xxIyjEENEsdCUBSKoi1q9oftIWaPvPc8nlJL2VcR0GQJYgyfjM3Yx1+XI08ENvwWEHZHW6ZqLVWtaYfeOBbTxbBUQTIkYHkiq+cfs/5H5tyQ9Lu0SZLQog835UwuF5beHsCki0wOywlwY6AtLHhphxNhqSfe0yBOQBwEARnEL+L+j0fgyBhmCED2omYSnv1U7seeCD2fBEcA/Ami/K3LnyKmxaOyj/+8JVPtW3wPhXMlEo75BoHzEwChP6UDtMPAPTu1xH3+xnKQhCIDVOmV2inL2MEs/Tz8xrEyqefU3YQj+7XchBlQSzAbMNhZhFwdUgH7KWPbru/CI4iQI4KSHLd3dWP/vEP9+56wbke3RFpR4xxjT8Qyh8tzQfMJk3ibzSoI4Ap10qIc5EkHKCq+OlFIwUJ4TdV8E0wZgtk5OBa8+SCCf5TSWjWxgow2+lqufkZ72uP3fbS9cwxUQTHe4ssLsF7S+Jenyb/068ueaWiavSbNZWlV4erNCU9YUj63C3kqhMF6xxYjp31KsgBIwCPgvAoaUqCLKgjQjtXONf/7P/7y10tHJVz6CfFUG4RIEdPVvyxzSy8a671q+8sW+k4WFc3vfacSA2Xu5msFpDCX0oCHUjcHTuAEDSYCC4ypjxki8yOSHrZ49tujN/27APR2Cz7eOqdWwRIgYEkFqtXv/rpy68GIpW/r4jIK0eNra5yHOMxeQJk/J6ix9hy1SQAGLc6WKZSWwKb17/Q2/CH/31hUWxxvfrJp5e7xZ0sRrGGVOYunGutuHuFO3p6oO4DnzvrjyefXzur291jPCOERDBXcGX6xZRoCBdaAOQ3NSQWMIbBtnDLAqXW5uc6Nr/w8KaLX31m2+bjtTVoUYMUoLStaDOxWEw8/siizlf/su2e8TPKJtZOqDxNBEh7LvtRKWIQ+YMwWYghAwlDHGiyYBjGCsCUUERtW5b6zV1fWfSJPdu6t/nN3d6/lPWiBjlGEotBfPe7ZIxh3PTfV15fNd29NzDOQzppPMtI5S+wAZH2230eVdPLb7BtwYFnKuEK7YWCWjmdAbzy5Lbb//SDlV8jItxyC4vmETxltgiQ42AN8/Xhp3xs8scvjc74/qgZ1oTedNplTZY//sCPpvIQ+CbMBpBwSyNBq2OT3vHiEzu+kfjlmt/kchyH2npFKQLkmGmTXE3JpEmBug98/axfTJ07ekGGkibtpSHIFoL9EPBRdcaZjbQFIqJU7FqVXPzkL1Z+Zv2LezbnqfvFXSkCpKCkfw3HP/7Xh786err1g9CEDHrTGU0mIAUdpcucAUPGC4cDKrtbYv3zPbe3/PuSr731GYpSdNILSrYmthrEILg1Rlde8PPnvUBmSXXJ2DOrx4ZGu9RtjLZYQBGRB5DOsXvffkcZyjWNoFwlCfn9tyQruGxYBFxTHqxQe99wN69esu3q3//38rtiHBMJJGjr+6TjYVGDjHgH/kBYNXzdv13wk6lnjLpB1aSRziQ9csuVgATJLhhWeGve5ECyMVeNCAI0DLT0vFI7pLhLYPMrHQ/+X+z5byGD7UWTqqhBRpwkEltNNAr5+utwXl207feeCG6oqqg6pXq0XeNSmjXDCBbiwHTbfiKgIcBgkjAEMBwtbCASLpUdr2e3v/LH3V94+PvLm0ijJ9oSlfff8FTRpCpqkJG7xswxyjVnCN9420Xfqz0p8NXweA+pjOsJR0l6i53FBBhiGDYsSeqyUEgl97jYt8G5465vPf19ZLC9yMQtAuS4kmg0Kh9+OK6ZgfMaT11wzhUTv1NdJxZ4gSwyGc8ThiTlJvF6LJiV1kElVNCtRPcWXvzi4rXfffqXaxYTgGsO1q8XpQiQ42u9c3PcPQBo/PaZX5p0etU3qieriWk3g6ynPCYDW0JF7BK0re1JvbFs111P/vj1rwEHQsnH5bDMIkCKcog2aWmZxUTNpnJc5cSPfuXUb4yZGbqxbLyMMAT62rzkvo2pX/7u7tV37H99/wZmpsbGRhGPF7VGUd5HUh872NB6/qdOOrHpwcvu+O6DV99x+afOPvEAmFqixUBKUd7fWryF3w6CFo5KxIoVn0UTqygAfOIjGup9QLQmTJFgWJSiFKUoRSlKUYpSlKIUpShFKUpRilKUohSlKEUpSlGKUpSiFKUox0j+f4NUwQnQQeLbAAAAAElFTkSuQmCC';
 let vendors=[], vid=1;
+// Event Experience (CX Manager step) state
+let recruitersList=[], rcid=1;     // {id, name, program, divId}
+let attractions=[], aid=1;          // {id, name, type, link, distance}
+let hotelPartner={name:'',rate:'',link:''};
+let welcomeOverride='';
+let logistics={lostFound:'',firstAid:'',restrooms:''};
+// Field map (uploaded PDF, first page inserted on every team's field guide between p2 and p3).
+// fieldMapPdfBytes is a Uint8Array of the source PDF; fieldMapMeta has display info.
+let fieldMapPdfBytes=null;
+let fieldMapMeta=null; // { name, sizeKB, pageCount }
 const TO={Elite:0,Strong:1,Mid:2,Lower:3};
 const parkingPassColors={'Red':'#fee2e2','Blue':'#dbeafe','Green':'#dcfce7','Yellow':'#fef9c3','Orange':'#ffedd5','Purple':'#f3e8ff','White':'#f8fafc'};
 const parkingPassBorder={'Red':'#ef4444','Blue':'#3b82f6','Green':'#22c55e','Yellow':'#eab308','Orange':'#f97316','Purple':'#a855f7','White':'#cbd5e1'};
@@ -700,7 +772,8 @@ function go(id){
     else if(i+1<n) b.classList.add('done');
   });
   if(id==='p4') renderTravel();
-  if(id==='p6') renderDay1Results();
+  if(id==='p6') renderEventExperience();
+  if(id==='p7') renderDay1Results();
 }
 function showDay(d){
   document.getElementById('grid-d1').style.display=d===1?'block':'none';
@@ -897,6 +970,152 @@ function renderVendors(){
       <input style="flex:3;min-width:180px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="https://vendor.com (optional)" value="${(v.website||'').replace(/"/g,'&quot;')}" onchange="vendors.find(x=>x.id===${v.id}).website=this.value">
       <button class="btn btn-sm" style="color:var(--red);border-color:#f09595;padding:3px 9px" onclick="delVendor(${v.id})" title="Remove vendor">×</button>
     </div>`).join('');
+}
+
+// ============================================================
+// EVENT EXPERIENCE (CX Manager step) — render functions
+// All sections: Welcome override · Recruiters on-site · Hotel · Attractions · Logistics
+// renderEventExperience() runs whenever the user navigates to page 6.
+// ============================================================
+function renderEventExperience(){
+  // Hydrate inputs from state (in case JR navigated away and back)
+  const wo=document.getElementById('welcome-override');if(wo)wo.value=welcomeOverride||'';
+  const hn=document.getElementById('hotel-name');if(hn)hn.value=hotelPartner.name||'';
+  const hr=document.getElementById('hotel-rate');if(hr)hr.value=hotelPartner.rate||'';
+  const hl=document.getElementById('hotel-link');if(hl)hl.value=hotelPartner.link||'';
+  const lf=document.getElementById('logistics-lostfound');if(lf)lf.value=logistics.lostFound||'';
+  const fa=document.getElementById('logistics-firstaid');if(fa)fa.value=logistics.firstAid||'';
+  const re=document.getElementById('logistics-restrooms');if(re)re.value=logistics.restrooms||'';
+  renderRecruiters();renderAttractions();renderFieldMapState();
+}
+
+// ── Recruiters on-site ────────────────────────────────────────────────
+function addRecruiter(){
+  recruitersList.push({id:rcid++,name:'',program:'',divId:divs.length?divs[0].id:''});
+  renderRecruiters();
+}
+function delRecruiter(id){
+  recruitersList=recruitersList.filter(r=>r.id!==id);
+  renderRecruiters();
+}
+function renderRecruiters(){
+  const c=document.getElementById('recruiters-list');
+  if(!c)return;
+  if(!recruitersList.length){
+    c.innerHTML='<div style="font-size:11px;color:var(--dark-gray);font-style:italic;padding:6px 0">No recruiters added. Click "+ Add recruiter" to list confirmed coaches and the divisions they recruit.</div>';
+    return;
+  }
+  c.innerHTML=recruitersList.map(r=>`
+    <div style="display:flex;gap:8px;align-items:center;background:var(--lt-gray);border-radius:5px;padding:6px 9px;margin-bottom:5px">
+      <input style="flex:2;min-width:140px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Coach name" value="${(r.name||'').replace(/"/g,'&quot;')}" onchange="recruitersList.find(x=>x.id===${r.id}).name=this.value">
+      <input style="flex:2;min-width:140px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Program (e.g. Aurora University)" value="${(r.program||'').replace(/"/g,'&quot;')}" onchange="recruitersList.find(x=>x.id===${r.id}).program=this.value">
+      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" onchange="recruitersList.find(x=>x.id===${r.id}).divId=this.value?+this.value:''">
+        <option value="">(any division)</option>
+        ${divs.map(d=>`<option value="${d.id}"${r.divId===d.id?' selected':''}>${d.name}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm" style="color:var(--red);border-color:#f09595;padding:3px 9px" onclick="delRecruiter(${r.id})" title="Remove recruiter">×</button>
+    </div>`).join('');
+}
+
+// ── Tourist attractions ───────────────────────────────────────────────
+function addAttraction(){
+  attractions.push({id:aid++,name:'',type:'Restaurant',link:'',distance:''});
+  renderAttractions();
+}
+function delAttraction(id){
+  attractions=attractions.filter(a=>a.id!==id);
+  renderAttractions();
+}
+function renderAttractions(){
+  const c=document.getElementById('attractions-list');
+  if(!c)return;
+  if(!attractions.length){
+    c.innerHTML='<div style="font-size:11px;color:var(--dark-gray);font-style:italic;padding:6px 0">No attractions added. For destination events, list nearby restaurants, family activities, and weekend outings.</div>';
+    return;
+  }
+  const types=['Restaurant','Family activity','Outdoors','Shopping','Landmark','Other'];
+  c.innerHTML=attractions.map(a=>`
+    <div style="display:flex;gap:8px;align-items:center;background:var(--lt-gray);border-radius:5px;padding:6px 9px;margin-bottom:5px">
+      <input style="flex:2;min-width:140px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Attraction name" value="${(a.name||'').replace(/"/g,'&quot;')}" onchange="attractions.find(x=>x.id===${a.id}).name=this.value">
+      <select style="font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" onchange="attractions.find(x=>x.id===${a.id}).type=this.value">
+        ${types.map(ct=>`<option value="${ct}"${a.type===ct?' selected':''}>${ct}</option>`).join('')}
+      </select>
+      <input style="flex:2;min-width:140px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="https://... (optional)" value="${(a.link||'').replace(/"/g,'&quot;')}" onchange="attractions.find(x=>x.id===${a.id}).link=this.value">
+      <input style="width:90px;font-size:12px;padding:3px 7px;border:.5px solid var(--mid-gray);border-radius:4px;background:#fff" placeholder="Distance" value="${(a.distance||'').replace(/"/g,'&quot;')}" onchange="attractions.find(x=>x.id===${a.id}).distance=this.value">
+      <button class="btn btn-sm" style="color:var(--red);border-color:#f09595;padding:3px 9px" onclick="delAttraction(${a.id})" title="Remove attraction">×</button>
+    </div>`).join('');
+}
+
+// ── Field map (PDF upload) ────────────────────────────────────────────
+// User drops or selects a PDF; we store its bytes and read page count via pdf-lib.
+// Only the first page is inserted into team field guides at packet-build time.
+function handleFieldMapInput(ev){
+  const f=ev.target.files&&ev.target.files[0];
+  if(f)loadFieldMapFile(f);
+  // Reset the input so the same file can be re-uploaded if removed
+  ev.target.value='';
+}
+function handleFieldMapDrop(ev){
+  const f=ev.dataTransfer.files&&ev.dataTransfer.files[0];
+  if(f)loadFieldMapFile(f);
+}
+async function loadFieldMapFile(file){
+  if(!file.type.includes('pdf')&&!/\.pdf$/i.test(file.name)){
+    showToast('Field map must be a PDF file','err');return;
+  }
+  if(file.size>15*1024*1024){
+    showToast('Field map is over 15 MB — large file will bloat every team packet. Consider compressing.','warn');
+  }
+  try{
+    const buf=await file.arrayBuffer();
+    const bytes=new Uint8Array(buf);
+    let pageCount=0;
+    if(window.PDFLib){
+      try{
+        const doc=await window.PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});
+        pageCount=doc.getPageCount();
+      }catch(e){
+        showToast('Could not read PDF — file may be corrupted or encrypted','err');return;
+      }
+    }
+    fieldMapPdfBytes=bytes;
+    fieldMapMeta={name:file.name,sizeKB:Math.round(file.size/1024),pageCount:pageCount};
+    renderFieldMapState();
+    showToast(`Field map loaded: ${file.name} (${fieldMapMeta.sizeKB} KB, ${pageCount} page${pageCount===1?'':'s'})`);
+  }catch(err){
+    console.error('Field map load failed',err);
+    showToast('Failed to load field map: '+err.message,'err');
+  }
+}
+function clearFieldMap(){
+  fieldMapPdfBytes=null;
+  fieldMapMeta=null;
+  renderFieldMapState();
+  showToast('Field map removed');
+}
+function renderFieldMapState(){
+  const el=document.getElementById('field-map-state');
+  if(!el)return;
+  if(!fieldMapMeta){
+    el.innerHTML=`<strong style="color:var(--navy)">Drop a field map PDF here</strong> or click to choose a file<br>
+      <span style="font-size:10px">Supported: .pdf · First page is inserted as page 3 of every team's field guide</span>`;
+    return;
+  }
+  // Estimated bundle add: field map size × team count
+  const teamCount=divs.reduce((s,d)=>s+(d.teams||[]).length,0);
+  const bundleAddMB=teamCount?Math.round((fieldMapMeta.sizeKB*teamCount)/1024):0;
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="text-align:left">
+        <strong style="color:var(--adrln-green-dk);font-size:13px">✓ Field map loaded</strong><br>
+        <span style="font-size:11px">${fieldMapMeta.name}</span><br>
+        <span style="font-size:10px;color:var(--dark-gray)">${fieldMapMeta.sizeKB} KB · ${fieldMapMeta.pageCount} page${fieldMapMeta.pageCount===1?'':'s'}${fieldMapMeta.pageCount>1?' (only page 1 will be inserted)':''}${teamCount?` · adds ~${bundleAddMB} MB to the team-packets ZIP`:''}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="event.stopPropagation();document.getElementById('field-map-input').click()" title="Replace with a different PDF">Replace</button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();clearFieldMap()" title="Remove the field map">Remove</button>
+      </div>
+    </div>`;
 }
 
 function renderFields(){
@@ -2777,18 +2996,30 @@ function printDay2Brackets(){
   const content=document.getElementById('bracket-content').innerHTML;
   if(!content){showToast('No brackets to print','warn');return;}
   const ename=document.getElementById('ename').value||'Event';
+  const logoSrc=(typeof ADRLN_LOGO_DATA_URL==='string')?ADRLN_LOGO_DATA_URL:'';
   const w=window.open('','_blank','width=900,height=700');
   w.document.write(`<!DOCTYPE html><html><head><title>${ename} — Day 2 Brackets</title>
     <style>
       body { font-family: Arial, sans-serif; padding: 24px; background: #fff; color: #1a1a18; }
-      h1 { font-size: 18px; margin: 0 0 16px; color: #1B3A5C; border-bottom: 2px solid #1B3A5C; padding-bottom: 6px; }
+      .brand-bar { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 3px solid #78C142; margin-bottom: 18px; }
+      .brand-logo { height: 40px; width: 40px; object-fit: contain; }
+      .brand-text { font-size: 11px; color: #5F5E5A; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+      h1 { font-size: 20px; margin: 14px 0 6px; color: #1B3A5C; }
+      h1 + .sub { font-size: 11px; color: #5F5E5A; margin-bottom: 16px; }
       .bracket-div { margin-bottom: 30px; page-break-after: always; }
       .bracket-div:last-child { page-break-after: auto; }
-      .cl { padding: 8px; background: #fef9e6; border-radius: 4px; }
-      @media print { body { padding: 12px; } button { display: none; } }
+      .cl { padding: 8px; background: #ECF7DD; border-left: 3px solid #78C142; border-radius: 4px; }
+      .print-btn { margin-bottom: 16px; padding: 8px 18px; background: #78C142; color: #1B3A5C; font-weight: 600; border: 1px solid #5FA32E; border-radius: 4px; cursor: pointer; }
+      .print-btn:hover { background: #5FA32E; color: #fff; }
+      @media print { body { padding: 12px; } .print-btn { display: none; } }
     </style></head><body>
+    <div class="brand-bar">
+      ${logoSrc?`<img class="brand-logo" src="${logoSrc}" alt="Adrenaline Lacrosse">`:''}
+      <div class="brand-text">Adrenaline Lacrosse Tournament Experience Tool</div>
+    </div>
     <h1>${ename} — Day 2 Brackets</h1>
-    <button onclick="window.print()" style="margin-bottom:12px;padding:6px 16px;background:#1B3A5C;color:#fff;border:none;border-radius:4px;cursor:pointer">Print</button>
+    <div class="sub">For on-site posting · Print and update with Day 1 results</div>
+    <button class="print-btn" onclick="window.print()">Print brackets</button>
     ${content}
     </body></html>`);
   w.document.close();
@@ -3177,25 +3408,141 @@ function expParkingPasses(){
 
 
 // ============================================================
-// XLSX EXPORT HELPER
+// XLSX EXPORT HELPER (branded)
+// All XLSX exports flow through dlXLSX or dlXLSXMulti, which call applyBrand()
+// to prepend a 2-row brand header (navy "Adrenaline Lacrosse Tournament
+// Experience Tool" + green sheet-title row) and to style the column-header
+// row in Adrenaline green with navy bold text. Column widths are auto-set
+// based on content if no override is provided.
+// Uses xlsx-js-style (drop-in fork of SheetJS) for full cell styling support.
 // ============================================================
+function applyBrand(rows, sheetTitle, opts){
+  // rows: array-of-arrays, where rows[0] is the column-header row.
+  // Returns a styled worksheet ready to be appended to a workbook.
+  opts=opts||{};
+  const brandTitle='Adrenaline Lacrosse Tournament Experience Tool';
+  const headerRow=rows[0]||[];
+  const dataRows=rows.slice(1);
+  const colCount=Math.max(headerRow.length,1);
+
+  // Build new rows array: brand row + title row + blank + original headers + data
+  const newRows=[
+    [brandTitle, ...Array(Math.max(0,colCount-1)).fill('')],
+    [sheetTitle||'', ...Array(Math.max(0,colCount-1)).fill('')],
+    Array(colCount).fill(''),
+    headerRow,
+    ...dataRows
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(newRows);
+
+  // Merge brand-row and title-row cells across all columns so they read as banners
+  ws['!merges']=ws['!merges']||[];
+  if(colCount>1){
+    ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:colCount-1}});
+    ws['!merges'].push({s:{r:1,c:0},e:{r:1,c:colCount-1}});
+    ws['!merges'].push({s:{r:2,c:0},e:{r:2,c:colCount-1}});
+  }
+
+  // Cell styles
+  const NAVY='1B3A5C',GREEN='78C142',LT_GREEN='ECF7DD',WHITE='FFFFFF';
+  const setStyle=(addr,style)=>{if(ws[addr])ws[addr].s=style;};
+
+  // Row 0 (brand banner): navy fill, white bold text
+  setStyle('A1',{
+    font:{name:'Arial',sz:14,bold:true,color:{rgb:WHITE}},
+    fill:{patternType:'solid',fgColor:{rgb:NAVY}},
+    alignment:{horizontal:'left',vertical:'center'}
+  });
+  // Row 1 (sheet title): green fill, navy bold text
+  setStyle('A2',{
+    font:{name:'Arial',sz:12,bold:true,color:{rgb:NAVY}},
+    fill:{patternType:'solid',fgColor:{rgb:GREEN}},
+    alignment:{horizontal:'left',vertical:'center'}
+  });
+
+  // Row 3 (column headers): light-green fill, navy bold text, thin borders
+  for(let c=0;c<colCount;c++){
+    const addr=XLSX.utils.encode_cell({r:3,c:c});
+    if(ws[addr]){
+      ws[addr].s={
+        font:{name:'Arial',sz:10,bold:true,color:{rgb:NAVY}},
+        fill:{patternType:'solid',fgColor:{rgb:LT_GREEN}},
+        alignment:{horizontal:'left',vertical:'center',wrapText:true},
+        border:{
+          top:{style:'thin',color:{rgb:GREEN}},
+          bottom:{style:'medium',color:{rgb:GREEN}},
+          left:{style:'thin',color:{rgb:'D3D1C7'}},
+          right:{style:'thin',color:{rgb:'D3D1C7'}}
+        }
+      };
+    }
+  }
+
+  // Data rows: subtle alternating row fill + thin borders
+  for(let r=4;r<newRows.length;r++){
+    for(let c=0;c<colCount;c++){
+      const addr=XLSX.utils.encode_cell({r:r,c:c});
+      if(ws[addr]){
+        const isAlt=(r-4)%2===1;
+        ws[addr].s={
+          font:{name:'Arial',sz:10,color:{rgb:'1A1A18'}},
+          fill:{patternType:'solid',fgColor:{rgb:isAlt?'F5F5F0':WHITE}},
+          alignment:{vertical:'center',wrapText:true},
+          border:{
+            top:{style:'thin',color:{rgb:'E8E6DD'}},
+            bottom:{style:'thin',color:{rgb:'E8E6DD'}},
+            left:{style:'thin',color:{rgb:'E8E6DD'}},
+            right:{style:'thin',color:{rgb:'E8E6DD'}}
+          }
+        };
+      }
+    }
+  }
+
+  // Row heights — banner rows taller, header row slightly taller, data normal
+  ws['!rows']=[
+    {hpt:24}, // brand banner
+    {hpt:20}, // sheet title
+    {hpt:8},  // spacer
+    {hpt:22}, // column headers
+  ];
+
+  // Column widths — caller can override via opts.cols, otherwise auto-fit on content
+  if(opts.cols){
+    ws['!cols']=opts.cols;
+  } else {
+    ws['!cols']=Array.from({length:colCount},(_,c)=>{
+      let maxLen=String(headerRow[c]||'').length;
+      for(let r=0;r<dataRows.length&&r<200;r++){
+        const v=dataRows[r]?dataRows[r][c]:'';
+        const len=String(v==null?'':v).length;
+        if(len>maxLen)maxLen=len;
+      }
+      // Min 8, max 50 — keeps Excel from blowing out wide
+      return {wch:Math.max(8,Math.min(50,maxLen+2))};
+    });
+  }
+
+  return ws;
+}
+
 function dlXLSX(filename, rows, sheetName){
   if(!window.XLSX){showToast('Excel library not loaded -- try refreshing','err');return;}
-  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const ws=applyBrand(rows,sheetName||'Sheet1');
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,sheetName||'Sheet1');
-  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
   dl(filename+'.xlsx',wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
 function dlXLSXMulti(filename, sheets){
   if(!window.XLSX){showToast('Excel library not loaded -- try refreshing','err');return;}
   const wb=XLSX.utils.book_new();
-  sheets.forEach(({rows,name})=>{
-    const ws=XLSX.utils.aoa_to_sheet(rows);
+  sheets.forEach(({rows,name,cols})=>{
+    const ws=applyBrand(rows,name,{cols:cols});
     XLSX.utils.book_append_sheet(wb,ws,name);
   });
-  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
   dl(filename+'.xlsx',wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
@@ -3217,7 +3564,7 @@ function expWelcomePackets(){
   showToast(`Generating ${allTeams.length} ADRLN Day field guides…`);
   const zip=new JSZip();
   let i=0;
-  const tick=()=>{
+  const tick=async ()=>{
     if(i>=allTeams.length){
       zip.generateAsync({type:'blob'}).then(blob=>{
         const url=URL.createObjectURL(blob);
@@ -3229,7 +3576,7 @@ function expWelcomePackets(){
     }
     const {team,div}=allTeams[i];
     try {
-      const pdfBytes=buildTeamWelcomePacket(team,div,ename);
+      const pdfBytes=await buildTeamWelcomePacket(team,div,ename);
       const safe=`${div.name}_${team.name}`.replace(/[^A-Za-z0-9_-]+/g,'_');
       zip.file(`${div.name.replace(/[^A-Za-z0-9_-]+/g,'_')}/${safe}.pdf`,pdfBytes);
     } catch(err){
@@ -3257,12 +3604,15 @@ function _qrPng(text,size){
 }
 
 // Build a single team's "The ADRLN Day" field guide PDF. Returns ArrayBuffer.
-function buildTeamWelcomePacket(team,div,ename){
+// Async because, when a field map is uploaded, we run a pdf-lib merge step
+// after jsPDF generation to insert the field map's first page at final-position-3.
+async function buildTeamWelcomePacket(team,div,ename){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'pt',format:'letter'});
   const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
   const M=40;
   const NAVY=[27,58,92],TEAL=[29,158,117],AMBER=[186,117,23],PURPLE=[83,74,183],GRAY=[95,94,90],GOLD=[180,140,40];
+  const GREEN=[120,193,66],GREEN_DK=[95,163,46]; // Adrenaline brand green
 
   // Onsite staff (entered once in Event Setup, blank if not provided)
   const opsName=(document.getElementById('staff-ops')||{}).value||'';
@@ -3273,19 +3623,49 @@ function buildTeamWelcomePacket(team,div,ename){
   const CHATBOT_URL='https://adrln.com';
   const CASES_URL='https://teamcenter.adrln.com/s/contactsupport';
 
+  // Field map state — drives page numbering. If a field map is loaded, an extra
+  // page gets inserted at final-page-3 (between Parking Pass and Day 1 schedule)
+  // by pdf-lib AFTER jsPDF generation. We adjust page numbers accordingly so the
+  // numbers in the footers match the final merged document.
+  const hasFieldMap=!!(fieldMapPdfBytes&&fieldMapPdfBytes.length);
+  const totalPages=hasFieldMap?7:6;
+  // Map a jsPDF-internal page number (1-6) to the final page number (1-7).
+  // Field map slips in at final-page-3, so jsPDF pages 3..6 shift up by 1.
+  const finalPageNum=(jsPdfN)=>(hasFieldMap&&jsPdfN>=3)?jsPdfN+1:jsPdfN;
+
   // Footer helper used on every page (page label + brand stamp)
-  const footer=(pageNum)=>{
+  const footer=(jsPdfN)=>{
     doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GRAY);
     doc.text('Adrenaline Lacrosse  ·  adrln.com',M,H-26);
-    doc.text(`Page ${pageNum} of 6`,W-M-40,H-26);
+    doc.text(`Page ${finalPageNum(jsPdfN)} of ${totalPages}`,W-M-40,H-26);
+  };
+
+  // Logo — Adrenaline shield rendered from the embedded base64 PNG constant.
+  // Drawn on every page header (cover left, other pages top-right).
+  // Square footprint (28×28pt) matches the visual weight of the prior wordmark.
+  const drawLogo=(x,y)=>{
+    const size=28;
+    if(typeof ADRLN_LOGO_DATA_URL==='string'){
+      try{
+        // 'PNG' tells jsPDF to embed the bytes as-is. Alpha channel is preserved.
+        doc.addImage(ADRLN_LOGO_DATA_URL,'PNG',x,y-5,size,size,undefined,'FAST');
+      }catch(e){
+        // Fallback to wordmark if image embedding fails (e.g., malformed data)
+        console.warn('Logo embed failed, using wordmark fallback',e);
+        doc.setFillColor(...GREEN);doc.roundedRect(x,y,44,18,2,2,'F');
+        doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(10);
+        doc.text('ADRLN',x+22,y+12,{align:'center'});
+      }
+    }
   };
 
   // ── PAGE 1: COVER ───────────────────────────────────────────────────
   doc.setFillColor(...NAVY);doc.rect(0,0,W,110,'F');
-  doc.setFillColor(...GOLD);doc.rect(0,108,W,3,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,108,W,3,'F'); // brand-green hairline
+  drawLogo(M,18);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-  doc.text('ADRENALINE LACROSSE',M,40);
-  doc.setFont('helvetica','bold');doc.setFontSize(34);
+  doc.text('ADRENALINE LACROSSE',M+56,32);
+  doc.setFont('helvetica','bold');doc.setFontSize(32);
   doc.text('The ADRLN Day',M,80);
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(255,255,255);
   doc.text('Your team field guide  ·  Pre-event',M,98);
@@ -3302,16 +3682,17 @@ function buildTeamWelcomePacket(team,div,ename){
   doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(15);
   doc.text(ename,M,215);
 
-  // Voice block — quiet confident open
+  // Voice block — quiet confident open. CX Manager can override the default opener.
   doc.setDrawColor(...GOLD);doc.setLineWidth(2);
   doc.line(M,238,M+30,238);
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
-  doc.text('YOUR DAY WAS DESIGNED BEFORE YOU GOT HERE',M,258);
+  const wo=(window.welcomeOverride||'').trim();
+  doc.text(wo?'A NOTE FOR THIS WEEKEND':'YOUR DAY WAS DESIGNED BEFORE YOU GOT HERE',M,258);
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
-  const opener=doc.splitTextToSize(
-    "Park once. Stay close. Three games on Day 1. A bracket on Day 2. The field your team plays on, the lot you parked in, and the recruiter zone are all within walking distance — by design, not by coincidence. "+
-    "This guide tells you the four things that matter: where to park, when you play, what the weekend looks like, and who to find on-site if something goes sideways.",
-    W-2*M);
+  const openerText=wo||
+    ("Park once. Stay close. Three games on Day 1. A bracket on Day 2. The field your team plays on, the lot you parked in, and the recruiter zone are all within walking distance — by design, not by coincidence. "+
+    "This guide tells you the four things that matter: where to park, when you play, what the weekend looks like, and who to find on-site if something goes sideways.");
+  const opener=doc.splitTextToSize(openerText,W-2*M);
   doc.text(opener,M,278);
   let y=278+opener.length*13+22;
 
@@ -3343,7 +3724,8 @@ function buildTeamWelcomePacket(team,div,ename){
   const podFieldNames=podFields.map(f=>f.name).join(', ');
 
   doc.setFillColor(...AMBER);doc.rect(0,0,W,90,'F');
-  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+  drawLogo(W-M-46,18);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
   doc.text('THE ADRLN DAY  ·  PAGE 2',M,38);
   doc.setFontSize(28);doc.text('Parking Pass',M,72);
@@ -3422,7 +3804,8 @@ function buildTeamWelcomePacket(team,div,ename){
   // ── PAGE 3: DAY 1 SCHEDULE ─────────────────────────────────────────
   doc.addPage();
   doc.setFillColor(...NAVY);doc.rect(0,0,W,90,'F');
-  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+  drawLogo(W-M-46,18);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
   doc.text('THE ADRLN DAY  ·  PAGE 3',M,38);
   doc.setFontSize(28);doc.text('Day 1 Schedule',M,72);
@@ -3472,7 +3855,8 @@ function buildTeamWelcomePacket(team,div,ename){
   // ── PAGE 4: DAY 2 BRACKET SHELL ────────────────────────────────────
   doc.addPage();
   doc.setFillColor(...PURPLE);doc.rect(0,0,W,90,'F');
-  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+  drawLogo(W-M-46,18);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
   doc.text('THE ADRLN DAY  ·  PAGE 4',M,38);
   doc.setFontSize(28);doc.text('Day 2 Bracket Shell',M,72);
@@ -3515,7 +3899,8 @@ function buildTeamWelcomePacket(team,div,ename){
   // ── PAGE 5: ON-SITE OPS — gift, roster, lounge, staff, support ─────
   doc.addPage();
   doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
-  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+  drawLogo(W-M-46,18);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
   doc.text('THE ADRLN DAY  ·  PAGE 5',M,38);
   doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
@@ -3533,8 +3918,39 @@ function buildTeamWelcomePacket(team,div,ename){
     "Three coaches passes per team. Plan five minutes. The check-in desk opens 30 minutes before the first scheduled game and is at the main entrance.");
   opSection('THE COACHES LOUNGE',
     "Refreshments, snacks, light food, and a quiet space to review film between games. Open both days from gates-open through end of play. Pass holders only — collect your three passes at check-in.");
-  opSection('RECRUITERS ON-SITE',
-    "The list of confirmed recruiting coaches will be posted at check-in and in the ADRLN app on event morning. Coaches recruiting your division are flagged on your team roster. Recruiter zones sit on adjacent fields to your pod — they don't have to come find you.");
+
+  // ── RECRUITERS ON-SITE — dynamic if configured, generic blurb if not ──
+  const allRecruiters=(window.recruitersList||[]).filter(r=>r&&r.name&&r.name.trim());
+  // For this team's division, surface recruiters who target it (or are open to all)
+  const myDivRecruiters=allRecruiters.filter(r=>!r.divId||r.divId===div.id);
+  if(allRecruiters.length){
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('RECRUITERS ON-SITE',M,yp5);yp5+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+    const blurb=myDivRecruiters.length?
+      `${allRecruiters.length} confirmed recruiting coaches on-site. ${myDivRecruiters.length} recruit ${div.name} or are open across divisions — listed below. Recruiter zones sit on adjacent fields to your pod.`:
+      `${allRecruiters.length} confirmed recruiting coaches on-site. None recruit ${div.name} specifically — coaches are listed at check-in and in the ADRLN app on event morning.`;
+    const blurbLines=doc.splitTextToSize(blurb,W-2*M);
+    doc.text(blurbLines,M,yp5);yp5+=blurbLines.length*12+8;
+
+    if(myDivRecruiters.length){
+      // Compact 2-column table: Coach · Program
+      doc.autoTable({
+        startY:yp5,
+        head:[['Coach','Program']],
+        body:myDivRecruiters.map(r=>[r.name||'',r.program||'']),
+        headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:9.5},
+        bodyStyles:{fontSize:9.5,cellPadding:5},
+        alternateRowStyles:{fillColor:[245,245,240]},
+        margin:{left:M,right:M},
+        theme:'grid'
+      });
+      yp5=doc.lastAutoTable.finalY+18;
+    }
+  } else {
+    opSection('RECRUITERS ON-SITE',
+      "The list of confirmed recruiting coaches will be posted at check-in and in the ADRLN app on event morning. Coaches recruiting your division are flagged on your team roster. Recruiter zones sit on adjacent fields to your pod — they don't have to come find you.");
+  }
 
   // ── VENDOR VILLAGE — only renders if vendors are configured ────────────
   // Compact 3-column table: Vendor · Category · Website (clickable link)
@@ -3546,7 +3962,8 @@ function buildTeamWelcomePacket(team,div,ename){
       footer(5);
       doc.addPage();
       doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
-      doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+      doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+      drawLogo(W-M-46,18);
       doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
       doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
       doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
@@ -3594,7 +4011,8 @@ function buildTeamWelcomePacket(team,div,ename){
     footer(5);
     doc.addPage();
     doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
-    doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+    doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+    drawLogo(W-M-46,18);
     doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
     doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
     doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
@@ -3628,7 +4046,68 @@ function buildTeamWelcomePacket(team,div,ename){
   });
   yp5+=66;
 
+  // ── HOTEL PARTNER — only renders if configured ───────────────────────
+  const hp=window.hotelPartner||{};
+  if((hp.name||'').trim()){
+    if(yp5>620){footer(5);doc.addPage();
+      doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+      drawLogo(W-M-46,18);
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+      doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);yp5=120;
+    }
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('HOTEL PARTNER',M,yp5);yp5+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+    doc.text(hp.name,M,yp5);
+    if((hp.rate||'').trim()){
+      doc.setTextColor(...GRAY);doc.setFontSize(9.5);
+      doc.text('  ·  '+hp.rate,M+doc.getTextWidth(hp.name),yp5);
+    }
+    yp5+=14;
+    if((hp.link||'').trim()){
+      doc.setTextColor(...PURPLE);doc.setFontSize(9.5);
+      doc.textWithLink('Book a room \u2192',M,yp5,{url:hp.link});
+      yp5+=14;
+    }
+    yp5+=4;
+  }
+
+  // ── ONSITE LOGISTICS — only renders if at least one field is filled ──
+  const lg=window.logistics||{};
+  const hasLogistics=(lg.lostFound||'').trim()||(lg.firstAid||'').trim()||(lg.restrooms||'').trim();
+  if(hasLogistics){
+    if(yp5>610){footer(5);doc.addPage();
+      doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+      drawLogo(W-M-46,18);
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+      doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);yp5=120;
+    }
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('ONSITE LOGISTICS',M,yp5);yp5+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
+    const logRows=[
+      ['Lost & found',lg.lostFound],
+      ['First aid',lg.firstAid],
+      ['Restrooms',lg.restrooms]
+    ].filter(r=>(r[1]||'').trim());
+    logRows.forEach(([label,val])=>{
+      doc.setFont('helvetica','bold');doc.setTextColor(...NAVY);doc.text(label,M,yp5);
+      doc.setFont('helvetica','normal');doc.setTextColor(40,40,40);
+      const valLines=doc.splitTextToSize(val,W-2*M-100);
+      doc.text(valLines,M+100,yp5);
+      yp5+=Math.max(13,valLines.length*12+2);
+    });
+    yp5+=8;
+  }
+
   // Support block — chatbot QR + Salesforce cases fallback
+  // Page-overflow guard: support block needs ~120pt
+  if(yp5>620){footer(5);doc.addPage();
+    doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+    drawLogo(W-M-46,18);
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+    doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);yp5=120;
+  }
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
   doc.text('QUESTIONS BEFORE OR DURING THE EVENT',M,yp5);yp5+=14;
   doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(40,40,40);
@@ -3658,7 +4137,8 @@ function buildTeamWelcomePacket(team,div,ename){
   // ── PAGE 6: HOW IT WORKS ───────────────────────────────────────────
   doc.addPage();
   doc.setFillColor(...GRAY);doc.rect(0,0,W,90,'F');
-  doc.setFillColor(...GOLD);doc.rect(0,88,W,3,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+  drawLogo(W-M-46,18);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
   doc.text('THE ADRLN DAY  ·  PAGE 6',M,38);
   doc.setFontSize(28);doc.text('How It Works',M,72);
@@ -3681,15 +4161,87 @@ function buildTeamWelcomePacket(team,div,ename){
     "After Day 1, teams are ranked within their pool by: tournament points (Win=3, Tie=1, Loss=0) → head-to-head against tied opponents → fewest goals against → goal differential. Top seeds advance to championship brackets; lower seeds enter consolation. The bracket on the previous page is the shell — your seed determines which line you land on.");
   sec('PARKING & TRAFFIC',
     "(Phase 2) A traffic-flow map and venue-arrival timing recommendations will be added to this guide pre-event. The short version: arrive 30 minutes before your first game, park in the lot on your pass, walk to your pod.");
-  sec('THE WEEKEND',
-    "(Phase 2 — destination events) For destination events, a curated list of restaurants, family activities, and weekend outings will be added pre-event. The on-site Consumer Experience Manager can recommend or assist with reservations.");
+
+  // ── THE WEEKEND — real attractions if configured, placeholder otherwise ──
+  const eventAttractions=(window.attractions||[]).filter(a=>a&&a.name&&a.name.trim());
+  if(eventAttractions.length){
+    // Page-overflow guard before the attractions table
+    if(yp6>580){
+      doc.setFontSize(8);doc.setTextColor(...GRAY);
+      doc.text('Generated by the Adrenaline Lacrosse Tournament Experience Tool  ·  Park once, stay close.',M,H-26);
+      doc.text(`Page ${finalPageNum(6)} of ${totalPages}`,W-M-40,H-26);
+      doc.addPage();
+      doc.setFillColor(...GRAY);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+      drawLogo(W-M-46,18);
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+      doc.text('THE ADRLN DAY  ·  PAGE 6 (cont.)',M,38);
+      doc.setFontSize(28);doc.text('How It Works',M,72);
+      yp6=120;
+    }
+    doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(...NAVY);
+    doc.text('THE WEEKEND',M,yp6);yp6+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(40,40,40);
+    const wkLines=doc.splitTextToSize(
+      "Restaurants, family activities, and outings near the venue. Tap a link to learn more. The on-site Consumer Experience Manager can also help with reservations.",
+      W-2*M);
+    doc.text(wkLines,M,yp6);yp6+=wkLines.length*11+8;
+
+    // Attractions table — Name · Type · Distance · Link (clickable)
+    const attRows=eventAttractions.map(a=>[a.name||'',a.type||'',a.distance||'',a.link||'']);
+    doc.autoTable({
+      startY:yp6,
+      head:[['Attraction','Type','Distance','Link']],
+      body:attRows,
+      headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+      bodyStyles:{fontSize:8.5,cellPadding:4},
+      alternateRowStyles:{fillColor:[245,245,240]},
+      columnStyles:{0:{cellWidth:'auto'},1:{cellWidth:80},2:{cellWidth:60},3:{cellWidth:180,textColor:PURPLE}},
+      margin:{left:M,right:M},
+      theme:'grid',
+      didDrawCell:(data)=>{
+        if(data.section==='body'&&data.column.index===3){
+          const url=data.cell.raw;
+          if(url&&typeof url==='string'&&url.trim()){
+            try{doc.link(data.cell.x,data.cell.y,data.cell.width,data.cell.height,{url:url.trim()});}
+            catch(e){}
+          }
+        }
+      }
+    });
+    yp6=doc.lastAutoTable.finalY+12;
+  } else {
+    sec('THE WEEKEND',
+      "(Phase 2 — destination events) For destination events, a curated list of restaurants, family activities, and weekend outings will be added pre-event. The on-site Consumer Experience Manager can recommend or assist with reservations.");
+  }
 
   // Footer with brand line
   doc.setFontSize(8);doc.setTextColor(...GRAY);
-  doc.text('Generated by the ADRLN Tournament Scheduler  ·  Park once, stay close.',M,H-26);
-  doc.text('Page 6 of 6',W-M-40,H-26);
+  doc.text('Generated by the Adrenaline Lacrosse Tournament Experience Tool  ·  Park once, stay close.',M,H-26);
+  doc.text(`Page ${finalPageNum(6)} of ${totalPages}`,W-M-40,H-26);
 
-  return doc.output('arraybuffer');
+  const baseBytes=doc.output('arraybuffer');
+
+  // No field map → return jsPDF output directly
+  if(!hasFieldMap||!window.PDFLib)return baseBytes;
+
+  // Field map merge: load both PDFs in pdf-lib, copy the field map's first page,
+  // insert it at index 2 (between Parking Pass page 1 [index 1] and Day 1 schedule),
+  // and return the merged bytes.
+  try {
+    const PDFDocument=window.PDFLib.PDFDocument;
+    const finalDoc=await PDFDocument.load(baseBytes);
+    const mapDoc=await PDFDocument.load(fieldMapPdfBytes,{ignoreEncryption:true});
+    if(mapDoc.getPageCount()>0){
+      const [mapPage]=await finalDoc.copyPages(mapDoc,[0]);
+      // Insert at index 2 → becomes the 3rd page in the final doc (after cover + parking)
+      finalDoc.insertPage(2,mapPage);
+    }
+    const mergedBytes=await finalDoc.save();
+    return mergedBytes.buffer.slice(mergedBytes.byteOffset,mergedBytes.byteOffset+mergedBytes.byteLength);
+  } catch(err){
+    console.warn('Field map merge failed for '+team.name+', returning packet without map:',err);
+    return baseBytes;
+  }
 }
 
 
@@ -3713,21 +4265,19 @@ function expTM(){
     });
   };
   addGames(sched1,1);addGames(sched2,2);
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols']=[{wch:24},{wch:24},{wch:22},{wch:10},{wch:24},{wch:20}];
+  const ws=applyBrand(rows,'TourneyMachine Import',{cols:[{wch:24},{wch:24},{wch:22},{wch:10},{wch:24},{wch:20}]});
   XLSX.utils.book_append_sheet(wb,ws,'TourneyMachine Import');
 
   // Instructions tab
   const iRows=[
-    ['Adrenaline Lacrosse -- TourneyMachine Import File'],[''],
-    ['How to use this file'],
-    ['1. In TourneyMachine go to Schedule > Import Games and upload this file.'],
-    ['2. Do not rename or reorder columns -- TourneyMachine requires this exact format.'],
-    ['3. Day 2 bracket games use placeholder seed labels (e.g. "1st Pool A vs 2nd Pool B").'],
-    ['   After Day 1 results are known, update Team Name 1 and Team Name 2 for bracket rows and re-import.'],
-    ['4. Field # is number only (e.g. 3). Must match your TourneyMachine field setup exactly.'],
-    ['5. Division Name is case-sensitive -- must match TourneyMachine exactly or a duplicate division is created.'],[''],
-    ['Column reference'],
+    ['Field','Value or Note'],
+    ['How to use','In TourneyMachine: Schedule > Import Games and upload this file.'],
+    ['Columns','Do not rename or reorder columns -- TourneyMachine requires this exact format.'],
+    ['Day 2','Bracket games use placeholder seed labels (e.g. "1st Pool A vs 2nd Pool B"). After Day 1 results are known, update Team Name 1 and Team Name 2 for bracket rows and re-import.'],
+    ['Field #','Number only (e.g. 3). Must match your TourneyMachine field setup exactly.'],
+    ['Division Name','Case-sensitive -- must match TourneyMachine exactly or a duplicate division is created.'],
+    ['',''],
+    ['Column','Meaning'],
     ['Team Name 1','Home / first listed team'],
     ['Team Name 2','Away / second listed team'],
     ['Date and Time','Single combined cell -- MM/DD/YYYY H:MM AM/PM'],
@@ -3735,12 +4285,11 @@ function expTM(){
     ['Division Name','Must match TourneyMachine division name exactly (case-sensitive)'],
     ['Pool Name','Day 1: Pool A / Pool B etc. * Day 2: Quarterfinal / Semifinal / Championship / Consolation / 3rd Place'],
   ];
-  const ws2=XLSX.utils.aoa_to_sheet(iRows);
-  ws2['!cols']=[{wch:55},{wch:55}];
+  const ws2=applyBrand(iRows,'Instructions',{cols:[{wch:18},{wch:80}]});
   XLSX.utils.book_append_sheet(wb,ws2,'Instructions');
 
   const ename=(document.getElementById('ename').value||'Event').replace(/[^a-zA-Z0-9 _-]/g,'');
-  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
   dl(`TourneyMachine_${ename}.xlsx`,wbout,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   showToast('TourneyMachine import file downloaded');
 }
@@ -5246,6 +5795,8 @@ function checkParkingConflicts(){
 
 // One-time initialization for elements that aren't auto-rendered elsewhere
 if(typeof renderVendors==='function')renderVendors();
+// Wire up topbar logo image from embedded base64 constant (keeps data URL out of HTML markup)
+(function(){const l=document.getElementById('brand-logo');if(l&&typeof ADRLN_LOGO_DATA_URL==='string')l.src=ADRLN_LOGO_DATA_URL;})();
 
 </script>
 </body>
