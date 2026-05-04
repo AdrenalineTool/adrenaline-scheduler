@@ -948,8 +948,69 @@ function divColor(divId){
   const hue=palette[Math.abs(divId)%palette.length];
   return `hsl(${hue},65%,40%)`;
 }
-// Pool count for n teams: 1 pool until 8 teams, then 2 pools through 12, then ceil(n/6)
-function poolCountFor(n){return n<8?1:n<=12?2:Math.ceil(n/6);}
+// Pool sizing per the official ADRLN tournament format spec.
+// poolSizesFor(n) returns an array of pool sizes (e.g. [4,4,4,6] for 18 teams).
+// Pools are 4-6 teams; spec table covers n=4..30. For n>30 we extrapolate the
+// pattern (mostly 4-team pools, last pool absorbs remainder up to 6).
+//
+// Spec source: ADRLN_Pool__Playoff_Format_1_.docx (ADRLN ops, 2026).
+function poolSizesFor(n){
+  // Lookup table — exact spec values for n=4..30
+  const table={
+    4:[4],5:[5],6:[6],7:[7],
+    8:[4,4],9:[4,5],10:[4,6],11:[5,6],
+    12:[4,4,4],13:[4,4,5],14:[4,4,6],15:[4,5,6],
+    16:[4,4,4,4],17:[4,4,4,5],18:[4,4,4,6],19:[4,4,5,6],
+    20:[4,4,4,4,4],21:[4,4,4,4,5],22:[4,4,4,4,6],23:[4,4,4,5,6],
+    24:[4,4,4,4,4,4],25:[4,4,4,4,4,5],26:[4,4,4,4,4,6],27:[4,4,4,4,5,6],
+    28:[4,4,4,4,4,4,4],29:[4,4,4,4,4,4,5],30:[4,4,4,4,4,4,6]
+  };
+  if(table[n]) return table[n].slice();
+  if(n<4) return n>0?[n]:[];
+  // n>30: extrapolation. Mostly pools of 4; last pool absorbs remainder.
+  const base=Math.floor(n/4), rem=n%4;
+  if(rem===0) return new Array(base).fill(4);
+  if(rem===1) { const a=new Array(base-1).fill(4); a.push(5); return a; }
+  if(rem===2) { const a=new Array(base-1).fill(4); a.push(6); return a; }
+  // rem===3: trade two 4-pools for a 5+6 (4*(b-2)+5+6 = 4b+3 = n)
+  if(base>=2){ const a=new Array(base-2).fill(4); a.push(5,6); return a; }
+  return [n];
+}
+// Backwards compatibility — pool COUNT (returns number of pools, not sizes).
+// Kept because some callers (Day 2 elimination logic) still reference this.
+function poolCountFor(n){ return poolSizesFor(n).length; }
+// Snake-draft team distribution into pools of given sizes.
+// Top tier-sorted teams go to pools A, B, C, D... in serpentine order, but the
+// distribution respects each pool's TARGET SIZE — once a pool is full, the
+// snake skips it. Returns an array of pool indices, one per team-in-sorted-order.
+function snakeDraftPoolIndices(nTeams, poolSizes){
+  if(nTeams!==poolSizes.reduce((a,b)=>a+b,0)){
+    // Mismatch — caller likely passed a count that doesn't match pool sizes.
+    // Fall back to plain modulo distribution so we don't lose teams.
+    return Array.from({length:nTeams},(_,i)=>i%poolSizes.length);
+  }
+  const counts=new Array(poolSizes.length).fill(0);
+  const out=new Array(nTeams);
+  let direction=1, pi=0;
+  for(let i=0;i<nTeams;i++){
+    // If current pool is full, find next non-full pool in current direction
+    let guard=poolSizes.length*2;
+    while(counts[pi]>=poolSizes[pi] && guard-->0){
+      pi+=direction;
+      if(pi>=poolSizes.length){pi=poolSizes.length-1; direction=-1;}
+      else if(pi<0){pi=0; direction=1;}
+    }
+    if(counts[pi]>=poolSizes[pi]) break; // all full (shouldn't happen)
+    out[i]=pi;
+    counts[pi]++;
+    // Advance for next pick (snake direction)
+    let next=pi+direction;
+    if(next>=poolSizes.length){direction=-1; next=poolSizes.length-1;}
+    else if(next<0){direction=1; next=0;}
+    pi=next;
+  }
+  return out;
+}
 function updL(){document.getElementById('ldesc').textContent=`Recruiting fields go dark at slot starting ${fmtSlot(rlSlot())} (nearest to ${fmt12(rl())} recruiter lunch). Non-recruiting fields run all day.`;}
 function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast-'+type;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3000);}
 function dl(fn,content,mime){
@@ -977,7 +1038,7 @@ function dl(fn,content,mime){
 function addF(n='',l=false,g='boys',ch=false){
   setTimeout(runCalc,50);
   const id=fid++;
-  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,recruiting:false,venue:'Main venue',location:'Main venue'});
+  fields.push({id,name:n||`Field ${id}`,lights:l,gender:g,champ:ch,champNonRec:false,recruiting:false,venue:'Main venue',location:'Main venue'});
   renderFields();
 }
 function addFs(n){for(let i=0;i<n;i++)addF();}
@@ -1221,8 +1282,11 @@ function renderFields(){
         <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer">
           <input type="checkbox" ${f.lights?'checked':''} onchange="fields.find(x=>x.id===${f.id}).lights=this.checked;runCalc()"> Lights
         </label>
-        <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600">
-          <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked;updateFieldGenderRecommendation()"> Champ field
+        <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--navy);font-weight:600" title="Recruiting championship field — Day 2 finals for recruiting-age divisions route here.">
+          <input type="checkbox" ${f.champ?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champ=this.checked;updateFieldGenderRecommendation()"> Champ (Rec)
+        </label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:#8B6914;font-weight:600" title="Non-recruiting championship field — Day 2 finals for non-recruiting divisions route here. Required if event has any non-recruiting divisions.">
+          <input type="checkbox" ${f.champNonRec?'checked':''} onchange="fields.find(x=>x.id===${f.id}).champNonRec=this.checked;updateFieldGenderRecommendation()"> Champ (Non-Rec)
         </label>
         <label style="display:flex;align-items:center;gap:3px;font-size:12px;cursor:pointer;color:var(--teal);font-weight:600">
           <input type="checkbox" ${f.recruiting?'checked':''} onchange="fields.find(x=>x.id===${f.id}).recruiting=this.checked;updateFieldGenderRecommendation();updateRecFieldRecommendation()"> Recruiting field
@@ -1515,12 +1579,18 @@ function buildPools(force){
     byTier.forEach(group=>{for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i],group[j]]=[group[j],group[i]];}});
     const sorted=byTier.flat();
 
-    // Step 2: Snake draft into pools
-    const n=d.teams.length,np=poolCountFor(n);
-    const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0}));
+    // Step 2: Snake draft into pools sized per ADRLN spec.
+    // poolSizesFor(n) returns target pool sizes (e.g. 18 → [4,4,4,6]);
+    // snakeDraftPoolIndices distributes the tier-sorted team list across those
+    // pools in serpentine order, respecting per-pool target sizes.
+    const n=d.teams.length;
+    const sizes=poolSizesFor(n);
+    const np=sizes.length;
+    const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0,targetSize:sizes[i]}));
+    const placement=snakeDraftPoolIndices(n,sizes);
     sorted.forEach((t,i)=>{
-      const pi=i<np?i:(np-1)-(i%np);
-      pl[Math.max(0,Math.min(pi,np-1))].teams.push(t);
+      const pi=placement[i];
+      if(pi!=null && pl[pi]) pl[pi].teams.push(t);
     });
 
     // Step 3: Resolve region conflicts via swaps (keep same tier when possible)
@@ -1693,11 +1763,14 @@ function rebuildPoolsForDivision(divId){
   const byTier=Object.keys(TO).map(tier=>d.teams.filter(t=>t.tier===tier));
   byTier.forEach(group=>{for(let i=group.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[group[i],group[j]]=[group[j],group[i]];}});
   const sorted=byTier.flat();
-  const n=d.teams.length,np=poolCountFor(n);
-  const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0}));
+  const n=d.teams.length;
+  const sizes=poolSizesFor(n);
+  const np=sizes.length;
+  const pl=Array.from({length:np},(_,i)=>({id:i,label:`Pool ${String.fromCharCode(65+i)}`,teams:[],regionConflicts:0,targetSize:sizes[i]}));
+  const placement=snakeDraftPoolIndices(n,sizes);
   sorted.forEach((t,i)=>{
-    const pi=i<np?i:(np-1)-(i%np);
-    pl[Math.max(0,Math.min(pi,np-1))].teams.push(t);
+    const pi=placement[i];
+    if(pi!=null && pl[pi]) pl[pi].teams.push(t);
   });
   // Region resolution (same algorithm as buildPools)
   if(np>1){
@@ -2623,7 +2696,16 @@ function genD2(){
     const dRestMin=minRest*(dRef?divSlotM(dRef):slotM());
     let pool;
     if(prefChamp){
-      const cf=fields.filter(f=>f.champ&&f.gender===gen);
+      // Route championship games to the right TYPE of champ field:
+      //   - Recruiting division → fields with f.champ === true
+      //   - Non-recruiting division → fields with f.champNonRec === true
+      // Each must also match the division's gender. Falls back to any matching
+      // gender field if no champ field is configured (defensive — validation
+      // gates require these but old saved events might not have them set).
+      const isRecDiv=dRef?dRef.recruitable:false;
+      const cf=isRecDiv
+        ? fields.filter(f=>f.champ&&f.gender===gen)
+        : fields.filter(f=>f.champNonRec&&f.gender===gen);
       pool=cf.length?cf:fields.filter(f=>f.gender===gen);
     } else {
       const d1pod=window._dpod&&window._dpod[t1.divId||0];
@@ -2821,21 +2903,131 @@ function genD2(){
     }
 
     // ── 3 POOLS ───────────────────────────────────────────────────────────
+    // Per ADRLN spec: top 2 from each pool = 6 + top 2 of 3rd-place teams = 8 advance.
+    // QF → SF → Championship + 3rd Place. Non-advancers play consolation.
+    //
+    // QF MATCHUPS: standard 1v8, 2v7, 3v6, 4v5 — but with same-pool avoidance.
+    // The conflict-avoidance algorithm runs POST-results when we know real pool
+    // affiliations. Pre-results we use generic placeholder pairings.
     else if(np===3){
-      const sA=getSeeded(dp[0],d),sB=getSeeded(dp[1],d),sC=getSeeded(dp[2],d);
-      const poolWinners=[sA[0],sB[0],sC[0]].filter(Boolean);
-      const seconds=rankSecondPlace(dp,d);
-      const bestSecond=seconds[0]; // best 2nd place
-      const adv=[...poolWinners,bestSecond].filter(Boolean).slice(0,4);
-      const advIds=new Set(adv.map(t=>t&&t.id));
-      const nonAdv=[...sA,...sB,...sC].filter(t=>t&&!advIds.has(t.id))
-        .map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
-      let s1=null,s2=null;
-      if(adv[0]&&adv[3])s1=schedG(adv[0],adv[3],'bracket','SF1',d.recruitable,0,false);
-      if(adv[1]&&adv[2])s2=schedG(adv[1],adv[2],'bracket','SF2',d.recruitable,0,false);
-      const sfMax=Math.max(s1?s2m(s1):0,s2?s2m(s2):0)+divSlotM(d)+rdbuf;
+      const seededPools=dp.map(pool=>getSeeded(pool,d));
+      const hasResults=dp.some(pool=>pool.seededTeams&&pool.seededTeams.length);
+
+      // Build the 8-team advancing list
+      let adv=[];
+      let nonAdv=[];
+
+      if(hasResults){
+        // Real seeding: pool winners ranked among themselves, runners-up ranked,
+        // top 2 third-place teams as wildcards.
+        const winners=seededPools.map(s=>s[0]).filter(Boolean);
+        const seconds=seededPools.map(s=>s[1]).filter(Boolean);
+        const thirds=seededPools.map(s=>s[2]).filter(Boolean);
+
+        // Rank within each tier by Day 1 standings
+        const rankByStandings=(teams)=>teams.slice().sort((a,b)=>{
+          const ra=day1Results[a.id]||{w:0,l:0,t:0,gf:0,ga:0};
+          const rb=day1Results[b.id]||{w:0,l:0,t:0,gf:0,ga:0};
+          const ptsDiff=(rb.w*3+rb.t)-(ra.w*3+ra.t);
+          if(ptsDiff!==0)return ptsDiff;
+          const gaDiff=ra.ga-rb.ga;
+          if(gaDiff!==0)return gaDiff;
+          return(rb.gf-rb.ga)-(ra.gf-ra.ga);
+        });
+        const w=rankByStandings(winners);  // seeds 1, 2, 3
+        const r=rankByStandings(seconds);  // seeds 4, 5, 6
+        const t3=rankByStandings(thirds).slice(0,2); // seeds 7, 8 (top 2 wildcards only)
+        adv=[...w,...r,...t3].filter(Boolean).slice(0,8);
+
+        // Track each advancer's pool ID (used for conflict avoidance)
+        const advByTeamId={};
+        adv.forEach(t=>{advByTeamId[t.id]=t;});
+        seededPools.forEach((s,pi)=>s.forEach(t=>{
+          if(advByTeamId[t.id]) advByTeamId[t.id]._poolIdx=pi;
+        }));
+
+        const advIds=new Set(adv.map(t=>t.id));
+        nonAdv=seededPools.flat().filter(t=>!advIds.has(t.id))
+          .map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
+      } else {
+        // Pre-results: generic seed placeholders. We don't know pool affiliations yet,
+        // so we use the standard 1v8/2v7/3v6/4v5 pairing with generic labels. When
+        // applyDay1Results triggers regeneration, real teams flow through the
+        // hasResults branch above and conflict avoidance kicks in.
+        adv=[
+          mkSeed('Seed 1 (Pool Winner)',d),
+          mkSeed('Seed 2 (Pool Winner)',d),
+          mkSeed('Seed 3 (Pool Winner)',d),
+          mkSeed('Seed 4 (Runner-up)',d),
+          mkSeed('Seed 5 (Runner-up)',d),
+          mkSeed('Seed 6 (Runner-up)',d),
+          mkSeed('Seed 7 (3rd-Place WC)',d),
+          mkSeed('Seed 8 (3rd-Place WC)',d),
+        ];
+        // Non-advancers (3rd place teams from each pool that didn't get a wildcard,
+        // plus 4th+ from each pool). Pre-results we'll just collect them all from
+        // the seeded pools beyond position 1.
+        nonAdv=seededPools.flatMap(s=>s.slice(2))
+          .map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
+      }
+
+      // Build QF pairings with same-pool avoidance.
+      // We only have meaningful pool affiliations post-results. Pre-results, all
+      // placeholders look "different" (they're separate seedIdMap entries) so
+      // the standard 1v8/2v7/3v6/4v5 pairing applies directly.
+      const top4=adv.slice(0,4), bot4=adv.slice(4,8);
+      let pairing=[3,2,1,0]; // default: top[i] vs bot[ideal[i]] = 1v8, 2v7, 3v6, 4v5
+
+      if(hasResults){
+        // Enumerate all 4! = 24 permutations; pick the one with zero same-pool
+        // matchups, then minimize deviation from ideal (1v8/2v7/3v6/4v5).
+        const perms=[];
+        const generate=(arr,start)=>{
+          if(start===arr.length){perms.push([...arr]);return;}
+          for(let i=start;i<arr.length;i++){
+            [arr[start],arr[i]]=[arr[i],arr[start]];
+            generate(arr,start+1);
+            [arr[start],arr[i]]=[arr[i],arr[start]];
+          }
+        };
+        generate([0,1,2,3],0);
+        const ideal=[3,2,1,0];
+        let bestScore=-Infinity;
+        perms.forEach(perm=>{
+          let conflicts=0,deviation=0;
+          for(let i=0;i<4;i++){
+            const t1=top4[i],t2=bot4[perm[i]];
+            if(t1&&t2&&t1._poolIdx!=null&&t2._poolIdx!=null&&t1._poolIdx===t2._poolIdx)conflicts++;
+            deviation+=Math.abs(perm[i]-ideal[i]);
+          }
+          // Heavily penalize conflicts; lightly penalize deviation from ideal seeding.
+          const score=-conflicts*1000-deviation;
+          if(score>bestScore){bestScore=score;pairing=perm;}
+        });
+      }
+
+      // Schedule the 4 quarterfinals in seed order (QF1 = highest seed).
+      const qfSlots=[];
+      for(let i=0;i<4;i++){
+        const t1=top4[i],t2=bot4[pairing[i]];
+        if(!t1||!t2){qfSlots.push(null);continue;}
+        const lbl=`QF${i+1}: #${i+1} vs #${pairing[i]+5}`;
+        const s=schedG(t1,t2,'bracket',lbl,d.recruitable,0,false);
+        qfSlots.push(s);
+      }
+      const qfMax=qfSlots.filter(Boolean).length
+        ? Math.max(...qfSlots.filter(Boolean).map(s=>s2m(s)))+divSlotM(d)+rdbuf
+        : 0;
+
+      // Semifinals: standard W-QF1 vs W-QF4, W-QF2 vs W-QF3 (so the #1 seed's
+      // bracket stays separate from the #2 seed's until the final).
+      const sf1=schedG(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
+      const sf2=schedG(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
+      const sfMax=Math.max(sf1?s2m(sf1):0,sf2?s2m(sf2):0)+divSlotM(d)+rdbuf;
       schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
       schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+
+      // Consolation games for non-advancers
       schedConsolation(nonAdv,2);
     }
 
@@ -2875,31 +3067,113 @@ function genD2(){
     }
 
     // ── 5-6 POOLS ─────────────────────────────────────────────────────────
+    // ── 5+ POOLS ──────────────────────────────────────────────────────────
+    // Per ADRLN spec:
+    //   5 pools → top of each pool (5) + top 3 of 2nd-place teams (3) = 8 advance
+    //   6 pools → top of each pool (6) + top 2 of 2nd-place teams (2) = 8 advance
+    //   7 pools → top of each pool (7) + top 1 of 2nd-place teams (1) = 8 advance
+    //
+    // Like the 3-pool case, wildcards mean we MUST rank — and once we're
+    // ranking some teams we rank ALL teams globally so seeding is consistent.
+    // QF matchups use same-pool avoidance: standard 1v8/2v7/3v6/4v5 unless that
+    // would create a same-pool rematch, in which case we pick the permutation
+    // with zero conflicts that's closest to ideal.
     else if(np>=5){
       const seededPools=dp.map(pool=>getSeeded(pool,d));
-      const poolWinners=seededPools.map(s=>s[0]).filter(Boolean);
-      const seconds=rankSecondPlace(dp,d);
-      const wildcards=np===5?3:2; // 5 pools needs 3 wildcards, 6 pools needs 2
-      const advancers=[...poolWinners,...seconds.slice(0,wildcards)].slice(0,8);
-      const advIds=new Set(advancers.map(t=>t&&t.id));
-      const nonAdv=seededPools.flatMap(s=>s)
-        .filter(t=>t&&!advIds.has(t.id))
-        .map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
-      // QF bracket with 8 teams: seed 1v8, 2v7, 3v6, 4v5
-      const qfPairs=[
-        [advancers[0],advancers[7],'QF1: 1 vs 8'],
-        [advancers[1],advancers[6],'QF2: 2 vs 7'],
-        [advancers[2],advancers[5],'QF3: 3 vs 6'],
-        [advancers[3],advancers[4],'QF4: 4 vs 5'],
-      ].filter(([a,b])=>a&&b);
-      const qfSlots=qfPairs.map(([t1,t2,lbl])=>schedG(t1,t2,'bracket',lbl,d.recruitable,0,false));
-      const qfMax=Math.max(...qfSlots.filter(Boolean).map(s=>s2m(s)))+divSlotM(d)+rdbuf;
+      const hasResults=dp.some(pool=>pool.seededTeams&&pool.seededTeams.length);
+      const wildcards=np===5?3:(np===6?2:(np===7?1:0));
+      let adv=[];
+      let nonAdv=[];
+
+      if(hasResults){
+        // Real seeding: rank pool winners among themselves, rank 2nd-place wildcards.
+        const winners=seededPools.map(s=>s[0]).filter(Boolean);
+        const seconds=seededPools.map(s=>s[1]).filter(Boolean);
+        const rankByStandings=(teams)=>teams.slice().sort((a,b)=>{
+          const ra=day1Results[a.id]||{w:0,l:0,t:0,gf:0,ga:0};
+          const rb=day1Results[b.id]||{w:0,l:0,t:0,gf:0,ga:0};
+          const ptsDiff=(rb.w*3+rb.t)-(ra.w*3+ra.t);
+          if(ptsDiff!==0)return ptsDiff;
+          const gaDiff=ra.ga-rb.ga;
+          if(gaDiff!==0)return gaDiff;
+          return(rb.gf-rb.ga)-(ra.gf-ra.ga);
+        });
+        const w=rankByStandings(winners);  // seeds 1..np
+        const r=rankByStandings(seconds).slice(0,wildcards); // top N wildcards
+        adv=[...w,...r].slice(0,8);
+        // Track each advancer's pool index
+        const advByTeamId={};
+        adv.forEach(t=>{advByTeamId[t.id]=t;});
+        seededPools.forEach((s,pi)=>s.forEach(t=>{
+          if(advByTeamId[t.id]) advByTeamId[t.id]._poolIdx=pi;
+        }));
+        const advIds=new Set(adv.map(t=>t.id));
+        nonAdv=seededPools.flat().filter(t=>!advIds.has(t.id))
+          .map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
+      } else {
+        // Pre-results: generic seed placeholders — winners take seeds 1..np,
+        // wildcards take the remaining slots. After Day 1 results are applied,
+        // regeneration flows through the hasResults branch above.
+        const placeholderW=[];
+        for(let i=0;i<Math.min(np,8);i++){
+          placeholderW.push(mkSeed(`Seed ${i+1} (Pool Winner)`,d));
+        }
+        const placeholderR=[];
+        for(let i=0;i<wildcards&&placeholderW.length+placeholderR.length<8;i++){
+          placeholderR.push(mkSeed(`Seed ${placeholderW.length+i+1} (Runner-up WC)`,d));
+        }
+        adv=[...placeholderW,...placeholderR].slice(0,8);
+        nonAdv=seededPools.flatMap(s=>s.slice(1))
+          .map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
+      }
+
+      // Build QF pairings with same-pool avoidance (post-results only — pre-results
+      // placeholders have no real pool affiliation).
+      const top4=adv.slice(0,4), bot4=adv.slice(4,8);
+      let pairing=[3,2,1,0]; // default: 1v8, 2v7, 3v6, 4v5
+
+      if(hasResults){
+        const perms=[];
+        const generate=(arr,start)=>{
+          if(start===arr.length){perms.push([...arr]);return;}
+          for(let i=start;i<arr.length;i++){
+            [arr[start],arr[i]]=[arr[i],arr[start]];
+            generate(arr,start+1);
+            [arr[start],arr[i]]=[arr[i],arr[start]];
+          }
+        };
+        generate([0,1,2,3],0);
+        const ideal=[3,2,1,0];
+        let bestScore=-Infinity;
+        perms.forEach(perm=>{
+          let conflicts=0,deviation=0;
+          for(let i=0;i<4;i++){
+            const t1=top4[i],t2=bot4[perm[i]];
+            if(t1&&t2&&t1._poolIdx!=null&&t2._poolIdx!=null&&t1._poolIdx===t2._poolIdx)conflicts++;
+            deviation+=Math.abs(perm[i]-ideal[i]);
+          }
+          const score=-conflicts*1000-deviation;
+          if(score>bestScore){bestScore=score;pairing=perm;}
+        });
+      }
+
+      const qfSlots=[];
+      for(let i=0;i<4;i++){
+        const t1=top4[i],t2=bot4[pairing[i]];
+        if(!t1||!t2){qfSlots.push(null);continue;}
+        const lbl=`QF${i+1}: #${i+1} vs #${pairing[i]+5}`;
+        const s=schedG(t1,t2,'bracket',lbl,d.recruitable,0,false);
+        qfSlots.push(s);
+      }
+      const qfMax=qfSlots.filter(Boolean).length
+        ? Math.max(...qfSlots.filter(Boolean).map(s=>s2m(s)))+divSlotM(d)+rdbuf
+        : 0;
       const sf1=schedG(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
       const sf2=schedG(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
       const sfMax=Math.max(sf1?s2m(sf1):0,sf2?s2m(sf2):0)+divSlotM(d)+rdbuf;
       schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
       schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
-      // QF losers: 1 QF game + 1 consolation = 2 total
+      // QF losers consolation
       const qfLosers=[mkSeed('L QF1',d),mkSeed('L QF2',d),mkSeed('L QF3',d),mkSeed('L QF4',d)];
       qfLosers.forEach(t=>tS2[t.id]=[]);
       [[qfLosers[0],qfLosers[3],'Consolation (QF losers)'],[qfLosers[1],qfLosers[2],'Consolation (QF losers)']]
@@ -3054,7 +3328,7 @@ function renderGrid(sched,containerId,isD1){
   const slots=Object.keys(sched).sort((a,b)=>sH(a)-sH(b));
   const R=rl(),N=nlH();
   if(!slots.length){document.getElementById(containerId).innerHTML='';return;}
-  let t=`<table><thead><tr><th style="min-width:58px">Time</th>${fields.map(f=>`<th>${f.name}${f.champ?' ★':''}${f.recruiting?' ⭐':''}<br><span style="font-size:8px;font-weight:400;opacity:.7">${f.venue||'Main venue'}</span></th>`).join('')}</tr></thead><tbody>`;
+  let t=`<table><thead><tr><th style="min-width:58px">Time</th>${fields.map(f=>`<th>${f.name}${f.champ?' ★':''}${f.champNonRec?' ☆':''}${f.recruiting?' ⭐':''}<br><span style="font-size:8px;font-weight:400;opacity:.7">${f.venue||'Main venue'}</span></th>`).join('')}</tr></thead><tbody>`;
   slots.forEach(slot=>{
     const h=sH(slot),isR=isLunchSlot(slot);
     const hp=isD1&&practiceSlots[slot];
@@ -4980,7 +5254,7 @@ function loadSample(){
     {n:'Field 6',l:false,g:'girls',ch:true, rec:false,parking:80, lot:'Lot B',venue:'Main venue'},
     {n:'Field 7',l:false,g:'girls',ch:false,rec:false,parking:80, lot:'Lot B',venue:'Main venue'},
     {n:'Field 8',l:false,g:'boys',ch:false,rec:false,parking:60, lot:'Lot C',venue:'Main venue'},
-  ].forEach(f=>fields.push({id:fid++,name:f.n,lights:f.l,gender:f.g,champ:f.ch,
+  ].forEach(f=>fields.push({id:fid++,name:f.n,lights:f.l,gender:f.g,champ:f.ch,champNonRec:false,
     recruiting:f.rec,parking:f.parking,parkingPass:'',parkingLot:f.lot,venue:f.venue,location:f.venue}));
   [{n:'2028 Boys Elite',r:true,g:'boys',t:[['Hawks MD','MD','Elite'],['Wolves VA','VA','Strong'],['Eagles PA','PA','Strong'],['Lions NY','NY','Mid'],['Bears NJ','NJ','Mid'],['Tigers NC','NC','Lower']]},
    {n:'2028 Boys AA',r:true,g:'boys',t:[['Storm MD','MD','Elite'],['Flash VA','VA','Strong'],['Force PA','PA','Mid'],['Rush NY','NY','Mid'],['Drive OH','OH','Mid'],['Push IL','IL','Lower']]},
@@ -5486,8 +5760,18 @@ function updateFieldGenderRecommendation(){
   const totalFieldsOk=boysFieldsOk&&girlsFieldsOk;
   const boysRecOk=boysRecTeams===0||configuredBoysRec>=minBoysRec;
   const girlsRecOk=girlsRecTeams===0||configuredGirlsRec>=minGirlsRec;
-  // Champ field
-  const champOk2=fields.some(f=>f.champ);
+  // Champ fields: per ADRLN spec, recruiting and non-recruiting divisions each
+  // need their own designated championship field of matching gender. Compute
+  // overall champOk by checking both classes against the divisions present.
+  const _needBR=divs.some(d=>d.recruitable&&d.gender==='boys');
+  const _needGR=divs.some(d=>d.recruitable&&d.gender==='girls');
+  const _needBNR=divs.some(d=>!d.recruitable&&d.gender==='boys');
+  const _needGNR=divs.some(d=>!d.recruitable&&d.gender==='girls');
+  const _hasBR=fields.some(f=>f.champ&&f.gender==='boys');
+  const _hasGR=fields.some(f=>f.champ&&f.gender==='girls');
+  const _hasBNR=fields.some(f=>f.champNonRec&&f.gender==='boys');
+  const _hasGNR=fields.some(f=>f.champNonRec&&f.gender==='girls');
+  const champOk2=(!_needBR||_hasBR)&&(!_needGR||_hasGR)&&(!_needBNR||_hasBNR)&&(!_needGNR||_hasGNR);
   const allOk=boysFieldsOk&&girlsFieldsOk&&totalFieldsOk&&boysRecOk&&girlsRecOk&&champOk2;
   // Build list of what's still missing
   const missing=[];
@@ -5496,7 +5780,14 @@ function updateFieldGenderRecommendation(){
   if(boysTotal>0&&girlsTotal>0&&!totalFieldsOk) missing.push('Total fields ('+(configuredBoys+configuredGirls)+') insufficient — need at least '+(minBoysTotal+minGirlsTotal)+' ('+minBoysTotal+' boys + '+minGirlsTotal+' girls). Add more fields or set dedicated gender per field.');
   if(!boysRecOk) missing.push('Need '+minBoysRec+' boys recruiting fields (have '+configuredBoysRec+')');
   if(!girlsRecOk) missing.push('Need '+minGirlsRec+' girls recruiting fields (have '+configuredGirlsRec+')');
-  if(!champOk2) missing.push('Check <strong>Champ</strong> on at least one field — needed for Day 2 championship games');
+  if(!champOk2){
+    const champNeed=[];
+    if(_needBR&&!_hasBR) champNeed.push('Boys Champ (Rec)');
+    if(_needGR&&!_hasGR) champNeed.push('Girls Champ (Rec)');
+    if(_needBNR&&!_hasBNR) champNeed.push('Boys Champ (Non-Rec)');
+    if(_needGNR&&!_hasGNR) champNeed.push('Girls Champ (Non-Rec)');
+    missing.push('Need championship field(s): '+champNeed.join(', ')+' — each class (rec / non-rec) needs its own designated field per gender');
+  }
 
   const majorIssue=!boysFieldsOk||!girlsFieldsOk||!totalFieldsOk;
   const minorIssue=!champOk2||!boysRecOk||!girlsRecOk;
@@ -5521,25 +5812,32 @@ function updateFieldGenderRecommendation(){
   }
   h2+=`<tr style="border-top:1px solid rgba(0,0,0,.15);font-weight:600"><td style="padding:5px 8px">Total</td><td style="padding:5px 8px;text-align:center">${boysTotal+girlsTotal}</td><td style="padding:5px 8px;text-align:center">${minTotal} fields</td><td style="padding:5px 8px;text-align:center">${totalRecFields} rec fields assigned</td><td></td></tr>`;
   h2+='</tbody></table>';
-  h2+='<div style="font-size:10px;margin-top:6px;opacity:.8">Set each field gender using the Boys / Girls dropdown. Check <strong>Recruiting</strong> on fields for recruiting-age divisions. Check <strong>Champ</strong> on the field(s) where championship games will be played. Girls and boys fields are lined differently.</div>';
-  // Add champ field status
-  const champF=fields.filter(f=>f.champ).length;
-  const champBoysF=fields.filter(f=>f.champ&&f.gender==='boys').length;
-  const champGirlsF=fields.filter(f=>f.champ&&f.gender==='girls').length;
-  const needBC=divs.some(d=>d.gender==='boys');
-  const needGC=divs.some(d=>d.gender==='girls');
+  h2+='<div style="font-size:10px;margin-top:6px;opacity:.8">Set each field gender using the Boys / Girls dropdown. Check <strong>Recruiting</strong> on fields for recruiting-age divisions. Check <strong>Champ (Rec)</strong> for recruiting championship games and <strong>Champ (Non-Rec)</strong> for non-recruiting championship games — these are separate fields. Girls and boys fields are lined differently.</div>';
+  // Champ field status: track Rec and Non-Rec separately per ADRLN spec.
+  // Recruiting divisions need a Champ (Rec) field. Non-rec divisions need a
+  // Champ (Non-Rec) field. Each must match division gender.
+  const recChampB=fields.filter(f=>f.champ&&f.gender==='boys').length;
+  const recChampG=fields.filter(f=>f.champ&&f.gender==='girls').length;
+  const nonRecChampB=fields.filter(f=>f.champNonRec&&f.gender==='boys').length;
+  const nonRecChampG=fields.filter(f=>f.champNonRec&&f.gender==='girls').length;
+  const needBR=divs.some(d=>d.recruitable&&d.gender==='boys');
+  const needGR=divs.some(d=>d.recruitable&&d.gender==='girls');
+  const needBNR=divs.some(d=>!d.recruitable&&d.gender==='boys');
+  const needGNR=divs.some(d=>!d.recruitable&&d.gender==='girls');
+  const champMissing=[];
+  if(needBR&&recChampB===0) champMissing.push('Boys Champ (Rec)');
+  if(needGR&&recChampG===0) champMissing.push('Girls Champ (Rec)');
+  if(needBNR&&nonRecChampB===0) champMissing.push('Boys Champ (Non-Rec)');
+  if(needGNR&&nonRecChampG===0) champMissing.push('Girls Champ (Non-Rec)');
   let champStatus='';
-  if(champF===0){
-    champStatus='<div class="cl cl-r" style="margin-top:6px;font-size:11px"><strong>Championship field required.</strong> Check the <strong>Champ</strong> box on the field where championship games will be played. Minimum: '+(needBC&&needGC?'1 boys + 1 girls champ field':needBC?'1 boys champ field':'1 girls champ field')+'.</div>';
+  if(champMissing.length){
+    champStatus='<div class="cl cl-r" style="margin-top:6px;font-size:11px"><strong>Championship fields required:</strong> '+champMissing.join(', ')+'. Each class (recruiting / non-recruiting) needs its own designated championship field per gender.</div>';
   } else {
-    const missing=[];
-    if(needBC&&!champBoysF) missing.push('boys champ field');
-    if(needGC&&!champGirlsF) missing.push('girls champ field');
-    if(missing.length){
-      champStatus='<div class="cl cl-a" style="margin-top:6px;font-size:11px"><strong>Add '+missing.join(' and ')+'.</strong> Check Champ on a field with the correct gender designation.</div>';
-    } else {
-      champStatus='<div style="font-size:11px;color:#085041;margin-top:4px">✓ Championship field'+(champF>1?'s':'')+' designated ('+champF+' field'+(champF>1?'s':'')+').</div>';
-    }
+    const total=recChampB+recChampG+nonRecChampB+nonRecChampG;
+    const summary=[];
+    if(recChampB||recChampG) summary.push((recChampB+recChampG)+' Rec champ');
+    if(nonRecChampB||nonRecChampG) summary.push((nonRecChampB+nonRecChampG)+' Non-Rec champ');
+    champStatus='<div style="font-size:11px;color:#085041;margin-top:4px">✓ Championship field'+(total>1?'s':'')+' designated ('+summary.join(' + ')+').</div>';
   }
   h2+=champStatus;
   h2+='</div>';
@@ -5586,19 +5884,23 @@ function validateAndProceed(){
       warnings.push('You have '+recTeams+' recruiting-age teams but no fields marked as Recruiting. Check the Recruiting box on the fields designated for recruiting-age divisions.');
     }
 
-    // Championship field is required
-    const champFields=fields.filter(f=>f.champ).length;
-    // Need 1 champ field per gender that has a bracket
-    const needBoysChamp=divs.some(d=>d.gender==='boys'&&d.recruitable);
-    const needGirlsChamp=divs.some(d=>d.gender==='girls'&&d.recruitable);
-    const hasBoysChamp=fields.some(f=>f.champ&&f.gender==='boys');
-    const hasGirlsChamp=fields.some(f=>f.champ&&f.gender==='girls');
-    if(champFields===0){
-      errors.push('No Championship field designated. Check the Champ box on the field where championship games will be played.');
-    } else {
-      if(needBoysChamp&&!hasBoysChamp) errors.push('Boys divisions need a Championship field. Check Champ on a Boys field.');
-      if(needGirlsChamp&&!hasGirlsChamp) errors.push('Girls divisions need a Championship field. Check Champ on a Girls field.');
-    }
+    // Championship fields are required.
+    // RECRUITING divisions need a Champ (Rec) field.
+    // NON-RECRUITING divisions need a Champ (Non-Rec) field.
+    // Each must be of matching gender. (E.g. boys recruiting div needs a boys
+    // recruiting-champ field; girls non-rec div needs a girls non-rec-champ field.)
+    const needBoysRecChamp=divs.some(d=>d.gender==='boys'&&d.recruitable);
+    const needGirlsRecChamp=divs.some(d=>d.gender==='girls'&&d.recruitable);
+    const needBoysNonRecChamp=divs.some(d=>d.gender==='boys'&&!d.recruitable);
+    const needGirlsNonRecChamp=divs.some(d=>d.gender==='girls'&&!d.recruitable);
+    const hasBoysRecChamp=fields.some(f=>f.champ&&f.gender==='boys');
+    const hasGirlsRecChamp=fields.some(f=>f.champ&&f.gender==='girls');
+    const hasBoysNonRecChamp=fields.some(f=>f.champNonRec&&f.gender==='boys');
+    const hasGirlsNonRecChamp=fields.some(f=>f.champNonRec&&f.gender==='girls');
+    if(needBoysRecChamp&&!hasBoysRecChamp) errors.push('Boys recruiting divisions need a Championship (Rec) field. Check the Champ (Rec) box on a Boys field.');
+    if(needGirlsRecChamp&&!hasGirlsRecChamp) errors.push('Girls recruiting divisions need a Championship (Rec) field. Check the Champ (Rec) box on a Girls field.');
+    if(needBoysNonRecChamp&&!hasBoysNonRecChamp) errors.push('Boys non-recruiting divisions need a separate Championship (Non-Rec) field. Check the Champ (Non-Rec) box on a Boys field.');
+    if(needGirlsNonRecChamp&&!hasGirlsNonRecChamp) errors.push('Girls non-recruiting divisions need a separate Championship (Non-Rec) field. Check the Champ (Non-Rec) box on a Girls field.');
 
     // Parking lots: hard block
     if(parkingLots.length===0){
