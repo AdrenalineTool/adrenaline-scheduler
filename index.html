@@ -686,25 +686,68 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div id="recruiters-list"></div>
   <button class="btn btn-sm" onclick="addRecruiter()" style="margin-top:6px">+ Add recruiter</button>
 
-  <div class="sec-label" style="margin-top:14px">Hotel partner <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— optional · negotiated room block link for visiting families</span></div>
+  <div class="sec-label" style="margin-top:14px">Recruiter hotel <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— for the recruiter packet only · NOT included in team field guides</span></div>
   <div class="form-row">
     <div class="fg" style="flex:2"><label>Hotel name</label><input id="hotel-name" placeholder="e.g. Hilton Garden Inn — Anaheim Resort" oninput="hotelPartner.name=this.value"></div>
     <div class="fg"><label>Negotiated rate</label><input id="hotel-rate" placeholder="e.g. $129/night" oninput="hotelPartner.rate=this.value"></div>
     <div class="fg" style="flex:2"><label>Booking link</label><input id="hotel-link" placeholder="https://..." oninput="hotelPartner.link=this.value"></div>
   </div>
 
+  <div class="sec-label" style="margin-top:14px">Recruiter happy hour <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— social spot for the recruiter packet · venue, address, website</span></div>
+  <div class="form-row">
+    <div class="fg" style="flex:2"><label>Venue name</label><input id="happyhour-name" placeholder="e.g. The Iron Door Tavern" oninput="recruiterHappyHour.name=this.value"></div>
+    <div class="fg" style="flex:2"><label>Address</label><input id="happyhour-addr" placeholder="123 Main St, City, ST" oninput="recruiterHappyHour.address=this.value"></div>
+    <div class="fg" style="flex:2"><label>Website</label><input id="happyhour-web" placeholder="https://..." oninput="recruiterHappyHour.website=this.value"></div>
+  </div>
+
   <div class="sec-label" style="margin-top:14px">Tourist attractions <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— for destination events; family activities near the venue</span></div>
   <div id="attractions-list"></div>
   <button class="btn btn-sm" onclick="addAttraction()" style="margin-top:6px">+ Add attraction</button>
 
-  <div class="sec-label" style="margin-top:14px">Field map (PDF) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— inserted between the parking pass and Day 1 schedule on every team's field guide; first page only</span></div>
+  <div class="sec-label" style="margin-top:14px">Event logo (PNG, JPG, or SVG) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— co-branded alongside the Adrenaline shield on every output deliverable</span></div>
+  <div id="event-logo-upload" style="background:var(--lt-gray);border:1.5px dashed var(--mid-gray);border-radius:6px;padding:14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s" onclick="document.getElementById('event-logo-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--adrln-green)';this.style.background='var(--lt-adrln-green)'" ondragleave="this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)'" ondrop="event.preventDefault();this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)';handleEventLogoDrop(event)">
+    <div id="event-logo-state" style="font-size:12px;color:var(--dark-gray)">
+      <strong style="color:var(--navy)">Drop the event logo here</strong> or click to choose a file<br>
+      <span style="font-size:10px">PNG, JPG, or SVG · Brands the field guide cover, headers, XLSX banners, and score sheets · Adrenaline shield is preserved alongside</span>
+    </div>
+    <input type="file" id="event-logo-input" accept="image/png,.png,image/jpeg,.jpg,.jpeg,image/svg+xml,.svg" style="display:none" onchange="handleEventLogoInput(event)">
+  </div>
+
+  <div class="sec-label" style="margin-top:14px">Field map (PDF, PNG, or JPG) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— inserted between the parking pass and Day 1 schedule on every team's field guide</span></div>
   <div id="field-map-upload" style="background:var(--lt-gray);border:1.5px dashed var(--mid-gray);border-radius:6px;padding:14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s" onclick="document.getElementById('field-map-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--adrln-green)';this.style.background='var(--lt-adrln-green)'" ondragleave="this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)'" ondrop="event.preventDefault();this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)';handleFieldMapDrop(event)">
     <div id="field-map-state" style="font-size:12px;color:var(--dark-gray)">
-      <strong style="color:var(--navy)">Drop a field map PDF here</strong> or click to choose a file<br>
-      <span style="font-size:10px">Supported: .pdf · First page is inserted as page 3 of every team's field guide</span>
+      <strong style="color:var(--navy)">Drop a field map here</strong> or click to choose a file<br>
+      <span style="font-size:10px">PDF, PNG, or JPG · Inserted as page 3 of every team's field guide</span>
     </div>
-    <input type="file" id="field-map-input" accept="application/pdf,.pdf" style="display:none" onchange="handleFieldMapInput(event)">
+    <input type="file" id="field-map-input" accept="application/pdf,.pdf,image/png,.png,image/jpeg,.jpg,.jpeg" style="display:none" onchange="handleFieldMapInput(event)">
   </div>
+
+  <div class="sec-label" style="margin-top:14px">Team rosters (EventConnect CSV) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— each team's roster appears on its own field guide; matched automatically by team name with manual override</span></div>
+  <div id="roster-upload" style="background:var(--lt-gray);border:1.5px dashed var(--mid-gray);border-radius:6px;padding:14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s" onclick="document.getElementById('roster-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--adrln-green)';this.style.background='var(--lt-adrln-green)'" ondragleave="this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)'" ondrop="event.preventDefault();this.style.borderColor='var(--mid-gray)';this.style.background='var(--lt-gray)';handleRosterDrop(event)">
+    <div id="roster-state" style="font-size:12px;color:var(--dark-gray)">
+      <strong style="color:var(--navy)">Drop the EventConnect roster export (CSV) here</strong> or click to choose a file<br>
+      <span style="font-size:10px">Aidan exports from EventConnect &rarr; Download &rarr; CSV. Each team's roster (player name + jersey #) appears on that team's field guide page.</span>
+    </div>
+    <input type="file" id="roster-input" accept=".csv,text/csv" style="display:none" onchange="handleRosterInput(event)">
+  </div>
+  <div id="roster-match-panel" style="margin-top:8px"></div>
+
+  <div class="sec-label" style="margin-top:14px">Recruiting rosters (EventBeacon — per team) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— used in the Recruiter Field Guide; one EventBeacon Excel per recruiting team</span></div>
+  <div style="background:var(--lt-gray);border:1px solid var(--mid-gray);border-radius:6px;padding:12px">
+    <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+      <div class="fg" style="flex:2;min-width:240px"><label>Choose recruiting team</label>
+        <select id="rec-roster-team-select" style="width:100%"></select>
+      </div>
+      <div>
+        <button class="btn btn-sm btn-navy" onclick="document.getElementById('rec-roster-input').click()">Upload roster file</button>
+        <input type="file" id="rec-roster-input" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="handleRecRosterInput(event)">
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--dark-gray);margin-top:6px">
+      EventBeacon template: First Name, Last Name, Email, Grad Year, Jersey #, Position, Committed, Guardians, Phone, USAL #. Pick the team first, then upload that team's Excel. Parent contact info is stripped at parse time — only recruiter-relevant fields are kept.
+    </div>
+  </div>
+  <div id="rec-roster-coverage-panel" style="margin-top:8px"></div>
 
   <div class="sec-label" style="margin-top:14px">Onsite logistics <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— locations families ask about repeatedly</span></div>
   <div class="form-row">
@@ -773,19 +816,33 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
   <div class="exp-row" onclick="expEric()"><div><div class="exp-name">Field-view schedule (Eric)</div><div class="exp-sub">Per-field timeline both days * practice assignments included</div></div><span class="exp-badge eb-eric">Eric</span></div>
   <div class="exp-row" onclick="expAidan()"><div><div class="exp-name">Recruiter window report (Aidan)</div><div class="exp-sub">All recruitable games both days * lunch protection confirmed</div></div><span class="exp-badge eb-aidan">Aidan</span></div>
 
-  <div class="sec-label">Print materials</div>
+  <div class="sec-label" style="margin-top:18px">Customer Experience (Aidan / CX) <span style="font-size:10px;color:var(--dark-gray);font-weight:400">— pre-event packets, recruiter materials, on-site reference</span></div>
   <div class="exp-row" onclick="expWelcomePackets()">
-    <div><div class="exp-name">"The ADRLN Day" team field guides (.zip of PDFs)</div><div class="exp-sub">One personalized field guide PDF per team — pulls from Step 2 (fields, staff, vendors) and Step 6 (welcome message, recruiters, hotel partner, attractions, field map, logistics) · CX Director emails to teams pre-event</div></div>
+    <div><div class="exp-name">"The ADRLN Day" team field guides (.zip of PDFs)</div><div class="exp-sub">One personalized field guide PDF per team — pulls Step 6 inputs (welcome message, recruiters, attractions, field map, team rosters from EventConnect, logistics) · CX emails to teams pre-event</div></div>
     <span class="exp-badge eb-aidan">CX / Teams</span>
   </div>
+  <div class="exp-row" onclick="expRecruiterFieldGuide()">
+    <div><div class="exp-name">Recruiter Field Guide (.pdf)</div><div class="exp-sub">Complete recruiter packet — players-by-region, teams-by-region, recruiter-only schedule, run-of-show with check-in window, tent amenities, lunch hour rules, hotel + happy hour, field map, parking note, one-page-per-team rosters (jersey order), master player roster · Pulls EventBeacon recruiting rosters from Step 6</div></div>
+    <span class="exp-badge eb-aidan">CX / Recruiters</span>
+  </div>
+  <div class="exp-row" onclick="expRecruiterSignIn()">
+    <div><div class="exp-name">Recruiter sign-in sheet (.xlsx)</div><div class="exp-sub">Day 1 + Day 2 tabs · Pre-populated rows from Step 6 recruiters list · Columns for arrival time, gift ✓, confirmed ✓, packet ✓, signature, notes · 15 walk-in rows per day · Auto-shows the check-in window (45 min before first recruiter game) · Print and post at the recruiter tent</div></div>
+    <span class="exp-badge eb-aidan">CX / Recruiters</span>
+  </div>
+  <div class="exp-row" onclick="expMasterPlayerRoster()">
+    <div><div class="exp-name">Master player roster (.xlsx)</div><div class="exp-sub">Every recruitable player alphabetical by last name — sortable spreadsheet for recruiters who want a phone-friendly filterable list · Includes team, division, jersey, position, grad year, committed, state</div></div>
+    <span class="exp-badge eb-aidan">CX / Recruiters</span>
+  </div>
   <div class="exp-row" onclick="expArrivalCards()">
-    <div><div class="exp-name">Team arrival cards (.xlsx)</div><div class="exp-sub">One sheet per team — game times, field, parking lot, pass color, check-in info · Aidan emails to teams</div></div>
-    <span class="exp-badge eb-aidan">Aidan / Teams</span>
+    <div><div class="exp-name">Team arrival cards (.xlsx)</div><div class="exp-sub">One sheet per team — game times, field, parking lot, pass color, check-in info · CX emails to teams</div></div>
+    <span class="exp-badge eb-aidan">CX / Teams</span>
   </div>
   <div class="exp-row" onclick="expScoreSheets()">
-    <div><div class="exp-name">Field score sheets (.zip of PDFs)</div><div class="exp-sub">One PDF per field per day — every game on the sheet with score boxes and a head-coach signature block · Field staff record final scores, both coaches sign, runner returns to the booth · Branded for live event use</div></div>
-    <span class="exp-badge eb-eric">Eric / Field staff</span>
+    <div><div class="exp-name">Field score sheets (.zip of PDFs)</div><div class="exp-sub">One PDF per field per day — every game on the sheet with score boxes and a head-coach signature block · Field staff record final scores, both coaches sign, runner returns to booth</div></div>
+    <span class="exp-badge eb-aidan">CX / Field</span>
   </div>
+
+  <div class="sec-label">Print materials</div>
   <div class="exp-row" onclick="expFieldSigns()">
     <div><div class="exp-name">Field schedule signs (.xlsx)</div><div class="exp-sub">One sheet per field — full day schedule in large print · Print and post at each field entrance</div></div>
     <span class="exp-badge eb-eric">Eric / Ops</span>
@@ -838,12 +895,48 @@ let vendors=[], vid=1;
 let recruitersList=[], rcid=1;     // {id, name, program, divId}
 let attractions=[], aid=1;          // {id, name, type, link, distance}
 let hotelPartner={name:'',rate:'',link:''};
+// Recruiter happy hour: social-spot info for the recruiter packet only.
+// Three fields — venue name, full address, website — pulled by the future
+// recruiter packet/roster book generator. Not displayed in team field guides.
+let recruiterHappyHour={name:'',address:'',website:''};
 let welcomeOverride='';
 let logistics={lostFound:'',firstAid:'',restrooms:''};
 // Field map (uploaded PDF, first page inserted on every team's field guide between p2 and p3).
 // fieldMapPdfBytes is a Uint8Array of the source PDF; fieldMapMeta has display info.
 let fieldMapPdfBytes=null;
-let fieldMapMeta=null; // { name, sizeKB, pageCount }
+let fieldMapMeta=null; // { name, sizeKB, pageCount, kind: 'pdf'|'image', w?, h? }
+let fieldMapImageDataUrl=null; // data URL when kind === 'image'
+let fieldMapImageDims=null;    // { w, h } natural pixel size when kind === 'image'
+// Event logo: per-event branding mark co-presented with the Adrenaline shield
+// on PDFs (field guide, score sheets) and XLSX banner rows. Stored as a data URL
+// for direct rendering (jsPDF.addImage / SheetJS image insertion).
+// SVG files are stored as a data URL too but rasterized to PNG via canvas at
+// upload time so jsPDF can render them (jsPDF does not natively support SVG).
+let eventLogoDataUrl=null;     // PNG/JPG data URL ready for PDF/XLSX rendering
+let eventLogoMeta=null;        // { name, sizeKB, w, h, originalKind: 'png'|'jpg'|'svg' }
+// Team rosters from EventConnect CSV upload.
+// rosterByTeamReg is a Map of "Registration Name" → array of {name, jersey}.
+// rosterFileMeta tracks file info (name, size, totals) for the UI status display.
+// rosterTeamMap is a Map of scheduler team.id → "Registration Name" linking
+// scheduler teams to EventConnect rosters. Auto-populated by fuzzy-matching at
+// upload, then editable by Aidan via dropdowns in the match panel.
+// We deliberately strip parent contact info (email/phone), DOB and other PII
+// at parse time — only player name + jersey survive into rosterByTeamReg.
+let rosterByTeamReg=null; // Map<string, Array<{name, jersey}>>
+let rosterFileMeta=null;  // { name, sizeKB, totalPlayers, totalTeams }
+let rosterTeamMap={};     // { [teamId]: registrationName }
+
+// EventBeacon recruiting rosters — uploaded one team at a time by Aidan in
+// Step 6. Keyed directly by scheduler team.id (no fuzzy matching needed since
+// Aidan picks the team from a dropdown before uploading).
+//
+// Each entry: {fileName, sizeKB, uploadedAt (ISO date), players: [{firstName,
+//   lastName, name, jersey, gradYear, position, committed, usal}]}
+//
+// Parent contact info (email, guardian email, phone) is stripped at parse time
+// — only recruiter-relevant fields survive into the players array. The same
+// PII-minimizing approach we use for EventConnect.
+let recruiterRosters={};
 const TO={Elite:0,Strong:1,Mid:2,Lower:3};
 const parkingPassColors={'Red':'#fee2e2','Blue':'#dbeafe','Green':'#dcfce7','Yellow':'#fef9c3','Orange':'#ffedd5','Purple':'#f3e8ff','White':'#f8fafc'};
 const parkingPassBorder={'Red':'#ef4444','Blue':'#3b82f6','Green':'#22c55e','Yellow':'#eab308','Orange':'#f97316','Purple':'#a855f7','White':'#cbd5e1'};
@@ -1172,10 +1265,14 @@ function renderEventExperience(){
   const hn=document.getElementById('hotel-name');if(hn)hn.value=hotelPartner.name||'';
   const hr=document.getElementById('hotel-rate');if(hr)hr.value=hotelPartner.rate||'';
   const hl=document.getElementById('hotel-link');if(hl)hl.value=hotelPartner.link||'';
+  // Recruiter happy hour — same hydration pattern as hotel
+  const hhn=document.getElementById('happyhour-name');if(hhn)hhn.value=recruiterHappyHour.name||'';
+  const hha=document.getElementById('happyhour-addr');if(hha)hha.value=recruiterHappyHour.address||'';
+  const hhw=document.getElementById('happyhour-web');if(hhw)hhw.value=recruiterHappyHour.website||'';
   const lf=document.getElementById('logistics-lostfound');if(lf)lf.value=logistics.lostFound||'';
   const fa=document.getElementById('logistics-firstaid');if(fa)fa.value=logistics.firstAid||'';
   const re=document.getElementById('logistics-restrooms');if(re)re.value=logistics.restrooms||'';
-  renderRecruiters();renderAttractions();renderFieldMapState();
+  renderRecruiters();renderAttractions();renderFieldMapState();renderEventLogoState();renderRosterState();renderRosterMatchPanel();renderRecRosterTeamSelect();renderRecRosterCoverage();
 }
 
 // ── Recruiters on-site ────────────────────────────────────────────────
@@ -1249,28 +1346,57 @@ function handleFieldMapDrop(ev){
   if(f)loadFieldMapFile(f);
 }
 async function loadFieldMapFile(file){
-  if(!file.type.includes('pdf')&&!/\.pdf$/i.test(file.name)){
-    showToast('Field map must be a PDF file','err');return;
+  const isPdf = file.type.includes('pdf') || /\.pdf$/i.test(file.name);
+  const isImage = /^image\/(png|jpe?g)$/i.test(file.type) || /\.(png|jpe?g)$/i.test(file.name);
+  if(!isPdf && !isImage){
+    showToast('Field map must be a PDF, PNG, or JPG file','err');return;
   }
   if(file.size>15*1024*1024){
     showToast('Field map is over 15 MB — large file will bloat every team packet. Consider compressing.','warn');
   }
   try{
-    const buf=await file.arrayBuffer();
-    const bytes=new Uint8Array(buf);
-    let pageCount=0;
-    if(window.PDFLib){
-      try{
-        const doc=await window.PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});
-        pageCount=doc.getPageCount();
-      }catch(e){
-        showToast('Could not read PDF — file may be corrupted or encrypted','err');return;
+    if(isPdf){
+      // PDF path: load bytes, validate via pdf-lib, store. The pdf-lib merge
+      // step in the field guide generator inserts page 1 of this PDF.
+      const buf=await file.arrayBuffer();
+      const bytes=new Uint8Array(buf);
+      let pageCount=0;
+      if(window.PDFLib){
+        try{
+          const doc=await window.PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});
+          pageCount=doc.getPageCount();
+        }catch(e){
+          showToast('Could not read PDF — file may be corrupted or encrypted','err');return;
+        }
       }
+      fieldMapPdfBytes=bytes;
+      fieldMapImageDataUrl=null;
+      fieldMapMeta={name:file.name,sizeKB:Math.round(file.size/1024),pageCount:pageCount,kind:'pdf'};
+      renderFieldMapState();
+      showToast(`Field map loaded: ${file.name} (${fieldMapMeta.sizeKB} KB, ${pageCount} page${pageCount===1?'':'s'})`);
+    } else {
+      // Image path: convert to data URL for direct rendering via jsPDF.addImage().
+      // Drawn into a fresh PDF page in the field guide generator (no pdf-lib needed).
+      const dataUrl=await new Promise((resolve,reject)=>{
+        const r=new FileReader();
+        r.onload=()=>resolve(r.result);
+        r.onerror=()=>reject(new Error('Could not read image file'));
+        r.readAsDataURL(file);
+      });
+      // Get image dimensions for aspect-ratio preservation in the field guide
+      const dims=await new Promise((resolve)=>{
+        const img=new Image();
+        img.onload=()=>resolve({w:img.naturalWidth,h:img.naturalHeight});
+        img.onerror=()=>resolve({w:0,h:0});
+        img.src=dataUrl;
+      });
+      fieldMapPdfBytes=null;
+      fieldMapImageDataUrl=dataUrl;
+      fieldMapImageDims=dims;
+      fieldMapMeta={name:file.name,sizeKB:Math.round(file.size/1024),pageCount:1,kind:'image',w:dims.w,h:dims.h};
+      renderFieldMapState();
+      showToast(`Field map loaded: ${file.name} (${fieldMapMeta.sizeKB} KB, ${dims.w}×${dims.h})`);
     }
-    fieldMapPdfBytes=bytes;
-    fieldMapMeta={name:file.name,sizeKB:Math.round(file.size/1024),pageCount:pageCount};
-    renderFieldMapState();
-    showToast(`Field map loaded: ${file.name} (${fieldMapMeta.sizeKB} KB, ${pageCount} page${pageCount===1?'':'s'})`);
   }catch(err){
     console.error('Field map load failed',err);
     showToast('Failed to load field map: '+err.message,'err');
@@ -1279,6 +1405,8 @@ async function loadFieldMapFile(file){
 function clearFieldMap(){
   fieldMapPdfBytes=null;
   fieldMapMeta=null;
+  fieldMapImageDataUrl=null;
+  fieldMapImageDims=null;
   renderFieldMapState();
   showToast('Field map removed');
 }
@@ -1286,25 +1414,575 @@ function renderFieldMapState(){
   const el=document.getElementById('field-map-state');
   if(!el)return;
   if(!fieldMapMeta){
-    el.innerHTML=`<strong style="color:var(--navy)">Drop a field map PDF here</strong> or click to choose a file<br>
-      <span style="font-size:10px">Supported: .pdf · First page is inserted as page 3 of every team's field guide</span>`;
+    el.innerHTML=`<strong style="color:var(--navy)">Drop a field map here</strong> or click to choose a file<br>
+      <span style="font-size:10px">PDF, PNG, or JPG · Inserted as page 3 of every team's field guide</span>`;
     return;
   }
   // Estimated bundle add: field map size × team count
   const teamCount=divs.reduce((s,d)=>s+(d.teams||[]).length,0);
   const bundleAddMB=teamCount?Math.round((fieldMapMeta.sizeKB*teamCount)/1024):0;
+  // Detail line varies by file type — images show dimensions, PDFs show page count
+  const detail=(fieldMapMeta.kind==='image')
+    ? `${fieldMapMeta.sizeKB} KB · ${fieldMapMeta.w}×${fieldMapMeta.h} image${teamCount?` · adds ~${bundleAddMB} MB to the team-packets ZIP`:''}`
+    : `${fieldMapMeta.sizeKB} KB · ${fieldMapMeta.pageCount} page${fieldMapMeta.pageCount===1?'':'s'}${fieldMapMeta.pageCount>1?' (only page 1 will be inserted)':''}${teamCount?` · adds ~${bundleAddMB} MB to the team-packets ZIP`:''}`;
   el.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
       <div style="text-align:left">
         <strong style="color:var(--adrln-green-dk);font-size:13px">✓ Field map loaded</strong><br>
         <span style="font-size:11px">${fieldMapMeta.name}</span><br>
-        <span style="font-size:10px;color:var(--dark-gray)">${fieldMapMeta.sizeKB} KB · ${fieldMapMeta.pageCount} page${fieldMapMeta.pageCount===1?'':'s'}${fieldMapMeta.pageCount>1?' (only page 1 will be inserted)':''}${teamCount?` · adds ~${bundleAddMB} MB to the team-packets ZIP`:''}</span>
+        <span style="font-size:10px;color:var(--dark-gray)">${detail}</span>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-sm" onclick="event.stopPropagation();document.getElementById('field-map-input').click()" title="Replace with a different PDF">Replace</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();document.getElementById('field-map-input').click()" title="Replace with a different file">Replace</button>
         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();clearFieldMap()" title="Remove the field map">Remove</button>
       </div>
     </div>`;
+}
+
+// ── Event logo upload ────────────────────────────────────────────────
+// Per-event branding mark co-presented with the Adrenaline shield on every
+// output deliverable (field guide PDFs, score sheets, XLSX banner rows).
+// Stored as a PNG/JPG data URL ready for direct rendering. SVG inputs are
+// rasterized to PNG via canvas at upload time (jsPDF doesn't support SVG).
+
+function handleEventLogoInput(ev){
+  const f=ev.target.files&&ev.target.files[0];
+  if(f)loadEventLogoFile(f);
+  ev.target.value='';
+}
+function handleEventLogoDrop(ev){
+  const f=ev.dataTransfer.files&&ev.dataTransfer.files[0];
+  if(f)loadEventLogoFile(f);
+}
+
+async function loadEventLogoFile(file){
+  const isPng=/^image\/png$/i.test(file.type)||/\.png$/i.test(file.name);
+  const isJpg=/^image\/jpe?g$/i.test(file.type)||/\.(jpg|jpeg)$/i.test(file.name);
+  const isSvg=/svg/i.test(file.type)||/\.svg$/i.test(file.name);
+  if(!isPng&&!isJpg&&!isSvg){
+    showToast('Event logo must be a PNG, JPG, or SVG file','err');return;
+  }
+  if(file.size>5*1024*1024){
+    showToast('Event logo over 5 MB — large file will bloat every output','warn');
+  }
+  try{
+    if(isSvg){
+      // Read SVG as text, then rasterize to PNG via a hidden canvas. jsPDF
+      // doesn't render SVG natively, so we convert at upload time. Render at
+      // 4x size for retina-quality print output.
+      const svgText=await file.text();
+      const png=await rasterizeSvgToPng(svgText,1024);
+      const dims=await new Promise((resolve)=>{
+        const img=new Image();
+        img.onload=()=>resolve({w:img.naturalWidth,h:img.naturalHeight});
+        img.onerror=()=>resolve({w:1024,h:1024});
+        img.src=png;
+      });
+      eventLogoDataUrl=png;
+      eventLogoMeta={name:file.name,sizeKB:Math.round(file.size/1024),w:dims.w,h:dims.h,originalKind:'svg'};
+    } else {
+      // PNG/JPG: read as data URL directly, capture natural dimensions
+      const dataUrl=await new Promise((resolve,reject)=>{
+        const r=new FileReader();
+        r.onload=()=>resolve(r.result);
+        r.onerror=()=>reject(new Error('Could not read image file'));
+        r.readAsDataURL(file);
+      });
+      const dims=await new Promise((resolve)=>{
+        const img=new Image();
+        img.onload=()=>resolve({w:img.naturalWidth,h:img.naturalHeight});
+        img.onerror=()=>resolve({w:0,h:0});
+        img.src=dataUrl;
+      });
+      eventLogoDataUrl=dataUrl;
+      eventLogoMeta={name:file.name,sizeKB:Math.round(file.size/1024),w:dims.w,h:dims.h,originalKind:isPng?'png':'jpg'};
+    }
+    renderEventLogoState();
+    showToast(`Event logo loaded: ${file.name} (${eventLogoMeta.w}×${eventLogoMeta.h})`);
+  }catch(err){
+    console.error('Event logo load failed',err);
+    showToast('Failed to load event logo: '+err.message,'err');
+  }
+}
+
+// Rasterize an SVG string to a PNG data URL via an offscreen canvas.
+// Renders at the requested target size (preserving aspect ratio) so the output
+// is print-quality. Returns a data URL ready for jsPDF.addImage / XLSX.
+function rasterizeSvgToPng(svgText, targetSize){
+  return new Promise((resolve,reject)=>{
+    const blob=new Blob([svgText],{type:'image/svg+xml'});
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const aspect=img.naturalWidth>0&&img.naturalHeight>0
+          ?img.naturalWidth/img.naturalHeight:1;
+        const w=Math.round(targetSize),h=Math.round(targetSize/aspect);
+        const canvas=document.createElement('canvas');
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/png'));
+      }catch(err){
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('SVG could not be rendered. Check the file is valid SVG.'));};
+    img.src=url;
+  });
+}
+
+function clearEventLogo(){
+  eventLogoDataUrl=null;
+  eventLogoMeta=null;
+  renderEventLogoState();
+  showToast('Event logo removed');
+}
+
+function renderEventLogoState(){
+  const el=document.getElementById('event-logo-state');
+  if(!el)return;
+  if(!eventLogoMeta){
+    el.innerHTML=`<strong style="color:var(--navy)">Drop the event logo here</strong> or click to choose a file<br>
+      <span style="font-size:10px">PNG, JPG, or SVG · Brands the field guide cover, headers, XLSX banners, and score sheets · Adrenaline shield is preserved alongside</span>`;
+    return;
+  }
+  // Live preview: show how the logo appears on a sample navy header (matches the
+  // field guide cover banner). Helps Aidan confirm the logo is readable on navy.
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="text-align:left">
+        <strong style="color:var(--adrln-green-dk);font-size:13px">✓ Event logo loaded</strong><br>
+        <span style="font-size:11px">${eventLogoMeta.name}</span><br>
+        <span style="font-size:10px;color:var(--dark-gray)">${eventLogoMeta.sizeKB} KB · ${eventLogoMeta.w}×${eventLogoMeta.h} ${eventLogoMeta.originalKind.toUpperCase()}${eventLogoMeta.originalKind==='svg'?' (rasterized to PNG)':''}</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div style="background:var(--navy);padding:6px 10px;border-radius:4px;display:flex;align-items:center;gap:6px" title="Preview on navy header">
+          <img src="${eventLogoDataUrl}" style="height:32px;display:block">
+        </div>
+        <button class="btn btn-sm" onclick="event.stopPropagation();document.getElementById('event-logo-input').click()" title="Replace with a different file">Replace</button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();clearEventLogo()" title="Remove the event logo">Remove</button>
+      </div>
+    </div>`;
+}
+
+// ── Team rosters (EventConnect CSV upload) ────────────────────────────
+// Parses an EventConnect Member Export CSV. Strips PII at parse time —
+// only player name + jersey number survive into rosterByTeamReg. Auto-matches
+// each scheduler team to an EventConnect Registration Name via fuzzy matching;
+// Aidan can override via the match panel before generating field guides.
+
+function handleRosterInput(ev){
+  const f=ev.target.files&&ev.target.files[0];
+  if(f)loadRosterFile(f);
+  ev.target.value='';
+}
+function handleRosterDrop(ev){
+  const f=ev.dataTransfer.files&&ev.dataTransfer.files[0];
+  if(f)loadRosterFile(f);
+}
+
+async function loadRosterFile(file){
+  if(!/\.csv$/i.test(file.name)&&!file.type.includes('csv')){
+    showToast('Roster file must be a CSV exported from EventConnect','err');return;
+  }
+  try{
+    const text=await file.text();
+    const result=parseRosterCSV(text);
+    if(!result.byTeam.size){
+      showToast('No player records found — confirm this is the EventConnect Member Export','err');return;
+    }
+    rosterByTeamReg=result.byTeam;
+    rosterFileMeta={
+      name:file.name,
+      sizeKB:Math.round(file.size/1024),
+      totalPlayers:result.totalPlayers,
+      totalTeams:result.byTeam.size
+    };
+    // Auto-match scheduler teams to EventConnect registration names
+    autoMatchRosterTeams();
+    renderRosterState();
+    renderRosterMatchPanel();
+    showToast(`Roster loaded: ${result.totalPlayers} players across ${result.byTeam.size} teams`);
+  }catch(err){
+    console.error('Roster load failed',err);
+    showToast('Failed to read roster CSV: '+err.message,'err');
+  }
+}
+
+function clearRoster(){
+  rosterByTeamReg=null;
+  rosterFileMeta=null;
+  rosterTeamMap={};
+  renderRosterState();
+  renderRosterMatchPanel();
+  showToast('Roster cleared');
+}
+
+// Lightweight CSV parser. Handles quoted fields with embedded commas, escaped
+// quotes (""), and trailing \r from Windows line endings. Strict field index
+// lookup by header — ignores everything outside the columns we care about.
+function parseRosterCSV(text){
+  // Strip BOM and split into lines
+  text=text.replace(/^\uFEFF/,'');
+  const lines=[];
+  let cur='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(ch==='"'){
+      if(inQ&&text[i+1]==='"'){cur+='"';i++;}
+      else inQ=!inQ;
+    } else if(ch==='\n'&&!inQ){
+      lines.push(cur);cur='';
+    } else if(ch==='\r'&&!inQ){
+      // skip — handled at \n
+    } else {
+      cur+=ch;
+    }
+  }
+  if(cur.length)lines.push(cur);
+  if(!lines.length)throw new Error('Empty CSV file');
+
+  // Parse one row of CSV into fields
+  const parseRow=(line)=>{
+    const out=[];let f='',inQ2=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='"'){
+        if(inQ2&&line[i+1]==='"'){f+='"';i++;}
+        else inQ2=!inQ2;
+      } else if(ch===','&&!inQ2){
+        out.push(f);f='';
+      } else {
+        f+=ch;
+      }
+    }
+    out.push(f);return out;
+  };
+
+  const header=parseRow(lines[0]);
+  const idx=(name)=>{
+    const i=header.findIndex(h=>h.trim().toLowerCase()===name.toLowerCase());
+    return i;
+  };
+  const iName=idx('Name'),iJersey=idx('Jersey Number'),iReg=idx('Registration Name');
+  if(iName<0||iReg<0){
+    throw new Error('CSV is missing required columns "Name" and/or "Registration Name". Confirm this is the EventConnect Member Export.');
+  }
+
+  const byTeam=new Map();
+  let totalPlayers=0;
+  for(let li=1;li<lines.length;li++){
+    const line=lines[li];
+    if(!line.trim())continue;
+    const row=parseRow(line);
+    const name=(row[iName]||'').trim();
+    const jersey=iJersey>=0?(row[iJersey]||'').trim():'';
+    const regName=(row[iReg]||'').trim();
+    if(!name||!regName)continue;
+    if(!byTeam.has(regName))byTeam.set(regName,[]);
+    // Strip all other PII — only name + jersey survive
+    byTeam.get(regName).push({name,jersey});
+    totalPlayers++;
+  }
+  return {byTeam,totalPlayers};
+}
+
+// Auto-match scheduler teams to EventConnect registration names by fuzzy text
+// similarity. Uses normalized substring match + token overlap as a coarse score.
+// For each scheduler team, picks the EventConnect team with the highest score
+// (above a confidence threshold); leaves the rest unmatched for manual override.
+function autoMatchRosterTeams(){
+  if(!rosterByTeamReg)return;
+  rosterTeamMap={};
+  const ecNames=Array.from(rosterByTeamReg.keys());
+  // Normalize: lowercase, strip non-alphanumeric, collapse whitespace
+  const norm=(s)=>String(s||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+  const tokens=(s)=>new Set(norm(s).split(' ').filter(t=>t.length>=2));
+
+  divs.forEach(d=>d.teams.forEach(team=>{
+    const teamNorm=norm(team.name);
+    const teamTokens=tokens(team.name);
+    let best=null,bestScore=0;
+    ecNames.forEach(ec=>{
+      const ecNorm=norm(ec);
+      const ecTokens=tokens(ec);
+      // Score 1: exact normalized match
+      if(teamNorm===ecNorm){
+        const score=100;
+        if(score>bestScore){bestScore=score;best=ec;}
+        return;
+      }
+      // Score 2: substring containment (one contains the other)
+      let score=0;
+      if(teamNorm.length&&ecNorm.length&&(teamNorm.includes(ecNorm)||ecNorm.includes(teamNorm))){
+        score+=40;
+      }
+      // Score 3: token overlap (Jaccard-ish)
+      let shared=0;
+      teamTokens.forEach(t=>{if(ecTokens.has(t))shared++;});
+      const union=new Set([...teamTokens,...ecTokens]).size;
+      if(union>0)score+=Math.round((shared/union)*60);
+      if(score>bestScore){bestScore=score;best=ec;}
+    });
+    // Confidence threshold: 50+ for an auto-match. Below that, leave unmatched.
+    if(best&&bestScore>=50){
+      rosterTeamMap[team.id]=best;
+    }
+  }));
+}
+
+function renderRosterState(){
+  const el=document.getElementById('roster-state');
+  if(!el)return;
+  if(!rosterFileMeta){
+    el.innerHTML=`<strong style="color:var(--navy)">Drop the EventConnect roster export (CSV) here</strong> or click to choose a file<br>
+      <span style="font-size:10px">Aidan exports from EventConnect &rarr; Download &rarr; CSV. Each team's roster (player name + jersey #) appears on that team's field guide page.</span>`;
+    return;
+  }
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="text-align:left">
+        <strong style="color:var(--adrln-green-dk);font-size:13px">✓ Roster loaded</strong><br>
+        <span style="font-size:11px">${rosterFileMeta.name}</span><br>
+        <span style="font-size:10px;color:var(--dark-gray)">${rosterFileMeta.totalPlayers} players · ${rosterFileMeta.totalTeams} teams · ${rosterFileMeta.sizeKB} KB</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="event.stopPropagation();document.getElementById('roster-input').click()" title="Replace with a different CSV">Replace</button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();clearRoster()" title="Remove the roster">Remove</button>
+      </div>
+    </div>`;
+}
+
+// Match panel: shows each scheduler team with its currently-mapped EC team
+// (auto-matched or manually overridden), with a dropdown to change the match
+// or set "Unmatched" (no roster page in that team's field guide).
+function renderRosterMatchPanel(){
+  const el=document.getElementById('roster-match-panel');
+  if(!el)return;
+  if(!rosterByTeamReg||!rosterFileMeta){el.innerHTML='';return;}
+
+  const ecNames=Array.from(rosterByTeamReg.keys()).sort();
+  // Tally match status
+  let matched=0,unmatched=0;
+  divs.forEach(d=>d.teams.forEach(t=>{
+    if(rosterTeamMap[t.id])matched++;else unmatched++;
+  }));
+
+  let html=`<div style="background:var(--lt-gray);border:1px solid var(--mid-gray);border-radius:6px;padding:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong style="font-size:13px;color:var(--navy)">Roster match review</strong>
+      <span style="font-size:11px;color:var(--dark-gray)">
+        <span style="color:var(--adrln-green-dk);font-weight:600">${matched} matched</span>
+        ${unmatched?`<span style="color:var(--red);font-weight:600;margin-left:8px">${unmatched} unmatched</span>`:''}
+      </span>
+    </div>
+    <div style="font-size:11px;color:var(--dark-gray);margin-bottom:8px">
+      Auto-match by team name. Override any mismatch via the dropdown — the chosen EventConnect roster appears on that team's field guide. "Unmatched" teams get NO roster page (the rest of the field guide still generates).
+    </div>`;
+
+  divs.forEach(d=>{
+    if(!d.teams.length)return;
+    html+=`<div style="margin-bottom:6px">
+      <div style="font-size:11px;font-weight:700;color:${divColor(d.id)};margin-bottom:3px">${d.name}</div>`;
+    d.teams.forEach(t=>{
+      const matchedEc=rosterTeamMap[t.id]||'';
+      const isMatched=!!matchedEc;
+      const ecPlayers=matchedEc?(rosterByTeamReg.get(matchedEc)||[]).length:0;
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:3px 6px;background:#fff;border-radius:4px;margin-bottom:2px;border-left:3px solid ${isMatched?'var(--adrln-green)':'var(--red)'}">
+        <span style="flex:1;font-size:12px;${isMatched?'':'color:var(--red);font-weight:600'}">${t.name}</span>
+        <select style="font-size:11px;padding:2px 6px;min-width:220px" onchange="setRosterMatch(${t.id},this.value)">
+          <option value="">— Unmatched (no roster page) —</option>
+          ${ecNames.map(ec=>{
+            const players=(rosterByTeamReg.get(ec)||[]).length;
+            return `<option value="${ec.replace(/"/g,'&quot;')}" ${ec===matchedEc?'selected':''}>${ec} (${players})</option>`;
+          }).join('')}
+        </select>
+        <span style="font-size:10px;color:var(--dark-gray);min-width:55px;text-align:right">${isMatched?ecPlayers+' players':'no match'}</span>
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+
+  html+=`</div>`;
+  el.innerHTML=html;
+}
+
+function setRosterMatch(teamId,ecName){
+  if(ecName)rosterTeamMap[teamId]=ecName;
+  else delete rosterTeamMap[teamId];
+  renderRosterMatchPanel();
+}
+
+// ── Recruiting rosters (EventBeacon, per-team) ────────────────────────
+// Aidan picks a recruiting team from the dropdown, then uploads that team's
+// EventBeacon Excel. Each upload is keyed by team.id directly — no fuzzy
+// matching needed. Coverage panel shows missing teams in red so Aidan can
+// see at a glance which rosters still need to be uploaded.
+
+// Repopulate the team dropdown whenever Step 6 renders. Sorted by division
+// (recruiting only), then by team name. Already-uploaded teams are marked
+// with ✓ in the dropdown label.
+function renderRecRosterTeamSelect(){
+  const sel=document.getElementById('rec-roster-team-select');
+  if(!sel)return;
+  const recDivs=divs.filter(d=>d.recruitable);
+  if(!recDivs.length){
+    sel.innerHTML='<option value="">— No recruiting divisions configured —</option>';
+    sel.disabled=true;
+    return;
+  }
+  sel.disabled=false;
+  let opts='<option value="">— Select a team —</option>';
+  recDivs.forEach(d=>{
+    if(!d.teams.length)return;
+    const teams=d.teams.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    opts+=`<optgroup label="${d.name}">`;
+    teams.forEach(t=>{
+      const has=!!recruiterRosters[t.id];
+      const mark=has?'✓ ':'';
+      opts+=`<option value="${t.id}">${mark}${t.name}</option>`;
+    });
+    opts+='</optgroup>';
+  });
+  sel.innerHTML=opts;
+}
+
+function handleRecRosterInput(ev){
+  const f=ev.target.files&&ev.target.files[0];
+  const sel=document.getElementById('rec-roster-team-select');
+  const teamId=sel?+sel.value:0;
+  if(!teamId){
+    showToast('Pick a recruiting team first, then upload the file','warn');
+    ev.target.value='';return;
+  }
+  if(f)loadRecRosterFile(f,teamId);
+  ev.target.value='';
+}
+
+async function loadRecRosterFile(file, teamId){
+  const team=findTeam(teamId);
+  if(!team){showToast('Team not found','err');return;}
+  if(!/\.(xlsx|xls)$/i.test(file.name)){
+    showToast('Recruiting roster must be an Excel file (.xlsx or .xls)','err');return;
+  }
+  if(!window.XLSX){
+    showToast('Excel parser not loaded — refresh the page and try again','err');return;
+  }
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(new Uint8Array(buf),{type:'array'});
+    // Take the first sheet — EventBeacon template ships with a single sheet
+    const sheetName=wb.SheetNames[0];
+    const ws=wb.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+    if(!rows.length){
+      showToast('No player rows found in the file','err');return;
+    }
+    // Header normalization: case-insensitive lookup with trailing-* stripped
+    // from EventBeacon's required-field markers (e.g. "First Name *" → "first name")
+    const norm=(k)=>String(k||'').toLowerCase().replace(/\*/g,'').trim();
+    const players=[];
+    rows.forEach(r=>{
+      const lookup={};
+      Object.keys(r).forEach(k=>{lookup[norm(k)]=r[k];});
+      const firstName=String(lookup['first name']||'').trim();
+      const lastName=String(lookup['last name']||'').trim();
+      if(!firstName&&!lastName)return; // skip empty rows
+      // PII strip: skip email, guardian email, phone — never store contact info
+      players.push({
+        firstName,
+        lastName,
+        name:[firstName,lastName].filter(Boolean).join(' '),
+        jersey:String(lookup['jersey number']||'').trim(),
+        gradYear:String(lookup['graduation year']||'').trim(),
+        position:String(lookup['position']||'').trim(),
+        committed:String(lookup['committed']||'').trim(),
+        usal:String(lookup['usal number']||'').trim()
+      });
+    });
+    if(!players.length){
+      showToast('No valid player records — check First Name and Last Name columns','err');return;
+    }
+    recruiterRosters[teamId]={
+      fileName:file.name,
+      sizeKB:Math.round(file.size/1024),
+      uploadedAt:new Date().toISOString(),
+      players
+    };
+    renderRecRosterTeamSelect();
+    renderRecRosterCoverage();
+    showToast(`Roster loaded for ${team.name}: ${players.length} player${players.length===1?'':'s'}`);
+  }catch(err){
+    console.error('Recruiting roster load failed',err);
+    showToast('Failed to read recruiting roster: '+err.message,'err');
+  }
+}
+
+function clearRecRoster(teamId){
+  delete recruiterRosters[teamId];
+  renderRecRosterTeamSelect();
+  renderRecRosterCoverage();
+  showToast('Roster removed');
+}
+
+// Helper used elsewhere in the file — find a team by ID across all divisions
+function findTeam(teamId){
+  for(const d of divs){
+    const t=(d.teams||[]).find(x=>x.id===+teamId);
+    if(t)return t;
+  }
+  return null;
+}
+
+// Coverage panel: per-team status grid for recruiting divisions. Green = roster
+// uploaded (with player count); red = missing. Every team is one row.
+function renderRecRosterCoverage(){
+  const el=document.getElementById('rec-roster-coverage-panel');
+  if(!el)return;
+  const recDivs=divs.filter(d=>d.recruitable&&d.teams&&d.teams.length);
+  if(!recDivs.length){
+    el.innerHTML=`<div style="font-size:11px;color:var(--dark-gray);padding:8px 0">
+      No recruiting divisions configured yet — mark divisions as recruiting in Step 3 (Pool Seeding) to see them here.
+    </div>`;
+    return;
+  }
+  const totalRecTeams=recDivs.reduce((s,d)=>s+d.teams.length,0);
+  const uploaded=recDivs.reduce((s,d)=>s+d.teams.filter(t=>recruiterRosters[t.id]).length,0);
+  const missing=totalRecTeams-uploaded;
+  let html=`<div style="background:var(--lt-gray);border:1px solid var(--mid-gray);border-radius:6px;padding:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong style="font-size:13px;color:var(--navy)">Recruiting roster coverage</strong>
+      <span style="font-size:11px">
+        <span style="color:var(--adrln-green-dk);font-weight:600">${uploaded} uploaded</span>
+        ${missing?`<span style="color:var(--red);font-weight:600;margin-left:8px">${missing} missing</span>`:''}
+      </span>
+    </div>`;
+  recDivs.forEach(d=>{
+    html+=`<div style="margin-bottom:6px">
+      <div style="font-size:11px;font-weight:700;color:${divColor(d.id)};margin-bottom:3px">${d.name}</div>`;
+    d.teams.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(t=>{
+      const r=recruiterRosters[t.id];
+      const has=!!r;
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:3px 6px;background:#fff;border-radius:4px;margin-bottom:2px;border-left:3px solid ${has?'var(--adrln-green)':'var(--red)'}">
+        <span style="flex:1;font-size:12px;${has?'':'color:var(--red);font-weight:600'}">${t.name}</span>
+        <span style="font-size:10px;color:var(--dark-gray);min-width:90px;text-align:right">
+          ${has?`${r.players.length} player${r.players.length===1?'':'s'}`:'roster missing'}
+        </span>
+        ${has?`<button class="btn btn-sm btn-danger" style="padding:2px 6px;font-size:10px" onclick="clearRecRoster(${t.id})" title="Remove this team's roster">Remove</button>`:''}
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+  if(missing>0){
+    html+=`<div style="font-size:10px;color:var(--red);margin-top:6px;font-style:italic">
+      ⚠ ${missing} recruiting team${missing===1?'':'s'} without rosters will be SKIPPED in the Recruiter Field Guide. Upload before generating.
+    </div>`;
+  }
+  html+=`</div>`;
+  el.innerHTML=html;
 }
 
 function renderFields(){
@@ -4222,7 +4900,16 @@ function applyBrand(rows, sheetTitle, opts){
   // rows: array-of-arrays, where rows[0] is the column-header row.
   // Returns a styled worksheet ready to be appended to a workbook.
   opts=opts||{};
-  const brandTitle='Adrenaline Lacrosse Tournament Experience Tool';
+  // Brand row: always starts with "ADRENALINE LACROSSE". When an event name is
+  // configured in Step 2, it's appended for co-branding ("ADRENALINE LACROSSE
+  // · BLACK CARD CLASSIC"). Image embedding in XLSX is unreliable in the
+  // SheetJS Community Edition we use, so the event logo lives on PDF outputs;
+  // XLSX gets the event NAME as a text-based brand element instead.
+  const enameInput=document.getElementById('ename');
+  const eventName=(enameInput&&enameInput.value||'').trim();
+  const brandTitle=eventName
+    ? `ADRENALINE LACROSSE  ·  ${eventName.toUpperCase()}`
+    : 'Adrenaline Lacrosse Tournament Experience Tool';
   const headerRow=rows[0]||[];
   const dataRows=rows.slice(1);
   const colCount=Math.max(headerRow.length,1);
@@ -4349,6 +5036,703 @@ function dlXLSXMulti(filename, sheets){
 }
 
 // ============================================================
+// RECRUITER FIELD GUIDE PDF — single multi-page PDF for the event
+// One PDF for the whole event (not per-team). Used by Aidan to brief
+// recruiting coaches before they arrive on-site. Pages:
+//   1. Cover
+//   2. Players-by-region overview (table)
+//   3. Teams-by-region overview (table)
+//   4. Field map (PDF or image — same as team field guide)
+//   5. Recruiter-fields-only schedule (Day 1 + Day 2)
+//   6. Daily run-of-show + recruiter check-in window
+//   7. Recruiter tent amenities + lunch hour rules
+//   8. Tourist info + happy hour
+//   9. Parking pass (color-coded for the recruiter parking area)
+//   10+. Team rosters — one page per recruiting team, alphabetical
+//   N. Master player roster (alphabetical by last name across all rec divs)
+// ============================================================
+function expRecruiterFieldGuide(){
+  if(!Object.keys(sched1).length){showToast('Generate schedule first — there are no games yet.','warn');return;}
+  if(!window.jspdf){showToast('PDF library not loaded — try refreshing.','err');return;}
+  const recDivs=divs.filter(d=>d.recruitable&&d.teams&&d.teams.length);
+  if(!recDivs.length){
+    showToast('No recruiting divisions configured. Mark divisions as recruiting in Step 3.','warn');return;
+  }
+  const recTeams=[];
+  recDivs.forEach(d=>d.teams.forEach(t=>recTeams.push({team:t,div:d})));
+  const teamsWithRoster=recTeams.filter(({team})=>recruiterRosters[team.id]);
+  const teamsMissing=recTeams.length-teamsWithRoster.length;
+  if(teamsMissing>0){
+    const proceed=confirm(`${teamsMissing} of ${recTeams.length} recruiting teams have no roster uploaded yet.\n\nThose teams will be SKIPPED in the team-rosters section. You can upload missing rosters in Step 6 → Recruiting rosters.\n\nGenerate the Recruiter Field Guide anyway?`);
+    if(!proceed)return;
+  }
+  showToast('Building Recruiter Field Guide…');
+  // Defer to next tick so the toast renders before the heavy PDF work
+  setTimeout(async ()=>{
+    try{
+      const ename=document.getElementById('ename').value||'Adrenaline Lacrosse Tournament';
+      const pdfBytes=await buildRecruiterFieldGuide({recDivs,recTeams,ename});
+      const safe=ename.replace(/[^A-Za-z0-9_-]+/g,'_');
+      const blob=new Blob([pdfBytes],{type:'application/pdf'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=`${safe}_Recruiter_Field_Guide.pdf`;
+      document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+      showToast('Recruiter Field Guide downloaded.');
+    }catch(err){
+      console.error('Recruiter Field Guide failed',err);
+      showToast('Failed to generate Recruiter Field Guide: '+err.message,'err');
+    }
+  },50);
+}
+
+// ============================================================
+// MASTER PLAYER ROSTER XLSX — alphabetical by last name across all recruiting
+// divisions. For recruiters who want a sortable/filterable phone-friendly list.
+// ============================================================
+function expMasterPlayerRoster(){
+  const recDivs=divs.filter(d=>d.recruitable&&d.teams&&d.teams.length);
+  if(!recDivs.length){showToast('No recruiting divisions configured.','warn');return;}
+  const ename=document.getElementById('ename').value||'Adrenaline Lacrosse Tournament';
+  const allPlayers=[];
+  recDivs.forEach(d=>d.teams.forEach(t=>{
+    const r=recruiterRosters[t.id];
+    if(!r)return;
+    r.players.forEach(p=>{
+      allPlayers.push({
+        last:p.lastName||'',
+        first:p.firstName||'',
+        team:t.name,
+        division:d.name,
+        jersey:p.jersey||'',
+        position:p.position||'',
+        gradYear:p.gradYear||'',
+        committed:p.committed||'',
+        state:t.state||'',
+        usal:p.usal||''
+      });
+    });
+  }));
+  if(!allPlayers.length){
+    showToast('No recruiting rosters uploaded yet — add at least one in Step 6.','warn');return;
+  }
+  allPlayers.sort((a,b)=>a.last.localeCompare(b.last)||a.first.localeCompare(b.first));
+  const rows=[
+    ['Last Name','First Name','Team','Division','Jersey','Position','Grad Year','Committed','State','USAL #'],
+    ...allPlayers.map(p=>[p.last,p.first,p.team,p.division,p.jersey,p.position,p.gradYear,p.committed,p.state,p.usal])
+  ];
+  dlXLSX('MasterPlayerRoster_'+ename.replace(/[^A-Za-z0-9_-]+/g,'_'),rows,'Master Player Roster');
+  showToast(`Master player roster: ${allPlayers.length} players exported.`);
+}
+
+// ============================================================
+// RECRUITER SIGN-IN SHEET XLSX — Day 1 + Day 2 tabs
+// On-site check-in sheet for the recruiter tent. Pre-populates rows from the
+// recruiters Aidan added in Step 6, plus blank rows for walk-ins. Each row has
+// columns the volunteer at the tent fills out by hand: arrival time, gift
+// picked up, attendance confirmed, packet picked up, signature, notes.
+//
+// Two sheets in one workbook (Day 1, Day 2). Top of each sheet shows the
+// auto-computed check-in window (45 min before first recruiter game that day)
+// so the volunteer running check-in knows when the tent opens.
+// ============================================================
+function expRecruiterSignIn(){
+  if(!Object.keys(sched1).length){
+    showToast('Generate schedule first — sign-in window depends on the first recruiter game time.','warn');return;
+  }
+  const recDivs=divs.filter(d=>d.recruitable&&d.teams&&d.teams.length);
+  if(!recDivs.length){
+    showToast('No recruiting divisions configured — mark divisions as recruiting in Step 3.','warn');return;
+  }
+  const ename=document.getElementById('ename').value||'Adrenaline Lacrosse Tournament';
+
+  // Compute first recruiter-field game time per day so the volunteer knows
+  // when check-in opens (45 min before first rec game).
+  const recFieldIds=new Set(fields.filter(f=>f.recruiting).map(f=>f.id));
+  const firstRecGameOn=(sched)=>{
+    const slots=Object.keys(sched||{}).sort((a,b)=>s2m(a)-s2m(b));
+    for(const s of slots){
+      const row=sched[s]||{};
+      for(const fid of Object.keys(row)){
+        if(row[fid]&&recFieldIds.has(+fid))return s;
+      }
+    }
+    return '';
+  };
+  const firstD1=firstRecGameOn(sched1);
+  const firstD2=firstRecGameOn(sched2);
+  const checkinD1=firstD1?fmtSlot(_addMinutes(firstD1,-45)):'(45 min before first rec game)';
+  const checkinD2=firstD2?fmtSlot(_addMinutes(firstD2,-45)):'(45 min before first rec game)';
+
+  // Build per-day sheet rows. Pre-populated from recruitersList (Step 6),
+  // followed by 15 blank walk-in rows for handwritten entries on-site.
+  // Recruiter division comes from divId — display "Any division" when null.
+  const buildSheet=(dayLabel,checkinTime,firstGameTime)=>{
+    const rows=[];
+    // Header row: instructions + check-in window. The applyBrand() helper
+    // already prepends a navy banner row + green sheet-title row above this.
+    rows.push([
+      `Instructions: Mark each recruiter as they arrive. Check-in opens ${checkinTime}${firstGameTime?` · first recruiter game ${fmtSlot(firstGameTime)}`:''}. Each recruiter receives a free gift, confirms attendance, and gets the event info packet. Sign on arrival.`
+    ]);
+    rows.push([]); // spacer
+    // Column headers
+    rows.push(['Recruiter Name','Program','Division Focus','Arrival Time','Gift ✓','Confirmed ✓','Packet ✓','Signature','Notes']);
+    // Pre-populated rows from Step 6 recruiters
+    const recList=(recruitersList||[]).slice();
+    recList.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+    recList.forEach(r=>{
+      let divFocus='Any division';
+      if(r.divId){
+        const d=divs.find(x=>x.id===r.divId);
+        if(d)divFocus=d.name;
+      }
+      rows.push([
+        r.name||'',
+        r.program||'',
+        divFocus,
+        '', // arrival time — handwritten on-site
+        '', // gift checkbox
+        '', // confirmed checkbox
+        '', // packet checkbox
+        '', // signature
+        ''  // notes
+      ]);
+    });
+    // Walk-in rows — 15 blank rows for unannounced arrivals. Common at events
+    // where recruiter attendance isn't fully RSVP'd.
+    rows.push([]);
+    rows.push(['— Walk-in recruiters (fill in below) —']);
+    for(let i=0;i<15;i++){
+      rows.push(['','','','','','','','','']);
+    }
+    return rows;
+  };
+
+  const day1Rows=buildSheet('Day 1',checkinD1,firstD1);
+  const day2Rows=buildSheet('Day 2',checkinD2,firstD2);
+
+  // Use dlXLSXMulti to ship both days as separate tabs in one workbook.
+  // Branded banner rows are added by applyBrand() automatically.
+  dlXLSXMulti(
+    'RecruiterSignIn_'+ename.replace(/[^A-Za-z0-9_-]+/g,'_'),
+    [
+      {name:'Day 1 Sign-In',rows:day1Rows},
+      {name:'Day 2 Sign-In',rows:day2Rows}
+    ]
+  );
+  const populated=(recruitersList||[]).length;
+  showToast(`Recruiter sign-in sheet: ${populated} pre-populated · 15 walk-in rows per day.`);
+}
+
+// Build the Recruiter Field Guide PDF. Returns ArrayBuffer.
+async function buildRecruiterFieldGuide({recDivs,recTeams,ename}){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight(),M=42;
+  const NAVY=[27,58,92],GREEN=[120,193,66],TEAL=[14,93,98],GRAY=[95,94,90],PURPLE=[107,70,193],GOLD=[184,134,11];
+
+  // Brand helpers — same logic as team field guide
+  const drawLogo=(x,y)=>{
+    const size=28;
+    if(typeof ADRLN_LOGO_DATA_URL==='string'){
+      try{doc.addImage(ADRLN_LOGO_DATA_URL,'PNG',x,y-5,size,size,undefined,'FAST');}
+      catch(e){
+        doc.setFillColor(...GREEN);doc.roundedRect(x,y,44,18,2,2,'F');
+        doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(10);
+        doc.text('ADRLN',x+22,y+12,{align:'center'});
+      }
+    }
+  };
+  const drawEventLogo=(x,y,h)=>{
+    if(!eventLogoDataUrl||!eventLogoMeta)return 0;
+    const aspect=eventLogoMeta.w>0&&eventLogoMeta.h>0?eventLogoMeta.w/eventLogoMeta.h:1;
+    const w=h*aspect;
+    try{
+      const fmt=eventLogoDataUrl.startsWith('data:image/jpeg')?'JPEG':'PNG';
+      doc.addImage(eventLogoDataUrl,fmt,x,y,w,h,undefined,'FAST');
+      return w;
+    }catch(e){return 0;}
+  };
+  const drawBodyHeader=(label,title,bg)=>{
+    doc.setFillColor(...(bg||NAVY));doc.rect(0,0,W,90,'F');
+    doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+    drawLogo(W-M-46,18);
+    if(eventLogoDataUrl&&eventLogoMeta){
+      const h=24;const aspect=eventLogoMeta.w/eventLogoMeta.h;
+      const fH=h*aspect>80?80/aspect:h;
+      drawEventLogo(M,12,fH);
+    }
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+    doc.text(label,M,38);
+    doc.setFontSize(28);doc.text(title,M,72);
+  };
+
+  const ev_date=document.getElementById('edate')?document.getElementById('edate').value:'';
+
+  // ── PAGE 1: COVER ────────────────────────────────────────────────────
+  doc.setFillColor(...NAVY);doc.rect(0,0,W,H,'F');
+  doc.setFillColor(...GREEN);doc.rect(0,H-22,W,4,'F');
+  drawLogo(M,40);
+  if(eventLogoDataUrl&&eventLogoMeta){
+    const coverLogoH=70;
+    const aspect=eventLogoMeta.w/eventLogoMeta.h;
+    drawEventLogo(W-M-coverLogoH*aspect,40,coverLogoH);
+  }
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+  doc.text('ADRENALINE LACROSSE',M+56,60);
+  doc.setFontSize(40);
+  doc.text('Recruiter',M,180);
+  doc.text('Field Guide',M,225);
+  doc.setFont('helvetica','normal');doc.setFontSize(14);
+  doc.text(ename,M,260);
+  if(ev_date){doc.setFontSize(11);doc.text(ev_date,M,280);}
+
+  // Quick stats row
+  const totalPlayers=Object.values(recruiterRosters).reduce((s,r)=>s+r.players.length,0);
+  doc.setDrawColor(...GREEN);doc.setLineWidth(2);
+  doc.line(M,330,M+60,330);
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...GREEN);
+  doc.text('AT A GLANCE',M,355);
+  doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(255,255,255);
+  doc.text(`${recDivs.length} recruiting divisions  ·  ${recTeams.length} teams  ·  ${totalPlayers} players on file`,M,380);
+
+  // Welcome message
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(...GREEN);
+  doc.text('FOR THIS WEEKEND',M,440);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(255,255,255);
+  const welcomeMsg=doc.splitTextToSize(
+    'This packet is built so you can see every recruitable player at this event in one place. Pages 2–3 give you the by-region picture. Pages 4–6 cover field layout, the recruiter-only schedule, and run-of-show including check-in. Pages 7+ are full team rosters in jersey order, then a master alphabetical roster across the entire event.',
+    W-2*M
+  );
+  doc.text(welcomeMsg,M,460);
+
+  // Footer brand line
+  doc.setFontSize(9);doc.setTextColor(...GREEN);
+  doc.text('Adrenaline Lacrosse  ·  Park once, stay close.',M,H-40);
+
+  // ── PAGE 2: PLAYERS BY REGION ────────────────────────────────────────
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 2','Players by Region',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  doc.text('Counts of recruitable players grouped by home state. Sorted by player count descending.',M,118);
+  // Build region → {players, teams} map
+  const byRegion={};
+  recDivs.forEach(d=>d.teams.forEach(t=>{
+    const r=recruiterRosters[t.id];
+    const region=t.state||'—';
+    if(!byRegion[region])byRegion[region]={players:0,teamCount:0,teams:new Set(),divs:new Set()};
+    byRegion[region].teamCount++;
+    byRegion[region].teams.add(t.name);
+    byRegion[region].divs.add(d.name);
+    if(r)byRegion[region].players+=r.players.length;
+  }));
+  const regionRows=Object.entries(byRegion)
+    .sort((a,b)=>b[1].players-a[1].players||b[1].teamCount-a[1].teamCount)
+    .map(([region,info])=>[
+      region,
+      String(info.players),
+      String(info.teams.size),
+      Array.from(info.divs).sort().join(', ')
+    ]);
+  doc.autoTable({
+    startY:140,
+    head:[['Region','Players','Teams','Divisions present']],
+    body:regionRows,
+    headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:10},
+    bodyStyles:{fontSize:10,cellPadding:6},
+    alternateRowStyles:{fillColor:[245,245,240]},
+    margin:{left:M,right:M},
+    theme:'grid'
+  });
+  doc.setFont('helvetica','italic');doc.setFontSize(9);doc.setTextColor(...GRAY);
+  doc.text(`Total: ${totalPlayers} players across ${Object.keys(byRegion).length} regions  ·  Counts reflect rosters uploaded as of generation time`,M,doc.lastAutoTable.finalY+18);
+  doc.setFontSize(8);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text(`Page 2`,W-M-30,H-26);
+
+  // ── PAGE 3: TEAMS BY REGION ──────────────────────────────────────────
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 3','Teams by Region',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  doc.text('Recruiting teams grouped by home state. Useful when you want to scout specific regions.',M,118);
+  // Build a flat list grouped by region
+  const teamRegionRows=[];
+  Object.entries(byRegion).sort((a,b)=>b[1].teamCount-a[1].teamCount||a[0].localeCompare(b[0])).forEach(([region,info])=>{
+    const teamList=Array.from(info.teams).sort();
+    teamList.forEach(tn=>{
+      // Find this team to get division
+      let divName='';
+      for(const d of recDivs){
+        const t=d.teams.find(x=>x.name===tn);
+        if(t){divName=d.name;break;}
+      }
+      const playerCount=(()=>{
+        for(const d of recDivs){
+          const t=d.teams.find(x=>x.name===tn);
+          if(t&&recruiterRosters[t.id])return recruiterRosters[t.id].players.length;
+        }
+        return 0;
+      })();
+      teamRegionRows.push([region,tn,divName,playerCount?String(playerCount):'—']);
+    });
+  });
+  doc.autoTable({
+    startY:140,
+    head:[['Region','Team','Division','Players on file']],
+    body:teamRegionRows,
+    headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:10},
+    bodyStyles:{fontSize:9,cellPadding:5},
+    alternateRowStyles:{fillColor:[245,245,240]},
+    margin:{left:M,right:M},
+    theme:'grid'
+  });
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text(`Page 3`,W-M-30,H-26);
+
+  // ── PAGE 4: FIELD MAP + RECRUITER PARKING NOTE ───────────────────────
+  // Image-type field map: drawn directly. PDF-type: merged later via pdf-lib.
+  const hasFieldMapPdf=!!(fieldMapPdfBytes&&fieldMapPdfBytes.length);
+  const hasFieldMapImage=!!fieldMapImageDataUrl;
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 4','Field Map',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  // Recruiter parking callout — text-only per Q2 answer (no separate lot model)
+  const recParkingText=
+    'RECRUITER PARKING — Park in the same lots as teams. Look for the recruiter check-in tent at the recruiter-fields cluster (see schedule on next page). Check in 45 minutes before the first recruiter game to confirm attendance, pick up your free gift, and grab the event info packet.';
+  const recParkingLines=doc.splitTextToSize(recParkingText,W-2*M);
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...GREEN);
+  doc.text('IMPORTANT',M,118);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(...NAVY);
+  doc.text(recParkingLines,M,134);
+  const mapStartY=134+recParkingLines.length*13+12;
+  if(hasFieldMapImage){
+    const bodyW=W-2*M, bodyH=H-mapStartY-50;
+    const imgW=fieldMapImageDims&&fieldMapImageDims.w>0?fieldMapImageDims.w:1000;
+    const imgH=fieldMapImageDims&&fieldMapImageDims.h>0?fieldMapImageDims.h:700;
+    const scale=Math.min(bodyW/imgW,bodyH/imgH);
+    const drawW=imgW*scale,drawH=imgH*scale;
+    const drawX=M+(bodyW-drawW)/2,drawY=mapStartY+(bodyH-drawH)/2;
+    try{
+      doc.addImage(fieldMapImageDataUrl,'AUTO',drawX,drawY,drawW,drawH,undefined,'FAST');
+    }catch(err){
+      try{
+        const isJpg=fieldMapImageDataUrl.startsWith('data:image/jpeg');
+        doc.addImage(fieldMapImageDataUrl,isJpg?'JPEG':'PNG',drawX,drawY,drawW,drawH);
+      }catch(err2){
+        doc.setTextColor(...GRAY);doc.text('Field map could not be rendered.',M,mapStartY+30);
+      }
+    }
+  } else if(hasFieldMapPdf){
+    // PDF map: pdf-lib merge happens at the end. Leave a placeholder note here.
+    doc.setFont('helvetica','italic');doc.setFontSize(11);doc.setTextColor(...GRAY);
+    doc.text('Field map (PDF) — see merged page below.',M,mapStartY+20);
+  } else {
+    doc.setFont('helvetica','italic');doc.setFontSize(11);doc.setTextColor(...GRAY);
+    doc.text('No field map uploaded. Aidan can add one in Step 6.',M,mapStartY+20);
+  }
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text('Page 4',W-M-30,H-26);
+
+  // ── PAGE 5: RECRUITER-FIELDS-ONLY SCHEDULE ───────────────────────────
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 5','Recruiter Schedule',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  doc.text('Day 1 + Day 2 games on recruiting fields only. All games on these fields are recruitable.',M,118);
+  // Pull all games on recruiting fields, both days
+  const recFields=fields.filter(f=>f.recruiting);
+  const recFieldIds=new Set(recFields.map(f=>f.id));
+  const recGames=[];
+  Object.entries(sched1||{}).forEach(([slot,row])=>{
+    Object.entries(row||{}).forEach(([fid,g])=>{
+      if(g&&recFieldIds.has(+fid))recGames.push({day:'Day 1',slot,fid:+fid,...g});
+    });
+  });
+  Object.entries(sched2||{}).forEach(([slot,row])=>{
+    Object.entries(row||{}).forEach(([fid,g])=>{
+      if(g&&recFieldIds.has(+fid))recGames.push({day:'Day 2',slot,fid:+fid,...g});
+    });
+  });
+  recGames.sort((a,b)=>a.day.localeCompare(b.day)||sH(a.slot)-sH(b.slot));
+  if(recGames.length){
+    doc.autoTable({
+      startY:140,
+      head:[['Day','Time','Field','Division','Game','Matchup']],
+      body:recGames.map(g=>{
+        const fld=fields.find(f=>f.id===g.fid);
+        return [g.day,fmtSlot(g.slot),fld?fld.name:'F'+g.fid,g.divName||'',g.label||g.type||'Pool',`${g.t1n}  vs  ${g.t2n}`];
+      }),
+      headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+      bodyStyles:{fontSize:8,cellPadding:4},
+      alternateRowStyles:{fillColor:[245,245,240]},
+      margin:{left:M,right:M},
+      theme:'grid'
+    });
+  } else {
+    doc.setFontSize(11);doc.setTextColor(...GRAY);
+    doc.text('No games on recruiting fields yet.',M,160);
+  }
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text('Page 5',W-M-30,H-26);
+
+  // ── PAGE 6: RUN-OF-SHOW ──────────────────────────────────────────────
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 6','Run of Show',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  // Compute first rec-field game time per day (for check-in math)
+  const day1RecGames=recGames.filter(g=>g.day==='Day 1');
+  const day2RecGames=recGames.filter(g=>g.day==='Day 2');
+  const firstRecD1=day1RecGames.length?day1RecGames[0].slot:'';
+  const firstRecD2=day2RecGames.length?day2RecGames[0].slot:'';
+  const checkinD1=firstRecD1?fmtSlot(_addMinutes(firstRecD1,-45)):'(45 min before first rec game)';
+  const checkinD2=firstRecD2?fmtSlot(_addMinutes(firstRecD2,-45)):'(45 min before first rec game)';
+  // Lunch hour: rl() returns the configured lunch slot
+  const lunchSlot=typeof rl==='function'?rl():'12:00';
+  const lunchEnd=_addMinutes(lunchSlot,60);
+  const todayBlocks=[
+    [`${checkinD1}`, 'RECRUITER CHECK-IN OPENS', 'At the recruiter tent on the recruiting field cluster. Confirm attendance, pick up your free gift, get the event info packet. Coffee and breakfast bites available.'],
+    [`${firstRecD1?fmtSlot(firstRecD1):'~8:00 AM'}`, 'FIRST RECRUITER GAME', 'Recruiter fields run wall-to-wall through the lunch hour.'],
+    [`${fmtSlot(lunchSlot)} – ${fmtSlot(lunchEnd)}`, 'LUNCH HOUR — ALL REC FIELDS DARK', 'Every recruiting field stops for one full hour. Lunch served in each tent on the field. Eat, take notes, return calls, prep your afternoon list.'],
+    [`${fmtSlot(lunchEnd)} – End of day`, 'AFTERNOON PLAY', 'Wall-to-wall recruiter games until the last whistle on the lit fields (or 6 PM otherwise).'],
+    [`Day 2 — ${checkinD2}`, 'DAY 2 RECRUITER CHECK-IN', 'Same routine — confirm, restock, check-in for any new arrivals.'],
+    [`Day 2 — ${firstRecD2?fmtSlot(firstRecD2):'~8:00 AM'}`, 'DAY 2 PLAYOFFS BEGIN', 'Brackets seeded from Day 1 results. Most divisions: top teams advance to QF/SF/Final on the championship field by mid-afternoon.']
+  ];
+  let yy=118;
+  todayBlocks.forEach(([time,label,detail])=>{
+    if(yy>700){
+      doc.setFontSize(8);doc.setTextColor(...GRAY);
+      doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+      doc.text('Page 6',W-M-30,H-26);
+      doc.addPage();drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 6','Run of Show (cont.)',NAVY);yy=118;
+    }
+    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...GREEN);
+    doc.text(time,M,yy);
+    doc.setTextColor(...NAVY);doc.text(label,M+150,yy);
+    yy+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(60,60,60);
+    const detailLines=doc.splitTextToSize(detail,W-2*M-150);
+    doc.text(detailLines,M+150,yy);
+    yy+=detailLines.length*12+14;
+  });
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text('Page 6',W-M-30,H-26);
+
+  // ── PAGE 7: RECRUITER TENT AMENITIES + LUNCH HOUR ────────────────────
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 7','Recruiter Tents',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  let ty=118;
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('WHAT THE TENTS HAVE',M,ty);ty+=16;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const amenities=[
+    'SNACKS & BEVERAGES — coffee in the morning, water and refreshments throughout the day, light snacks pre-positioned.',
+    'SEATING — folding chairs and a few high-tops, shaded by the tent canopy. Plenty of room to take notes between rotations.',
+    'SHADE — full tent coverage on every recruiting field. Sunburn is not part of the deal.',
+    'WIFI — event wifi available at every recruiter tent. Network name and password posted at check-in.',
+    'LUNCH SERVED IN-TENT — boxed lunches arrive at the start of the lunch hour. Stay on the field, eat in the tent.'
+  ];
+  amenities.forEach(a=>{
+    const lines=doc.splitTextToSize('• '+a,W-2*M-12);
+    doc.text(lines,M+6,ty);
+    ty+=lines.length*13+4;
+  });
+  ty+=10;
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('PARENTS BLOCKED FROM RECRUITER AREA',M,ty);ty+=16;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const parentRule=doc.splitTextToSize(
+    'Recruiter tents are recruiter-only. Parents and family members are blocked from the area — they have a separate spectator zone with their own seating around the playing field. This is enforced by event staff, not negotiated. If a parent approaches a recruiter, refer them to the family festival space and event staff will redirect.',
+    W-2*M
+  );
+  doc.text(parentRule,M,ty);ty+=parentRule.length*13+14;
+
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+  doc.text('LUNCH HOUR PROTOCOL',M,ty);ty+=16;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+  const lunchRule=doc.splitTextToSize(
+    'All recruiting fields go DARK for one full hour at the configured lunch slot. No games run during the lunch hour on rec fields — by design. Use this time to eat, return calls, decompress, prep your afternoon target list. Non-recruiting fields keep playing through this window; teams in those divisions eat in natural game gaps. The hour belongs to you.',
+    W-2*M
+  );
+  doc.text(lunchRule,M,ty);
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text('Page 7',W-M-30,H-26);
+
+  // ── PAGE 8: TOURIST INFO + HAPPY HOUR ───────────────────────────────
+  doc.addPage();
+  drawBodyHeader('RECRUITER FIELD GUIDE  ·  PAGE 8','For Off-Hours',NAVY);
+  doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
+  let oy=118;
+  // Recruiter Hotel
+  if(hotelPartner.name){
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('RECRUITER HOTEL',M,oy);oy+=16;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+    doc.text(hotelPartner.name,M,oy);
+    if(hotelPartner.rate){
+      doc.setTextColor(...GRAY);doc.setFontSize(9.5);
+      doc.text(' · '+hotelPartner.rate,M+doc.getTextWidth(hotelPartner.name),oy);
+    }
+    oy+=14;
+    if(hotelPartner.link){
+      doc.setTextColor(...PURPLE);doc.setFontSize(9.5);
+      doc.textWithLink('Book a room →',M,oy,{url:hotelPartner.link});
+      oy+=14;
+    }
+    oy+=8;
+  }
+  // Recruiter Happy Hour
+  if(recruiterHappyHour.name){
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('COACHES HAPPY HOUR',M,oy);oy+=16;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+    doc.text(recruiterHappyHour.name,M,oy);oy+=14;
+    if(recruiterHappyHour.address){
+      doc.setTextColor(...GRAY);doc.setFontSize(9);
+      doc.text(recruiterHappyHour.address,M,oy);oy+=12;
+    }
+    if(recruiterHappyHour.website){
+      doc.setTextColor(...PURPLE);doc.setFontSize(9.5);
+      doc.textWithLink(recruiterHappyHour.website,M,oy,{url:recruiterHappyHour.website});
+      oy+=14;
+    }
+    oy+=8;
+  }
+  // Tourist attractions
+  if(window.attractions&&attractions.length){
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('NEARBY',M,oy);oy+=16;
+    doc.autoTable({
+      startY:oy,
+      head:[['Name','Type','Distance','Link']],
+      body:attractions.map(a=>[a.name||'',a.type||'',a.distance||'',a.website||'']),
+      headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+      bodyStyles:{fontSize:9,cellPadding:5},
+      alternateRowStyles:{fillColor:[245,245,240]},
+      margin:{left:M,right:M},
+      theme:'grid'
+    });
+  }
+  doc.setFontSize(8);doc.setTextColor(...GRAY);
+  doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+  doc.text('Page 8',W-M-30,H-26);
+
+  // ── PAGES 9+: TEAM ROSTERS — ONE PAGE PER TEAM ──────────────────────
+  // Sorted alphabetically by team name. Skipped for any team without a roster
+  // uploaded (Aidan was warned at generation time).
+  const teamsWithData=recTeams
+    .filter(({team})=>recruiterRosters[team.id])
+    .sort((a,b)=>a.team.name.localeCompare(b.team.name));
+  let pageNum=9;
+  teamsWithData.forEach(({team,div})=>{
+    doc.addPage();
+    drawBodyHeader(`RECRUITER FIELD GUIDE  ·  PAGE ${pageNum}`,team.name,NAVY);
+    const r=recruiterRosters[team.id];
+    doc.setTextColor(...GRAY);doc.setFont('helvetica','normal');doc.setFontSize(10);
+    const subhead=`${div.name}  ·  ${team.state||''}  ·  ${r.players.length} player${r.players.length===1?'':'s'}`;
+    doc.text(subhead,M,118);
+    // Sort by jersey number ascending (numeric where possible)
+    const sortedPlayers=r.players.slice().sort((a,b)=>{
+      const ja=parseInt(a.jersey,10),jb=parseInt(b.jersey,10);
+      const aHas=!isNaN(ja),bHas=!isNaN(jb);
+      if(aHas&&bHas)return ja-jb||a.lastName.localeCompare(b.lastName);
+      if(aHas)return -1;
+      if(bHas)return 1;
+      return a.lastName.localeCompare(b.lastName);
+    });
+    doc.autoTable({
+      startY:140,
+      head:[['#','Last Name','First Name','Pos','Grad','Committed','USAL #']],
+      body:sortedPlayers.map(p=>[
+        p.jersey||'—',p.lastName||'',p.firstName||'',
+        p.position||'—',p.gradYear||'—',p.committed||'—',p.usal||'—'
+      ]),
+      headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:9},
+      bodyStyles:{fontSize:9,cellPadding:4},
+      alternateRowStyles:{fillColor:[245,245,240]},
+      margin:{left:M,right:M},
+      theme:'grid',
+      columnStyles:{0:{cellWidth:30,halign:'center',fontStyle:'bold'}}
+    });
+    doc.setFontSize(8);doc.setTextColor(...GRAY);
+    doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+    doc.text(`Page ${pageNum}`,W-M-30,H-26);
+    pageNum++;
+  });
+
+  // ── FINAL PAGE: MASTER PLAYER ROSTER (alphabetical across all teams) ─
+  // Compact 2-column-per-row format. Many pages possible for a large event.
+  const allPlayersFlat=[];
+  recDivs.forEach(d=>d.teams.forEach(t=>{
+    const r=recruiterRosters[t.id];
+    if(!r)return;
+    r.players.forEach(p=>{
+      allPlayersFlat.push({
+        last:p.lastName||'',first:p.firstName||'',
+        team:t.name,divName:d.name,
+        jersey:p.jersey||'',position:p.position||'',
+        gradYear:p.gradYear||'',state:t.state||''
+      });
+    });
+  }));
+  if(allPlayersFlat.length){
+    allPlayersFlat.sort((a,b)=>a.last.localeCompare(b.last)||a.first.localeCompare(b.first));
+    doc.addPage();
+    drawBodyHeader(`RECRUITER FIELD GUIDE  ·  PAGE ${pageNum}`,'Master Player Roster',NAVY);
+    doc.setTextColor(...GRAY);doc.setFont('helvetica','normal');doc.setFontSize(10);
+    doc.text(`All ${allPlayersFlat.length} recruitable players, alphabetical by last name. For roster XLSX, see the CX section in Step 8.`,M,118);
+    doc.autoTable({
+      startY:140,
+      head:[['Last','First','#','Pos','Grad','Team','Div','State']],
+      body:allPlayersFlat.map(p=>[p.last,p.first,p.jersey||'—',p.position||'—',p.gradYear||'—',p.team,p.divName,p.state||'—']),
+      headStyles:{fillColor:NAVY,textColor:[255,255,255],fontStyle:'bold',fontSize:8},
+      bodyStyles:{fontSize:7,cellPadding:3},
+      alternateRowStyles:{fillColor:[245,245,240]},
+      margin:{left:M,right:M},
+      theme:'grid',
+      didDrawPage:(data)=>{
+        doc.setFontSize(8);doc.setTextColor(...GRAY);
+        doc.text('Adrenaline Lacrosse  ·  Recruiter Field Guide',M,H-26);
+        doc.text(`Page ${pageNum}`,W-M-30,H-26);
+      }
+    });
+  }
+
+  // Get raw bytes
+  const baseBytes=doc.output('arraybuffer');
+  // PDF field map merge (if applicable)
+  if(hasFieldMapPdf&&window.PDFLib){
+    try{
+      const PDFDocument=window.PDFLib.PDFDocument;
+      const finalDoc=await PDFDocument.load(baseBytes);
+      const mapDoc=await PDFDocument.load(fieldMapPdfBytes,{ignoreEncryption:true});
+      if(mapDoc.getPageCount()>0){
+        const [mapPage]=await finalDoc.copyPages(mapDoc,[0]);
+        // Insert at index 3 (after cover, players-by-region, teams-by-region)
+        finalDoc.insertPage(3,mapPage);
+      }
+      const merged=await finalDoc.save();
+      return merged.buffer.slice(merged.byteOffset,merged.byteOffset+merged.byteLength);
+    }catch(err){
+      console.warn('Recruiter field guide PDF merge failed; returning unmerged',err);
+      return baseBytes;
+    }
+  }
+  return baseBytes;
+}
+
+// Helper: shift a slot string by N minutes (positive or negative).
+// Used for run-of-show check-in math.
+function _addMinutes(slotStr, deltaMins){
+  const m=s2m(slotStr)+deltaMins;
+  const h=Math.floor(m/60),mm=m%60;
+  return `${h}:${String(mm).padStart(2,'0')}`;
+}
+
+// ============================================================
 // WELCOME PACKET PDF — per team
 // One PDF per team, then bundled into a ZIP for batch download.
 // Pages: Cover · Parking pass · Day 1 schedule · Day 2 bracket shell ·
@@ -4425,15 +5809,62 @@ async function buildTeamWelcomePacket(team,div,ename){
   const CHATBOT_URL='https://adrln.com';
   const CASES_URL='https://teamcenter.adrln.com/s/contactsupport';
 
-  // Field map state — drives page numbering. If a field map is loaded, an extra
-  // page gets inserted at final-page-3 (between Parking Pass and Day 1 schedule)
-  // by pdf-lib AFTER jsPDF generation. We adjust page numbers accordingly so the
-  // numbers in the footers match the final merged document.
-  const hasFieldMap=!!(fieldMapPdfBytes&&fieldMapPdfBytes.length);
-  const totalPages=hasFieldMap?7:6;
-  // Map a jsPDF-internal page number (1-6) to the final page number (1-7).
-  // Field map slips in at final-page-3, so jsPDF pages 3..6 shift up by 1.
-  const finalPageNum=(jsPdfN)=>(hasFieldMap&&jsPdfN>=3)?jsPdfN+1:jsPdfN;
+  // Page-count tracking. The field map can be either a PDF (merged via pdf-lib
+  // AFTER jsPDF generation) or an image (drawn directly into a jsPDF page).
+  // The two types differ in how jsPDF page numbers map to user-facing page
+  // numbers — see pgN() below.
+  //
+  // Optional pages:
+  //   • Field map (event-wide) — at user-facing position 3.
+  //     - PDF type: pdf-lib insert AFTER jsPDF generation; jsPDF doesn't see it.
+  //     - Image type: drawn as a fresh jsPDF page right after Parking Pass.
+  //   • Team roster (per-team) — drawn directly by jsPDF AFTER the Day 2 bracket
+  //     page and BEFORE the check-in/on-site ops page. Only included when this
+  //     team has a matched roster in rosterByTeamReg.
+  //
+  // Roster matching: a team has a roster iff rosterTeamMap[team.id] points to
+  // an EventConnect Registration Name that exists in rosterByTeamReg.
+  const hasFieldMapPdf=!!(fieldMapPdfBytes&&fieldMapPdfBytes.length);
+  const hasFieldMapImage=!!fieldMapImageDataUrl;
+  const hasFieldMap=hasFieldMapPdf||hasFieldMapImage;
+  const teamRosterEcName=rosterTeamMap?rosterTeamMap[team.id]:null;
+  const teamRosterPlayers=(rosterByTeamReg&&teamRosterEcName)?(rosterByTeamReg.get(teamRosterEcName)||[]):[];
+  const hasRoster=teamRosterPlayers.length>0;
+  const totalPages=6+(hasFieldMap?1:0)+(hasRoster?1:0);
+
+  // pgN(jsPdfN) → final user-facing page number.
+  // - For PDF field maps: pdf-lib slips a page in at user-position 3, so jsPDF
+  //   pages 3+ shift up by 1.
+  // - For IMAGE field maps: the image is drawn directly as jsPDF page 3, so
+  //   jsPDF page numbers ALREADY match user-facing numbers (no shift needed).
+  // jsPDF page sequence depends on what's enabled:
+  //   No field map, no roster:    Cover=1 Parking=2 Day1=3 Day2=4 Ops=5 How=6
+  //   PDF map, no roster:         Cover=1 Parking=2 Day1=3 Day2=4 Ops=5 How=6 (jsPDF), pdf-lib inserts page 3 → user 1,2,3(map),4,5,6,7
+  //   IMAGE map, no roster:       Cover=1 Parking=2 Map=3 Day1=4 Day2=5 Ops=6 How=7 (all in jsPDF)
+  //   No map, with roster:        Cover=1 Parking=2 Day1=3 Day2=4 Roster=5 Ops=6 How=7
+  //   PDF map + roster:           Cover=1 Parking=2 Day1=3 Day2=4 Roster=5 Ops=6 How=7 (jsPDF), pdf-lib inserts at user position 3
+  //   IMAGE map + roster:         Cover=1 Parking=2 Map=3 Day1=4 Day2=5 Roster=6 Ops=7 How=8 (all in jsPDF)
+  const pgN=(jsPdfN)=>{
+    let n=jsPdfN;
+    // PDF field map shifts user-facing pages 3+ up by 1
+    if(hasFieldMapPdf&&n>=3)n+=1;
+    return n;
+  };
+  // Backwards-compatible alias for the old name used elsewhere in the function.
+  const finalPageNum=pgN;
+
+  // Logical jsPDF page numbers for each section. These shift based on whether
+  // an image map is drawn as jsPDF page 3 and whether a roster page is present.
+  // Use these (instead of hardcoded numbers) in all "PAGE N" labels and footer() calls.
+  const day1Pg=hasFieldMapImage?4:3;
+  const day2Pg=hasFieldMapImage?5:4;
+  const rosterPg=hasFieldMapImage?(hasRoster?6:0):(hasRoster?5:0);
+  const opsPg=hasFieldMapImage
+    ?(hasRoster?7:6)
+    :(hasRoster?6:5);
+  const howPg=hasFieldMapImage
+    ?(hasRoster?8:7)
+    :(hasRoster?7:6);
 
   // Footer helper used on every page (page label + brand stamp)
   const footer=(jsPdfN)=>{
@@ -4460,6 +5891,42 @@ async function buildTeamWelcomePacket(team,div,ename){
       }
     }
   };
+  // Event logo helper. Co-presented with the Adrenaline shield on every page
+  // when an event logo is uploaded in Step 6. Aspect ratio is preserved to
+  // avoid distortion. Auto-detects PNG vs JPG from the data URL prefix.
+  // Returns the actual width drawn (so callers can reserve space for adjacent
+  // text). Drawn at the requested position with the requested HEIGHT — width
+  // computed from aspect ratio.
+  const drawEventLogo=(x,y,h)=>{
+    if(!eventLogoDataUrl||!eventLogoMeta)return 0;
+    const aspect=eventLogoMeta.w>0&&eventLogoMeta.h>0?eventLogoMeta.w/eventLogoMeta.h:1;
+    const w=h*aspect;
+    try{
+      const fmt=eventLogoDataUrl.startsWith('data:image/jpeg')?'JPEG':'PNG';
+      doc.addImage(eventLogoDataUrl,fmt,x,y,w,h,undefined,'FAST');
+      return w;
+    }catch(e){
+      console.warn('Event logo embed failed',e);
+      return 0;
+    }
+  };
+  // Body page header helper. Draws BOTH the Adrenaline shield (top-right,
+  // existing position) AND the event logo (top-left, smaller) on every body
+  // page. Use this in place of drawLogo() on body pages so the event logo
+  // appears consistently across all pages without scattered duplication.
+  const drawBodyHeaderLogos=()=>{
+    drawBodyHeaderLogos();
+    if(eventLogoDataUrl&&eventLogoMeta){
+      // Event logo: top-left of body banner, height 24pt to match the shield
+      // visual weight while leaving room for the page-label text below.
+      const h=24;
+      const aspect=eventLogoMeta.w>0&&eventLogoMeta.h>0?eventLogoMeta.w/eventLogoMeta.h:1;
+      const w=h*aspect;
+      // Cap width at 80pt so a wide logo doesn't crowd the title text below
+      const finalH=w>80?80/aspect:h;
+      drawEventLogo(M,12,finalH);
+    }
+  };
 
   // ── PAGE 1: COVER ───────────────────────────────────────────────────
   doc.setFillColor(...NAVY);doc.rect(0,0,W,110,'F');
@@ -4471,6 +5938,16 @@ async function buildTeamWelcomePacket(team,div,ename){
   doc.text('The ADRLN Day',M,80);
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(255,255,255);
   doc.text('Your team field guide  ·  Pre-event',M,98);
+  // Event logo on cover: top-right of the navy banner, opposite the Adrenaline
+  // shield + wordmark on the left. Vertically centered. Height 50pt for visibility.
+  if(eventLogoDataUrl&&eventLogoMeta){
+    const coverLogoH=50;
+    const aspect=eventLogoMeta.w>0&&eventLogoMeta.h>0?eventLogoMeta.w/eventLogoMeta.h:1;
+    const coverLogoW=coverLogoH*aspect;
+    drawEventLogo(W-M-coverLogoW,30,coverLogoH);
+  }
+
+
 
   // Team header
   doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(24);
@@ -4527,7 +6004,7 @@ async function buildTeamWelcomePacket(team,div,ename){
 
   doc.setFillColor(...AMBER);doc.rect(0,0,W,90,'F');
   doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-  drawLogo(W-M-46,18);
+  drawBodyHeaderLogos();
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
   doc.text('THE ADRLN DAY  ·  PAGE 2',M,38);
   doc.setFontSize(28);doc.text('Parking Pass',M,72);
@@ -4603,13 +6080,52 @@ async function buildTeamWelcomePacket(team,div,ename){
 
   footer(2);
 
-  // ── PAGE 3: DAY 1 SCHEDULE ─────────────────────────────────────────
+  // ── PAGE 3 (optional, IMAGE-TYPE FIELD MAP ONLY) ────────────────────
+  // For PDF-type field maps, the page is inserted later by pdf-lib (after
+  // jsPDF generation). For image maps, we draw a dedicated jsPDF page here
+  // with a navy header band and the image scaled to fit the body.
+  if(hasFieldMapImage){
+    doc.addPage();
+    doc.setFillColor(...NAVY);doc.rect(0,0,W,90,'F');
+    doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+    drawBodyHeaderLogos();
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+    doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(3)}`,M,38);
+    doc.setFontSize(28);doc.text('Field Map',M,72);
+
+    // Compute aspect-ratio-preserving fit within the body area
+    const bodyTop=120, bodyBottom=H-50;
+    const bodyW=W-2*M, bodyH=bodyBottom-bodyTop;
+    const imgW=fieldMapImageDims&&fieldMapImageDims.w>0?fieldMapImageDims.w:1000;
+    const imgH=fieldMapImageDims&&fieldMapImageDims.h>0?fieldMapImageDims.h:700;
+    const scale=Math.min(bodyW/imgW, bodyH/imgH);
+    const drawW=imgW*scale, drawH=imgH*scale;
+    const drawX=M+(bodyW-drawW)/2, drawY=bodyTop+(bodyH-drawH)/2;
+    // jsPDF auto-detects PNG/JPEG from the data URL prefix
+    try{
+      doc.addImage(fieldMapImageDataUrl,'AUTO',drawX,drawY,drawW,drawH,undefined,'FAST');
+    }catch(err){
+      console.warn('Field map image render failed, attempting fallback',err);
+      try{
+        // Fallback: explicit format detection from the data URL
+        const isJpg=fieldMapImageDataUrl.startsWith('data:image/jpeg');
+        doc.addImage(fieldMapImageDataUrl, isJpg?'JPEG':'PNG', drawX,drawY,drawW,drawH);
+      }catch(err2){
+        // Last-resort: write a placeholder error message
+        doc.setTextColor(...GRAY);doc.setFontSize(11);
+        doc.text('Field map could not be rendered. Replace and try again.',M,bodyTop+30);
+      }
+    }
+    footer(3);
+  }
+
+  // ── PAGE 3 (or 4): DAY 1 SCHEDULE ──────────────────────────────────
   doc.addPage();
   doc.setFillColor(...NAVY);doc.rect(0,0,W,90,'F');
   doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-  drawLogo(W-M-46,18);
+  drawBodyHeaderLogos();
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-  doc.text('THE ADRLN DAY  ·  PAGE 3',M,38);
+  doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(day1Pg)}`,M,38);
   doc.setFontSize(28);doc.text('Day 1 Schedule',M,72);
 
   doc.setTextColor(...NAVY);doc.setFont('helvetica','normal');doc.setFontSize(11);
@@ -4643,6 +6159,55 @@ async function buildTeamWelcomePacket(team,div,ename){
   });
 
   let yEnd=doc.lastAutoTable.finalY+24;
+
+  // ── YOUR POOL ────────────────────────────────────────────────────────
+  // Find this team's pool within the division and list its members so the team
+  // knows who else they're competing against in pool play. Pool affiliation
+  // also tells coaches where to track standings on Day 1.
+  const teamPool=(pools[div.id]||[]).find(p=>p.teams.some(t=>t.id===team.id));
+  if(teamPool && teamPool.teams.length>1){
+    if(yEnd>700){doc.addPage();
+      doc.setFillColor(...NAVY);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+      drawBodyHeaderLogos();
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+      doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(day1Pg)} (cont.)`,M,38);
+      doc.setFontSize(28);doc.text('Day 1 Schedule (cont.)',M,72);
+      yEnd=120;
+    }
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text(`YOUR POOL — ${teamPool.label}`,M,yEnd);yEnd+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+    // List pool teammates as a compact comma-separated string with state markers.
+    // Highlight the current team in bold so the family can spot themselves.
+    const poolNames=teamPool.teams.map(t=>{
+      const stateBit=t.state?` (${t.state})`:'';
+      return t.id===team.id?`${t.name}${stateBit} ←` : `${t.name}${stateBit}`;
+    }).join('  ·  ');
+    const poolLines=doc.splitTextToSize(poolNames,W-2*M);
+    doc.text(poolLines,M,yEnd);
+    yEnd+=poolLines.length*13+10;
+
+    // ── HOW STANDINGS WORK ─────────────────────────────────────────────
+    // Three-tier tiebreaker explanation. This is the canonical ADRLN order:
+    //   1. Points (Win=3, Tie=1, Loss=0) — rewards winning over draws
+    //   2. Goals Against — rewards defense, not score-running
+    //   3. Goal Differential — final discriminator if first two are tied
+    // Goals Against precedes Goal Differential intentionally: it discourages
+    // teams from running up the score on weaker opponents to improve seeding.
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
+    doc.text('HOW STANDINGS WORK',M,yEnd);yEnd+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+    const standingsExplain=doc.splitTextToSize(
+      'Pool standings determine your Day 2 placement. Tiebreakers run in this order: '+
+      '(1) Points — Win = 3, Tie = 1, Loss = 0. '+
+      '(2) Goals Against — fewest goals allowed wins the tiebreak. '+
+      '(3) Goal Differential — goals scored minus goals allowed. '+
+      'Goals-against ranks above goal-differential by design — defending well matters more than running up the score.',
+      W-2*M);
+    doc.text(standingsExplain,M,yEnd);
+    yEnd+=standingsExplain.length*13+14;
+  }
+
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
   doc.text('WHAT TO EXPECT',M,yEnd);yEnd+=16;
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
@@ -4652,22 +6217,55 @@ async function buildTeamWelcomePacket(team,div,ename){
     W-2*M):['(no Day 1 games scheduled — confirm with your club director)'];
   doc.text(expect,M,yEnd);
 
-  footer(3);
+  footer(day1Pg);
 
-  // ── PAGE 4: DAY 2 BRACKET SHELL ────────────────────────────────────
+  // ── PAGE 4 (or 5): DAY 2 BRACKET SHELL ─────────────────────────────
   doc.addPage();
   doc.setFillColor(...PURPLE);doc.rect(0,0,W,90,'F');
   doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-  drawLogo(W-M-46,18);
+  drawBodyHeaderLogos();
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-  doc.text('THE ADRLN DAY  ·  PAGE 4',M,38);
+  doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(day2Pg)}`,M,38);
   doc.setFontSize(28);doc.text('Day 2 Bracket Shell',M,72);
 
   doc.setTextColor(40,40,40);doc.setFont('helvetica','normal');doc.setFontSize(10);
-  const d2Intro=doc.splitTextToSize(
-    `Day 2 brackets are seeded from Day 1 results. Below is the structure for ${div.name}. Where you land depends on your pool standings — see "How seeding works" later in this guide.`,
-    W-2*M);
+
+  // ── YOUR DAY 2 PATH (division-specific based on pool count) ──────────
+  // The ADRLN format spec defines different advancement rules for each pool
+  // count. This block emits a paragraph customized to this division's actual
+  // pool structure so families know exactly what to expect.
+  const dPools=pools[div.id]||[];
+  const np=dPools.length;
+  let pathExplain='Day 2 brackets are seeded from Day 1 results.';
+  if(np===1){
+    const n=dPools[0]?dPools[0].teams.length:div.teams.length;
+    if(n<=4){
+      pathExplain=`Single pool of ${n} teams. All ${Math.min(n,4)} teams advance to a Day 2 bracket — semifinals followed by a championship game and a 3rd-place match.`;
+    } else {
+      pathExplain=`Single pool of ${n} teams. The top 4 by Day 1 standings advance to Day 2 — semifinals (1 vs 4 and 2 vs 3) feed into a championship game and a 3rd-place match. Teams that finish 5th or below play consolation games on Day 2.`;
+    }
+  } else if(np===2){
+    pathExplain='Two-pool format. The top 2 from each pool advance — 4 teams total. Day 2 is cross-pool: 1st in Pool A plays 2nd in Pool B, and 1st in Pool B plays 2nd in Pool A. Winners meet in the championship; losers play for 3rd. This guarantees you face a team from the OTHER pool in the semifinal — no rematches from Day 1.';
+  } else if(np===3){
+    pathExplain='Three-pool format. Eight teams advance to Day 2: the top 2 from each pool (6 teams) plus the two best 3rd-place teams ranked across pools. All 8 are seeded 1–8 globally by Day 1 standings. Quarterfinals are 1v8, 2v7, 3v6, 4v5 — adjusted to avoid same-pool rematches in the QF when needed. Winners advance to semifinals, then championship and 3rd-place games. Teams that don\'t advance play consolation games.';
+  } else if(np===4){
+    pathExplain='Four-pool format. The top 2 from each pool advance — 8 teams total. Day 2 is cross-pool: 1A v 2D, 1B v 2C, 1C v 2B, 1D v 2A in the quarterfinals. Winners meet in semifinals, then championship and 3rd-place. This structure guarantees no Day 1 rematches in the QF round.';
+  } else if(np>=5){
+    let advRule;
+    if(np===5)advRule='top of each pool (5 teams) plus the 3 best 2nd-place teams ranked across pools = 8 advance';
+    else if(np===6)advRule='top of each pool (6 teams) plus the 2 best 2nd-place teams ranked across pools = 8 advance';
+    else if(np===7)advRule='top of each pool (7 teams) plus the 1 best 2nd-place team = 8 advance';
+    else advRule=`top teams from each pool plus best runners-up = 8 advance`;
+    pathExplain=`${np}-pool format. ${advRule}. All 8 teams are seeded 1–8 globally by Day 1 standings. Quarterfinals are 1v8, 2v7, 3v6, 4v5 — adjusted to avoid same-pool rematches in the QF when needed. Winners go to semifinals, then championship and 3rd-place. Teams that don't advance play consolation games on their pod fields.`;
+  }
+  const d2Intro=doc.splitTextToSize(pathExplain,W-2*M);
   doc.text(d2Intro,M,118);
+  // Small heading above the explanation for visual hierarchy
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(...NAVY);
+  doc.text('YOUR DAY 2 PATH',M,108);
+
+  // Schedule table starts below the explanation block
+  let d2TableStart=118+d2Intro.length*13+14;
 
   const d2Games=[];
   Object.entries(sched2||{}).forEach(([slot,row])=>{
@@ -4679,7 +6277,7 @@ async function buildTeamWelcomePacket(team,div,ename){
 
   if(d2Games.length){
     doc.autoTable({
-      startY:160,
+      startY:d2TableStart,
       head:[['Time','Field','Game','Matchup']],
       body:d2Games.map(g=>{
         const fld=fields.find(f=>f.id===g.fid);
@@ -4693,18 +6291,111 @@ async function buildTeamWelcomePacket(team,div,ename){
     });
   } else {
     doc.setFontSize(11);doc.setTextColor(...GRAY);
-    doc.text('Day 2 schedule not yet published — check back at check-in.',M,160);
+    doc.text('Day 2 schedule not yet published — check back at check-in.',M,d2TableStart);
   }
 
-  footer(4);
+  footer(day2Pg);
 
-  // ── PAGE 5: ON-SITE OPS — gift, roster, lounge, staff, support ─────
+  // ── PAGE 5 (optional): TEAM ROSTER ───────────────────────────────────
+  // Inserted only when this team has a matched EventConnect roster. Pushes
+  // the on-site ops page to jsPDF page 6 and how-it-works to page 7.
+  // Layout: navy banner, two-column table of player name + jersey, sorted
+  // by jersey number ascending (then name) for predictable event-day lookup.
+  // Only player name + jersey are shown — no parent contact info, no DOB.
+  if(hasRoster){
+    doc.addPage();
+    doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
+    doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
+    drawBodyHeaderLogos();
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+    doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(rosterPg)}`,M,38);
+    doc.setFontSize(28);doc.text('Team Roster',M,72);
+
+    // Subhead: team name + player count + division
+    doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text(team.name,M,118);
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(...GRAY);
+    doc.text(`${div.name}  ·  ${teamRosterPlayers.length} player${teamRosterPlayers.length===1?'':'s'} from EventConnect`,M,134);
+
+    // Sort: jersey number ascending (numeric where possible), then name.
+    // Players without a jersey number sink to the bottom.
+    const sortedRoster=teamRosterPlayers.slice().sort((a,b)=>{
+      const ja=parseInt(a.jersey,10),jb=parseInt(b.jersey,10);
+      const aHas=!isNaN(ja),bHas=!isNaN(jb);
+      if(aHas&&bHas)return ja-jb||a.name.localeCompare(b.name);
+      if(aHas)return -1;
+      if(bHas)return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Two-column layout: 30 players fit per column, 60 per page. If a team
+    // somehow has more than 60 (shouldn't happen — typical roster is 18-25
+    // even with extras), we just truncate to 60 with a note. Page break
+    // mid-roster would be confusing.
+    const colW=(W-2*M-20)/2;
+    const colX=[M,M+colW+20];
+    const startY=160,rowH=14;
+    const maxPerCol=Math.floor((H-startY-50)/rowH); // headroom for footer
+    const maxTotal=maxPerCol*2;
+    const display=sortedRoster.slice(0,maxTotal);
+
+    // Header row (per column): Jersey # · Player Name
+    const drawColHeader=(x,y)=>{
+      doc.setFillColor(...LT_TEAL);doc.rect(x,y-12,colW,16,'F');
+      doc.setTextColor(...NAVY);doc.setFont('helvetica','bold');doc.setFontSize(9);
+      doc.text('JERSEY',x+8,y);
+      doc.text('PLAYER NAME',x+62,y);
+      doc.setDrawColor(...GREEN);doc.setLineWidth(0.8);
+      doc.line(x,y+4,x+colW,y+4);
+    };
+    drawColHeader(colX[0],startY);
+    drawColHeader(colX[1],startY);
+
+    // Player rows
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
+    display.forEach((p,i)=>{
+      const col=i<maxPerCol?0:1;
+      const rowIdx=i<maxPerCol?i:i-maxPerCol;
+      const x=colX[col],y=startY+20+rowIdx*rowH;
+      // Subtle alternating row tint for scannability
+      if(rowIdx%2===1){
+        doc.setFillColor(248,248,243);doc.rect(x,y-10,colW,rowH,'F');
+      }
+      const jersey=(p.jersey||'').toString().trim()||'—';
+      doc.setFont('helvetica','bold');doc.setTextColor(...NAVY);
+      doc.text(jersey,x+8,y);
+      doc.setFont('helvetica','normal');doc.setTextColor(40,40,40);
+      // Truncate long names so they don't overflow the column
+      const maxNameW=colW-72;
+      const nameLines=doc.splitTextToSize(p.name,maxNameW);
+      doc.text(nameLines[0]||'',x+62,y);
+    });
+
+    // Truncation note if the roster was bigger than fits on one page
+    if(sortedRoster.length>maxTotal){
+      doc.setFont('helvetica','italic');doc.setFontSize(8);doc.setTextColor(...GRAY);
+      doc.text(`+ ${sortedRoster.length-maxTotal} additional player${sortedRoster.length-maxTotal===1?'':'s'} on file (full roster verified at check-in)`,M,startY+20+maxPerCol*rowH+10);
+    }
+
+    // Footnote — clarifies waiver requirement and contact info source
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GRAY);
+    const noteLines=doc.splitTextToSize(
+      'Roster verified at check-in. Each player must have a signed waiver on file in EventConnect to take the field. '+
+      'For roster changes after this guide is published, contact the CX Manager listed on the Check-in & On-Site page.',
+      W-2*M
+    );
+    doc.text(noteLines,M,H-50);
+
+    footer(rosterPg);
+  }
+
+  // ── On-site ops (jsPDF page 5 normally, page 6 with roster) ──────────
   doc.addPage();
   doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
   doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-  drawLogo(W-M-46,18);
+  drawBodyHeaderLogos();
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-  doc.text('THE ADRLN DAY  ·  PAGE 5',M,38);
+  doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(opsPg)}`,M,38);
   doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
 
   let yp5=120;
@@ -4761,13 +6452,13 @@ async function buildTeamWelcomePacket(team,div,ename){
     // Page-overflow guard: if the cursor is past ~520, start a fresh page so the
     // table doesn't collide with the staff/support blocks below.
     if(yp5>520){
-      footer(5);
+      footer(opsPg);
       doc.addPage();
       doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
       doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-      drawLogo(W-M-46,18);
+      drawBodyHeaderLogos();
       doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-      doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+      doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(opsPg)} (cont.)`,M,38);
       doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
       yp5=120;
     }
@@ -4810,13 +6501,13 @@ async function buildTeamWelcomePacket(team,div,ename){
   // Page-overflow guard: staff cards + support block need ~180pt; if not enough
   // room, flip to a fresh continuation page.
   if(yp5>540){
-    footer(5);
+    footer(opsPg);
     doc.addPage();
     doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');
     doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-    drawLogo(W-M-46,18);
+    drawBodyHeaderLogos();
     doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-    doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+    doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(opsPg)} (cont.)`,M,38);
     doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);
     yp5=120;
   }
@@ -4848,40 +6539,18 @@ async function buildTeamWelcomePacket(team,div,ename){
   });
   yp5+=66;
 
-  // ── HOTEL PARTNER — only renders if configured ───────────────────────
-  const hp=window.hotelPartner||{};
-  if((hp.name||'').trim()){
-    if(yp5>620){footer(5);doc.addPage();
-      doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-      drawLogo(W-M-46,18);
-      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
-      doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);yp5=120;
-    }
-    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
-    doc.text('HOTEL PARTNER',M,yp5);yp5+=14;
-    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(40,40,40);
-    doc.text(hp.name,M,yp5);
-    if((hp.rate||'').trim()){
-      doc.setTextColor(...GRAY);doc.setFontSize(9.5);
-      doc.text('  ·  '+hp.rate,M+doc.getTextWidth(hp.name),yp5);
-    }
-    yp5+=14;
-    if((hp.link||'').trim()){
-      doc.setTextColor(...PURPLE);doc.setFontSize(9.5);
-      doc.textWithLink('Book a room \u2192',M,yp5,{url:hp.link});
-      yp5+=14;
-    }
-    yp5+=4;
-  }
+  // Hotel info is intentionally NOT rendered on team field guides. The
+  // hotelPartner global is held for the recruiter packet generator (separate
+  // deliverable) — recruiters get the room block info, families do not.
 
   // ── ONSITE LOGISTICS — only renders if at least one field is filled ──
   const lg=window.logistics||{};
   const hasLogistics=(lg.lostFound||'').trim()||(lg.firstAid||'').trim()||(lg.restrooms||'').trim();
   if(hasLogistics){
-    if(yp5>610){footer(5);doc.addPage();
+    if(yp5>610){footer(opsPg);doc.addPage();
       doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-      drawLogo(W-M-46,18);
-      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+      drawBodyHeaderLogos();
+      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(opsPg)} (cont.)`,M,38);
       doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);yp5=120;
     }
     doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
@@ -4904,10 +6573,10 @@ async function buildTeamWelcomePacket(team,div,ename){
 
   // Support block — chatbot QR + Salesforce cases fallback
   // Page-overflow guard: support block needs ~120pt
-  if(yp5>620){footer(5);doc.addPage();
+  if(yp5>620){footer(opsPg);doc.addPage();
     doc.setFillColor(...TEAL);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-    drawLogo(W-M-46,18);
-    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('THE ADRLN DAY  ·  PAGE 5 (cont.)',M,38);
+    drawBodyHeaderLogos();
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(opsPg)} (cont.)`,M,38);
     doc.setFontSize(28);doc.text('Check-in & On-Site',M,72);yp5=120;
   }
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...NAVY);
@@ -4934,15 +6603,15 @@ async function buildTeamWelcomePacket(team,div,ename){
   doc.setFontSize(8);doc.setTextColor(...PURPLE);
   doc.textWithLink('Fallback: open a support case at teamcenter.adrln.com',M,yp5,{url:CASES_URL});
 
-  footer(5);
+  footer(opsPg);
 
   // ── PAGE 6: HOW IT WORKS ───────────────────────────────────────────
   doc.addPage();
   doc.setFillColor(...GRAY);doc.rect(0,0,W,90,'F');
   doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-  drawLogo(W-M-46,18);
+  drawBodyHeaderLogos();
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-  doc.text('THE ADRLN DAY  ·  PAGE 6',M,38);
+  doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(howPg)}`,M,38);
   doc.setFontSize(28);doc.text('How It Works',M,72);
 
   let yp6=120;
@@ -4971,12 +6640,12 @@ async function buildTeamWelcomePacket(team,div,ename){
     if(yp6>580){
       doc.setFontSize(8);doc.setTextColor(...GRAY);
       doc.text('Generated by the Adrenaline Lacrosse Tournament Experience Tool  ·  Park once, stay close.',M,H-26);
-      doc.text(`Page ${finalPageNum(6)} of ${totalPages}`,W-M-40,H-26);
+      doc.text(`Page ${finalPageNum(howPg)} of ${totalPages}`,W-M-40,H-26);
       doc.addPage();
       doc.setFillColor(...GRAY);doc.rect(0,0,W,90,'F');doc.setFillColor(...GREEN);doc.rect(0,88,W,3,'F');
-      drawLogo(W-M-46,18);
+      drawBodyHeaderLogos();
       doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
-      doc.text('THE ADRLN DAY  ·  PAGE 6 (cont.)',M,38);
+      doc.text(`THE ADRLN DAY  ·  PAGE ${pgN(howPg)} (cont.)`,M,38);
       doc.setFontSize(28);doc.text('How It Works',M,72);
       yp6=120;
     }
@@ -5019,7 +6688,7 @@ async function buildTeamWelcomePacket(team,div,ename){
   // Footer with brand line
   doc.setFontSize(8);doc.setTextColor(...GRAY);
   doc.text('Generated by the Adrenaline Lacrosse Tournament Experience Tool  ·  Park once, stay close.',M,H-26);
-  doc.text(`Page ${finalPageNum(6)} of ${totalPages}`,W-M-40,H-26);
+  doc.text(`Page ${finalPageNum(howPg)} of ${totalPages}`,W-M-40,H-26);
 
   const baseBytes=doc.output('arraybuffer');
 
@@ -5128,6 +6797,22 @@ function buildScoreSheetPDF({day,dateStr,field,games,ename}){
     }
   };
 
+  // Event logo helper for score sheet (mirrors field guide drawEventLogo).
+  // Returns rendered width so caller can position adjacent elements.
+  const drawEventLogoSS=(x,y,h)=>{
+    if(!eventLogoDataUrl||!eventLogoMeta)return 0;
+    const aspect=eventLogoMeta.w>0&&eventLogoMeta.h>0?eventLogoMeta.w/eventLogoMeta.h:1;
+    const w=h*aspect;
+    try{
+      const fmt=eventLogoDataUrl.startsWith('data:image/jpeg')?'JPEG':'PNG';
+      doc.addImage(eventLogoDataUrl,fmt,x,y,w,h,undefined,'FAST');
+      return w;
+    }catch(e){
+      console.warn('Score sheet event logo embed failed',e);
+      return 0;
+    }
+  };
+
   // ── HEADER ─────────────────────────────────────────────────────
   doc.setFillColor(...NAVY);doc.rect(0,0,W,80,'F');
   doc.setFillColor(...GREEN);doc.rect(0,78,W,3,'F'); // green hairline
@@ -5136,6 +6821,17 @@ function buildScoreSheetPDF({day,dateStr,field,games,ename}){
   doc.text('ADRENALINE LACROSSE',M+44,32);
   doc.setFont('helvetica','bold');doc.setFontSize(20);
   doc.text('FIELD SCORE SHEET',M+44,56);
+  // Event logo: centered between the left brand block and the right field-name
+  // block. Sized to match Adrenaline shield height (40pt) for visual balance.
+  // If no event logo, this is a no-op and right-side text gets the full width.
+  if(eventLogoDataUrl&&eventLogoMeta){
+    const eH=40;
+    const aspect=eventLogoMeta.w>0&&eventLogoMeta.h>0?eventLogoMeta.w/eventLogoMeta.h:1;
+    const eW=eH*aspect;
+    // Center horizontally between left text block (~M+260) and right block (~W-M-200)
+    const eX=(M+260+(W-M-200))/2 - eW/2;
+    drawEventLogoSS(eX,20,eH);
+  }
   // Right side: field + day badge
   doc.setFontSize(11);doc.setFont('helvetica','normal');
   doc.text(ename,W-M,28,{align:'right'});
