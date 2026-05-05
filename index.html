@@ -933,6 +933,44 @@ function getSlots(sh,eh){
 }
 function sH(s){const[h,m]=s.split(':').map(Number);return h+m/60;}
 function s2m(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
+// Field occupancy check that handles MIXED SLOT LENGTHS.
+// When divisions have different slot lengths (e.g. 2029 plays 60-min slots,
+// 2030 plays 50-min slots), two games on the same field at "different" slots
+// in the master grid can actually overlap in real time. For example:
+//   2030 at 8:50 (50-min slot) → occupies 8:50–9:40
+//   2029 at 9:00 (60-min slot) → starts at 9:00
+// The 9:00 game would START before the 8:50 game ENDS — overlap from 9:00–9:40.
+//
+// This helper returns true ONLY if no existing game on `fId` overlaps the
+// time window [s, s+slotMins) for the candidate game.
+//
+// `sched` is the schedule object (sched1 or sched2). `s` is the candidate
+// slot string. `fId` is the field id. `slotMins` is the slot length in
+// minutes for the CANDIDATE game's division (caller computes via divSlotM).
+function fieldFreeAt(sched, s, fId, slotMins){
+  if(!sched) return true;
+  const start=s2m(s), end=start+slotMins;
+  // Walk every slot in the schedule; for each game on this field, compute its
+  // own end-time using its division's slot length (or the candidate's length
+  // as a defensive fallback if division lookup fails).
+  for(const slot of Object.keys(sched)){
+    const g=sched[slot] && sched[slot][fId];
+    if(!g) continue;
+    const gStart=s2m(slot);
+    // Look up the placed game's slot length from its division
+    let gMins=slotMins; // fallback
+    if(g.divId!=null){
+      const gDiv=divs.find(x=>x.id===g.divId);
+      if(gDiv) gMins=divSlotM(gDiv);
+    }
+    const gEnd=gStart+gMins;
+    // Overlap if [start, end) intersects [gStart, gEnd) — using half-open intervals,
+    // games are allowed to be exactly back-to-back (one ends at the same minute
+    // the next starts).
+    if(start < gEnd && gStart < end) return false;
+  }
+  return true;
+}
 function fmt12(h){const ap=h<12?'am':'pm';return`${h>12?h-12:h===0?12:h}:00${ap}`;}
 function fmtSlot(s){const h=sH(s),hh=Math.floor(h),mm=Math.round((h-hh)*60),ap=h<12?'am':'pm';return`${hh>12?hh-12:hh===0?12:hh}:${mm.toString().padStart(2,'0')}${ap}`;}
 function sameReg(a,b){if(!a.state||!b.state)return false;if(a.state.includes('CA')||b.state.includes('CA'))return a.state===b.state;return a.state===b.state;}
@@ -2268,7 +2306,11 @@ function genD1(){
         if(d.recruitable&&s===divLunchSlot[d.id])return;
         const podFields=dpod[d.id]||[];
         if(!podFields.length)return;
-        const avFieldsNow=podFields.filter(f=>!sched1[s][f.id]);
+        // Use fieldFreeAt to detect overlapping games — when divisions have
+        // different slot lengths, two games at "different" slot strings can
+        // still occupy the same physical field at the same time.
+        const dSlotM=divSlotM(d);
+        const avFieldsNow=podFields.filter(f=>fieldFreeAt(sched1,s,f.id,dSlotM));
         if(!avFieldsNow.length)return;
 
         // Sort queue: (1) most under-gamed teams first (starvation prevention),
@@ -2431,9 +2473,13 @@ function genD1(){
     const h=sH(s);
     const si=slots.indexOf(s);
 
-    // For each field, check if idle and try to fill
+    // For each field, try to fill if not occupied. Note: with mixed slot
+    // lengths, "occupied" depends on the candidate division's slot length —
+    // a 50-min game could overlap a 60-min slot at a different start time.
+    // We check fieldFreeAt per-division inside the candidate loop.
     fields.forEach(f=>{
-      if(sched1[s][f.id]) return; // already has a game
+      // Quick exit: if THIS exact slot has a game here, no point trying.
+      if(sched1[s][f.id]) return;
 
       // Try divisions in backfill candidate order (owners first, then any
       // grid+gender-compatible division to soak up idle capacity)
@@ -2479,6 +2525,9 @@ function genD1(){
           if(Object.values(sched1[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
           // Gender check
           if(f.gender!==d.gender) continue;
+          // Mixed-slot-length overlap check: with this division's slot length,
+          // does the field have any other game whose time range overlaps?
+          if(!fieldFreeAt(sched1,s,f.id,divSlotM(d))) continue;
           // Place game (carry bonus flags if present)
           const gameRec={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
             divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
@@ -2553,6 +2602,8 @@ function genD1(){
         if(!s2.every(prev=>Math.abs(s2m(lunchSlot)-s2m(prev))>restMin))continue;
         if(Object.values(sched1[lunchSlot]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
         if(Object.values(sched1[lunchSlot]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
+        // Mixed-slot-length overlap check
+        if(!fieldFreeAt(sched1,lunchSlot,f.id,divSlotM(d))) continue;
         const gameRec={id:`D1-G${++gc}`,t1:t1.id,t2:t2.id,t1n:t1.name,t2n:t2.name,
           divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender,pool:poolLabel,type:'pool'};
         if(bonusOpts&&bonusOpts.bonusGame){
@@ -2591,10 +2642,18 @@ function genD1(){
         const g=sched1[s][f.id];
         if(!g)continue;
         const d=divs.find(x=>x.id===g.divId);if(!d)continue;
+        const dSlotM=divSlotM(d);
         // Try to move this game earlier on the same field
         for(let ei=0;ei<si;ei++){
           const es=slots[ei];
-          if(sched1[es][f.id])continue; // earlier slot already has a game on this field
+          // Mixed-slot-length-aware: the target slot must have no game whose
+          // time range overlaps the candidate game's [es, es+dSlotM) window.
+          // We temporarily clear the source slot (s) before the check so the
+          // game doesn't conflict with itself.
+          const wasAt=sched1[s][f.id]; sched1[s][f.id]=null;
+          const free=fieldFreeAt(sched1,es,f.id,dSlotM);
+          sched1[s][f.id]=wasAt;
+          if(!free)continue;
           // Earlier slot must be in division's grid
           if(!divGridSet[d.id].has(es))continue;
           // Skip lunch slot for recruiting divisions
@@ -2726,7 +2785,11 @@ function genD2(){
       const s2x=tS2[t2.id]||[];if(!s2x.every(prev=>Math.abs(s2m(s)-s2m(prev))>dRestMin))continue;
       if(Object.values(sched2[s]).some(g=>g&&(g.t1===t1.id||g.t2===t1.id)))continue;
       if(Object.values(sched2[s]).some(g=>g&&(g.t1===t2.id||g.t2===t2.id)))continue;
-      const av=pool.filter(f=>f.gender===gen&&!sched2[s][f.id]);if(!av.length)continue;
+      // Mixed-slot-length overlap check (Day 2): a 50-min slot game on this
+      // field could overlap a 60-min candidate, so check by time range.
+      const d2SlotM=dRef?divSlotM(dRef):slotM();
+      const av=pool.filter(f=>f.gender===gen&&fieldFreeAt(sched2,s,f.id,d2SlotM));
+      if(!av.length)continue;
       // Day 1 rematch flag: true if these two real teams played each other in pool play
       const d1played=window._played||new Set();
       const isRematch=t1.id>0&&t2.id>0&&d1played.has(pk(t1.id,t2.id));
@@ -3798,7 +3861,29 @@ function toggleUtil(){
 // ============================================================
 function checkConflicts(sched){
   const tm={};let c=0;
+  // Team double-booking detection (existing logic)
   Object.entries(sched).forEach(([slot,sl])=>{Object.values(sl).forEach(g=>{if(!g||g.t1<0||g.t2<0)return;[g.t1,g.t2].forEach(tid=>{if(!tm[tid])tm[tid]=new Set();if(tm[tid].has(slot))c++;tm[tid].add(slot);});});});
+  // Field-overlap detection: with mixed slot lengths, two games on the same
+  // field can occupy overlapping time ranges even at different slot strings.
+  const fieldGames={};
+  Object.entries(sched).forEach(([slot,row])=>{
+    Object.entries(row).forEach(([fid,g])=>{
+      if(!g)return;
+      const start=s2m(slot);
+      let mins=50; // default fallback
+      if(g.divId!=null){
+        const gDiv=divs.find(x=>x.id===g.divId);
+        if(gDiv) mins=divSlotM(gDiv);
+      }
+      const end=start+mins;
+      if(!fieldGames[fid]) fieldGames[fid]=[];
+      // Check this game against every previously-seen game on the same field
+      fieldGames[fid].forEach(prev=>{
+        if(start < prev.end && prev.start < end) c++;
+      });
+      fieldGames[fid].push({start,end,slot});
+    });
+  });
   return c;
 }
 function updateConflicts(){
@@ -3830,6 +3915,39 @@ function updateConflicts(){
     });
   }
   markC(sched1,1);markC(sched2,2);
+
+  // Mark field-overlap conflicts (mixed-slot-length issues)
+  function markFieldOverlap(sched,day){
+    const fieldGames={};
+    Object.entries(sched).forEach(([slot,row])=>{
+      Object.entries(row).forEach(([fid,g])=>{
+        if(!g)return;
+        const start=s2m(slot);
+        let mins=50;
+        if(g.divId!=null){
+          const gDiv=divs.find(x=>x.id===g.divId);
+          if(gDiv) mins=divSlotM(gDiv);
+        }
+        const end=start+mins;
+        if(!fieldGames[fid]) fieldGames[fid]=[];
+        fieldGames[fid].forEach(prev=>{
+          if(start < prev.end && prev.start < end){
+            window._cset.add(slot+':'+fid);
+            window._cset.add(prev.slot+':'+fid);
+            const f=fields.find(x=>x.id===+fid);
+            const fname=f?f.name:('Field '+fid);
+            conflictDetails.push({
+              team:fname+' overlap',slot:fmtSlot(slot),day:'Day '+day,
+              game1:g.t1n+' vs '+g.t2n+' ('+fmtSlot(slot)+', '+mins+'min)',
+              game2:(sched[prev.slot]&&sched[prev.slot][fid])?(sched[prev.slot][fid].t1n+' vs '+sched[prev.slot][fid].t2n+' ('+fmtSlot(prev.slot)+', '+(prev.end-prev.start)+'min)'):'game'
+            });
+          }
+        });
+        fieldGames[fid].push({start,end,slot});
+      });
+    });
+  }
+  markFieldOverlap(sched1,1);markFieldOverlap(sched2,2);
 
   const c=checkConflicts(sched1)+checkConflicts(sched2);
   const el=document.getElementById('conflict-ct'),btn=document.getElementById('regen-btn');
@@ -3868,6 +3986,28 @@ function dropGame(ev,toSlot,toFid,day){
   const fld=fields.find(f=>f.id===toFid);
   if(sH(toSlot)===rl()||sH(toSlot)===nlH()){showToast('Cannot place game in break slot','err');dgSrc=null;return;}
   if(fld&&fld.gender!==src.gen){showToast(`${fld.name} is ${fld.gender} only -- rejected`,'err');dgSrc=null;return;}
+  // Mixed-slot-length overlap check: temporarily clear the source slot, check if the
+  // destination slot is free for the moving game's full duration, then restore.
+  const srcDiv=divs.find(d=>d.id===src.divId);
+  const srcMins=srcDiv?divSlotM(srcDiv):50;
+  const wasAtSrc=sc[dgSrc.slot][dgSrc.fid]; sc[dgSrc.slot][dgSrc.fid]=null;
+  // For a swap (dst exists), also clear destination so dst's old game doesn't block
+  const wasAtDst=dst; if(dst)sc[toSlot][toFid]=null;
+  const overlapAtDest=!fieldFreeAt(sc,toSlot,toFid,srcMins);
+  // For swaps, also confirm the destination game would fit at the source slot
+  let overlapAtSrc=false;
+  if(dst){
+    const dstDiv=divs.find(d=>d.id===dst.divId);
+    const dstMins=dstDiv?divSlotM(dstDiv):50;
+    overlapAtSrc=!fieldFreeAt(sc,dgSrc.slot,dgSrc.fid,dstMins);
+  }
+  // Restore for normal placement below
+  sc[dgSrc.slot][dgSrc.fid]=wasAtSrc;
+  if(dst)sc[toSlot][toFid]=wasAtDst;
+  if(overlapAtDest||overlapAtSrc){
+    showToast('Move blocked — would overlap another game on the same field due to mixed slot lengths','err');
+    dgSrc=null;return;
+  }
   if(dst){sc[dgSrc.slot][dgSrc.fid]=dst;sc[toSlot][toFid]=src;showToast('Games swapped');}
   else{sc[dgSrc.slot][dgSrc.fid]=null;sc[toSlot][toFid]=src;showToast(`Moved to ${fmtSlot(toSlot)} ${fld?fld.name:''}`);}
   dgSrc=null;
