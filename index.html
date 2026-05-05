@@ -4022,8 +4022,67 @@ function renderAll(){
   const pw=Object.keys(practiceSlots).length;
   document.getElementById('met-row').innerHTML=[['Teams',teams],['Day 1',d1g],['Day 2',d2g],['Practice windows',pw],['Fields',fields.length]].map(([l,v])=>`<div class="met"><div class="met-v">${v}</div><div class="met-l">${l}</div></div>`).join('');
   let rh=`<div class="cl cl-t" style="margin-bottom:8px">Schedule generated. Review below. Day 2 bracket shells use placeholder seeds -- fill in with Day 1 results before TourneyMachine import.</div>`;
-  // Day 1 game-count check — surfaces any teams with <gpt games scheduled
+
+  // ── Day 1 game-count verifier ────────────────────────────────────────
+  // Walks the schedule and confirms every team has its expected game count
+  // (gpt for normal teams, gpt+1 for bonus opponents in odd-parity pools).
+  // Surfaces a positive confirmation when clean, or rolls into the existing
+  // shortfall blocks when not. Also reports bonus matchups by division so JR
+  // can see that odd-pool parity was handled.
   const gptVal=+document.getElementById('gpt').value||3;
+  // Count games per team from sched1 (source of truth — what actually got placed)
+  const teamGameCount={};
+  const teamBonusCount={};
+  divs.forEach(d=>d.teams.forEach(t=>{teamGameCount[t.id]=0;teamBonusCount[t.id]=0;}));
+  const bonusByDiv={};
+  let totalBonusGames=0;
+  Object.values(sched1||{}).forEach(row=>{
+    Object.values(row||{}).forEach(g=>{
+      if(!g||g.t1<0||g.t2<0)return;
+      teamGameCount[g.t1]=(teamGameCount[g.t1]||0)+1;
+      teamGameCount[g.t2]=(teamGameCount[g.t2]||0)+1;
+      if(g.bonusGame){
+        totalBonusGames++;
+        if(g.divName)bonusByDiv[g.divName]=(bonusByDiv[g.divName]||0)+1;
+        // Track which team got the bonus — the OPPONENT of parityFor (parityFor
+        // is the parity-short team and gets credit, the opponent plays a 4th).
+        const opp=(g.t1===g.parityFor)?g.t2:g.t1;
+        teamBonusCount[opp]=(teamBonusCount[opp]||0)+1;
+      }
+    });
+  });
+  // Verify: each team's count should equal gpt + bonus games they played in
+  const teamsShort=[];
+  const teamsOver=[];
+  divs.forEach(d=>d.teams.forEach(t=>{
+    const expected=gptVal+(teamBonusCount[t.id]||0);
+    const actual=teamGameCount[t.id]||0;
+    if(actual<expected) teamsShort.push({team:t,div:d,expected,actual});
+    else if(actual>expected) teamsOver.push({team:t,div:d,expected,actual});
+  }));
+  // Compose summary block. Three states:
+  //   1. All clean → green confirmation with bonus-by-division note
+  //   2. Shortfalls only → existing shortfall warnings handle it (skip here)
+  //   3. Overcount → schedule integrity issue, flag it (rare)
+  const totalTeams=divs.reduce((a,d)=>a+d.teams.length,0);
+  const totalGames=Object.values(sched1||{}).reduce((a,row)=>
+    a+Object.values(row||{}).filter(g=>g&&g.t1>=0&&g.t2>=0).length,0);
+  if(teamsShort.length===0&&teamsOver.length===0&&totalTeams>0){
+    // All clean — green confirmation
+    let bonusNote='';
+    if(totalBonusGames>0){
+      const divList=Object.entries(bonusByDiv).map(([dn,n])=>`${dn} (${n})`).join(', ');
+      bonusNote=` · ${totalBonusGames} bonus matchup${totalBonusGames===1?'':'s'} placed for odd-pool parity in ${divList}`;
+    }
+    rh+=`<div class="cl cl-t" style="margin-bottom:8px;background:var(--lt-adrln-green);border-color:var(--adrln-green-dk)">
+      <strong>✓ Day 1 verified:</strong> all ${totalTeams} teams scheduled for ${gptVal} game${gptVal===1?'':'s'} · ${totalGames} games total${bonusNote}
+    </div>`;
+  } else if(teamsOver.length>0){
+    // Overcount — should not happen, but surface it so JR can investigate
+    const detail=teamsOver.slice(0,5).map(t=>`${t.team.name} (${t.actual}/${t.expected})`).join(', ');
+    rh+=`<div class="cl cl-r"><strong>⚠ Schedule integrity issue — ${teamsOver.length} team${teamsOver.length===1?'':'s'} overscheduled:</strong> ${detail}${teamsOver.length>5?` (+${teamsOver.length-5} more)`:''}<br><span style="font-size:11px">A team has more games than its cap allows. Likely caused by manual drag-drop edits or stale state. Regenerate the schedule.</span></div>`;
+  }
+  // Day 1 game-count check — surfaces any teams with <gpt games scheduled
   const sf=window._d1Shortfalls||[];
   if(sf.length){
     const parity=sf.filter(s=>s.cause==='parity');
@@ -4434,14 +4493,33 @@ function printDay2Brackets(){
 // ============================================================
 function renderUtil(){
   const sh=+document.getElementById('dstart').value,eh=+document.getElementById('dend').value;
-  const slots=getSlots(sh,eh);const R=rl(),N=nlH();
+  const slots=getSlots(sh,eh);
+  // Lunch logic per ADRLN spec: only RECRUITING fields go dark for one hour at
+  // the configured lunch slot. Non-recruiting fields run all day. There's
+  // no second "team lunch" — that legacy nlH() concept is unused. The panel
+  // must reflect this: a 12:00 slot may be lunch for rec fields while real
+  // games run on non-rec fields at the same time.
+  const recLunchHour=rl();
+  const recFieldCount=fields.filter(f=>f.recruiting).length;
+  const nonRecFieldCount=fields.length-recFieldCount;
   let total=0,games=0,prac=0;
   const stats=slots.map(s=>{
-    const h=sH(s),isL=(h===R||h===N);
-    const g=isL?0:Object.values(sched1[s]||{}).filter(x=>x).length;
-    const p=isL?0:(practiceSlots[s]?practiceSlots[s].assignedCount:0);
-    if(!isL){total+=fields.length;games+=g;prac+=p;}
-    return{s,h,isL,g,p,f:fields.length};
+    const h=sH(s);
+    // A slot is "rec-lunch" only when its hour exactly matches recLunchHour
+    // (sH returns fractional hours, so 12:10 → 12.166 ≠ 12).
+    const isRecLunch=(h===recLunchHour);
+    // Count games actually scheduled at this slot. Important: count BOTH rec
+    // and non-rec field games regardless of lunch — non-rec fields play
+    // through the rec lunch hour, and the schedule is the source of truth.
+    const g=Object.values(sched1[s]||{}).filter(x=>x).length;
+    const p=isRecLunch?0:(practiceSlots[s]?practiceSlots[s].assignedCount:0);
+    // Capacity denominator: exclude only rec fields during rec lunch.
+    const slotCapacity=isRecLunch?nonRecFieldCount:fields.length;
+    total+=slotCapacity;games+=g;prac+=p;
+    // For the per-row UI, expose the row label state and capacity:
+    // - "Rec lunch" label appears at the rec-lunch hour
+    // - bar fills against the slot's actual capacity (excluding lunch fields)
+    return{s,h,isRecLunch,g,p,f:slotCapacity};
   });
   const gu=total?Math.round(games/total*100):0;
   const au=total?Math.round((games+prac)/total*100):0;
@@ -4472,6 +4550,8 @@ function renderUtil(){
   </div>`;
 
   stats.forEach(st=>{
+    // f is the slot's CAPACITY (fields available this slot — excludes rec
+    // fields during rec lunch). Always use it as the denominator.
     const gp=st.f?Math.round(st.g/st.f*100):0;
     const pp=st.f?Math.round(st.p/st.f*100):0;
     const ip=Math.max(0,100-gp-pp); // idle %
@@ -4482,8 +4562,12 @@ function renderUtil(){
 
     // Status label
     let statusLabel='';
-    if(st.isL){
-      statusLabel=`<span style="font-size:9px;background:var(--navy);color:#fff;padding:1px 6px;border-radius:3px">Lunch</span>`;
+    if(st.isRecLunch&&st.g===0){
+      // Rec lunch hour with NO non-rec games either — pure lunch row
+      statusLabel=`<span style="font-size:9px;background:var(--navy);color:#fff;padding:1px 6px;border-radius:3px">Rec lunch</span>`;
+    } else if(st.isRecLunch){
+      // Rec lunch but non-rec fields are playing — mixed state
+      statusLabel=`<span style="font-size:9px;background:var(--lt-blue);color:#0C447C;padding:1px 6px;border-radius:3px">Rec lunch · non-rec ${gp}%</span>`;
     } else if(gp>=90){
       statusLabel=`<span style="font-size:9px;background:var(--lt-teal);color:#085041;padding:1px 6px;border-radius:3px">Full</span>`;
     } else if(gp>=65){
@@ -4494,16 +4578,31 @@ function renderUtil(){
       statusLabel=`<span style="font-size:9px;background:var(--lt-red);color:var(--red);padding:1px 6px;border-radius:3px">${ip}% idle</span>`;
     }
 
+    // Bar visualization. When it's rec lunch with mixed activity, show a navy
+    // band for the rec-fields-dark portion + teal for non-rec games. When it's
+    // pure lunch (no games), the whole bar is navy. Otherwise standard
+    // game/practice/idle composition.
+    const recFraction=fields.length?(fields.length-st.f)/fields.length*100:0;
+    let barInner;
+    if(st.isRecLunch&&st.g===0){
+      // Pure lunch — full navy
+      barInner=`<div style="position:absolute;left:0;top:0;width:100%;height:100%;background:${lunchColor}"></div>`;
+    } else if(st.isRecLunch){
+      // Mixed: navy for rec-dark portion, then game bar for non-rec capacity
+      const gameW=(100-recFraction)*gp/100;
+      barInner=`<div style="position:absolute;left:0;top:0;width:${recFraction}%;height:100%;background:${lunchColor}"></div>
+                <div style="position:absolute;left:${recFraction}%;top:0;width:${gameW}%;height:100%;background:${gameColor}"></div>`;
+    } else {
+      barInner=`<div style="position:absolute;left:0;top:0;width:${gp}%;height:100%;background:${gameColor}"></div>
+                <div style="position:absolute;left:${gp}%;top:0;width:${pp}%;height:100%;background:${pracColor}"></div>`;
+    }
+
     html+=`<div class="util-bar-row" style="margin-bottom:4px">
       <span class="util-time" style="font-size:10px;font-weight:500;min-width:52px">${fmtSlot(st.s)}</span>
       <div style="flex:1;height:16px;background:${idleColor};border-radius:4px;overflow:hidden;position:relative;border:.5px solid #D3D1C7">
-        ${st.isL
-          ? `<div style="position:absolute;left:0;top:0;width:100%;height:100%;background:${lunchColor}"></div>`
-          : `<div style="position:absolute;left:0;top:0;width:${gp}%;height:100%;background:${gameColor}"></div>
-             <div style="position:absolute;left:${gp}%;top:0;width:${pp}%;height:100%;background:${pracColor}"></div>`
-        }
+        ${barInner}
       </div>
-      <span style="font-size:10px;color:var(--dark-gray);min-width:36px;text-align:right">${st.isL?'':st.g+'/'+st.f}</span>
+      <span style="font-size:10px;color:var(--dark-gray);min-width:36px;text-align:right">${st.g+'/'+st.f}</span>
       <span style="min-width:110px;text-align:right">${statusLabel}</span>
     </div>`;
   });
