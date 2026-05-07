@@ -3550,6 +3550,14 @@ function genD1(){
         // "Under-gamed" measured as deficit-from-cap so bonus opponents (cap=gpt+1)
         // who already have gpt games still appear as "1 game short" relative to
         // their actual target.
+        //
+        // NOTE on rest-gap minimization: an earlier May 2026 attempt to promote
+        // rest-penalty (slots-since-last-game) to primary sort criterion was
+        // reverted because it stranded teams with only 1-2 games on tightly-packed
+        // schedules. The greedy slot-by-slot model can't simultaneously minimize
+        // rest gaps AND guarantee every team hits gpt — those are competing goals.
+        // The rest-gap problem is now addressed by Phase 4.5 (team-rest compaction)
+        // which moves games AFTER placement without risking starvation.
         matchQueues[d.id].sort((a,b)=>{
           const aDef=Math.min(gameCap[a[0].id]-(tG[a[0].id]||0),gameCap[a[1].id]-(tG[a[1].id]||0));
           const bDef=Math.min(gameCap[b[0].id]-(tG[b[0].id]||0),gameCap[b[1].id]-(tG[b[1].id]||0));
@@ -3929,6 +3937,198 @@ function genD1(){
   }
   if(compactedCount>0) console.log('Early-pack compaction shifted '+compactedCount+' games earlier ('+compactPass+' pass'+(compactPass===1?'':'es')+')');
 
+  // ── PHASE 4.5: TEAM-REST COMPACTION ─────────────────────────────────────
+  // Phase 4 only moves games WITHIN a single field's calendar. That misses
+  // the dominant cause of long rest gaps: a team's later game sits on a
+  // field that's busy in the morning, while OTHER pod fields for that team's
+  // division are sitting idle in the morning. Phase 4 never tries to move
+  // a game across fields.
+  //
+  // Phase 4.5 walks teams worst-first. For each team with a max-gap > 1, it
+  // tries moving EVERY one of the team's games (not just one specific one)
+  // to EVERY earlier slot on EVERY pod-eligible field, scoring each candidate
+  // by the team's resulting max-gap. The best move (greatest reduction in
+  // max-gap) is applied, provided no other team's rest constraint breaks
+  // and the opponent's max-gap doesn't worsen.
+  //
+  // Why score globally rather than just shrinking the worst gap: moving the
+  // "later" endpoint of the worst gap can grow the gap on the OTHER side.
+  // Example: team plays 8:00, 15:00, 17:00 (gaps 7, 1). Moving 15:00 to 9:00
+  // gives gaps 1, 9 — net WORSE. The correct move is 17:00 → 11:00 (gaps
+  // 3, 3, max 3). Global scoring finds this.
+  //
+  // Loops until a full pass produces no improvement (cap 10 passes for safety).
+
+  const podOf = (divId) => {
+    const dp = (window._dpod||{})[divId];
+    return (dp && dp.length) ? dp : fields;
+  };
+
+  // Quick lookups
+  const teamLookup = {};
+  const teamDivLookup = {};
+  divs.forEach(d => d.teams.forEach(t => {
+    teamLookup[t.id] = t;
+    teamDivLookup[t.id] = d;
+  }));
+
+  // Compute the max rest gap (in "slots waited") for a hypothetical sorted slot list.
+  const maxGapForSlots = (sortedSlots, dSlot) => {
+    if(sortedSlots.length < 2) return 0;
+    let mg = 0;
+    for(let i = 1; i < sortedSlots.length; i++){
+      const sw = Math.round((s2m(sortedSlots[i]) - s2m(sortedSlots[i-1]) - dSlot) / dSlot);
+      if(sw > mg) mg = sw;
+    }
+    return mg;
+  };
+
+  const teamMaxGap = (teamId) => {
+    const ts = (tS[teamId]||[]).slice().sort((a,b)=>sH(a)-sH(b));
+    const d = teamDivLookup[teamId];
+    return maxGapForSlots(ts, d ? divSlotM(d) : slotM());
+  };
+
+  // Find the (slot, field) of every game a team plays. Returns array of {slot, fid, g}.
+  const findAllTeamGames = (teamId) => {
+    const out = [];
+    for(const slot in sched1){
+      const row = sched1[slot] || {};
+      for(const fid in row){
+        const g = row[fid];
+        if(g && (g.t1 === teamId || g.t2 === teamId)) out.push({slot, fid: +fid, g});
+      }
+    }
+    return out;
+  };
+
+  // Try EVERY possible "move one of this team's games earlier" candidate, pick
+  // the move that minimizes the team's max-gap. Returns true if a move was made.
+  const tryBestMoveForTeam = (focusTid) => {
+    const focusBefore = teamMaxGap(focusTid);
+    if(focusBefore <= 1) return false;
+
+    let bestMove = null;
+    let bestNewMax = focusBefore;
+
+    const teamGames = findAllTeamGames(focusTid);
+    for(const {slot: sourceSlot, fid: sourceFid, g} of teamGames){
+      const d = divs.find(x => x.id === g.divId); if(!d) continue;
+      const dSlotM = divSlotM(d);
+      const dGrid = divGridSet[d.id];
+      const dLunch = divLunchSlot[d.id];
+      const t1 = d.teams.find(x => x.id === g.t1);
+      const t2 = d.teams.find(x => x.id === g.t2);
+      if(!t1 || !t2) continue;
+      const restMin = minRest * dSlotM;
+      const pod = podOf(d.id);
+      const sourceMin = s2m(sourceSlot);
+
+      for(let i = 0; i < slots.length; i++){
+        const es = slots[i];
+        if(s2m(es) >= sourceMin) break; // only earlier
+        if(!dGrid.has(es)) continue;
+        if(d.recruitable && es === dLunch) continue;
+
+        // Travel cutoffs
+        const eh_ = sH(es);
+        const te1 = t1.travelWaitlist ? 'local' : (t1.travelTier || 'local');
+        const te2 = t2.travelWaitlist ? 'local' : (t2.travelTier || 'local');
+        if((te1==='in'||te1==='both') && eh_ < lc) continue;
+        if((te2==='in'||te2==='both') && eh_ < lc) continue;
+        if((te1==='out'||te1==='both') && eh_ > ec) continue;
+        if((te2==='out'||te2==='both') && eh_ > ec) continue;
+
+        // No double-booking at es on any field
+        const row = sched1[es] || {};
+        let doubleBook = false;
+        for(const fid_ in row){
+          const og = row[fid_];
+          if(og && (og.t1===t1.id||og.t2===t1.id||og.t1===t2.id||og.t2===t2.id)){
+            doubleBook = true; break;
+          }
+        }
+        if(doubleBook) continue;
+
+        // Proposed tS for both teams
+        const propT1 = tS[t1.id].filter(x => x !== sourceSlot).concat([es]).sort((a,b)=>sH(a)-sH(b));
+        const propT2 = tS[t2.id].filter(x => x !== sourceSlot).concat([es]).sort((a,b)=>sH(a)-sH(b));
+        // Min-rest on both
+        let restOk = true;
+        for(let k=1; k<propT1.length; k++)
+          if((s2m(propT1[k]) - s2m(propT1[k-1])) <= restMin){restOk=false;break;}
+        if(!restOk) continue;
+        for(let k=1; k<propT2.length; k++)
+          if((s2m(propT2[k]) - s2m(propT2[k-1])) <= restMin){restOk=false;break;}
+        if(!restOk) continue;
+
+        // Score: focus team's resulting max-gap
+        const focusProp = (focusTid === t1.id) ? propT1 : propT2;
+        const focusMax = maxGapForSlots(focusProp, dSlotM);
+        if(focusMax >= bestNewMax) continue; // not better than what we already found
+
+        // Opponent's max-gap can't get worse than its current value
+        const opponentId = (focusTid === t1.id) ? t2.id : t1.id;
+        const opponentBefore = teamMaxGap(opponentId);
+        const opponentProp = (focusTid === t1.id) ? propT2 : propT1;
+        const opponentMax = maxGapForSlots(opponentProp, dSlotM);
+        if(opponentMax > opponentBefore) continue;
+
+        // Pod-eligible field free at es (overlap-aware)
+        sched1[sourceSlot][sourceFid] = null;
+        const candidateFields = pod.filter(f =>
+          f.gender === d.gender && fieldFreeAt(sched1, es, f.id, dSlotM)
+        );
+        sched1[sourceSlot][sourceFid] = g;
+        if(!candidateFields.length) continue;
+
+        // This is a better candidate — record it, keep searching for an even
+        // better one within this team's options.
+        bestMove = {
+          sourceSlot, sourceFid, g,
+          targetSlot: es, targetField: candidateFields[0],
+          propT1, propT2, t1id: t1.id, t2id: t2.id,
+        };
+        bestNewMax = focusMax;
+      }
+    }
+
+    if(!bestMove) return false;
+
+    // Execute the best move
+    sched1[bestMove.sourceSlot][bestMove.sourceFid] = null;
+    if(!sched1[bestMove.targetSlot]) sched1[bestMove.targetSlot] = {};
+    sched1[bestMove.targetSlot][bestMove.targetField.id] = bestMove.g;
+    tS[bestMove.t1id] = bestMove.propT1;
+    tS[bestMove.t2id] = bestMove.propT2;
+    return true;
+  };
+
+  let restCompactCount = 0;
+  let restPass = 0;
+  let restMoved = true;
+  while(restMoved && restPass < 10){
+    restMoved = false;
+    restPass++;
+    // Build sorted team list: worst gap first
+    const teamGaps = [];
+    divs.forEach(d => d.teams.forEach(t => {
+      const mg = teamMaxGap(t.id);
+      if(mg > 1) teamGaps.push({tid: t.id, maxGap: mg});
+    }));
+    teamGaps.sort((a,b) => b.maxGap - a.maxGap);
+
+    for(const {tid} of teamGaps){
+      // Re-check: gap might have closed during this pass via another team's move
+      if(teamMaxGap(tid) <= 1) continue;
+      if(tryBestMoveForTeam(tid)){
+        restCompactCount++;
+        restMoved = true;
+      }
+    }
+  }
+  if(restCompactCount > 0) console.log('Team-rest compaction shifted '+restCompactCount+' games to reduce wait gaps ('+restPass+' pass'+(restPass===1?'':'es')+')');
+
   // (Former Phase 5 "parity bonus pass" was removed. Bonus matchups for
   // odd-pool parity-short teams are now generated at queue-build time and
   // flow through Phase 1/2/3 placement and Phase 4 compaction like any other
@@ -4092,10 +4292,44 @@ function genD2(){
     });
   };
 
-  divs.forEach(d=>{
+  // ── TWO-PASS DAY 2 SCHEDULING ───────────────────────────────────────────
+  // Pass 1: every division schedules ONLY its bracket games (QF/SF/Champ/3rd-place).
+  // Pass 2: every division schedules ONLY its consolation games.
+  //
+  // Why: bracket games anchor the day for each division — they have rigid
+  // dependencies (QF before SF before Champ) and need predictable slots on
+  // pod fields. Consolation games are flexible and can fill whatever's left.
+  // If consolation games schedule first (or interleaved), they can fragment
+  // a pod's calendar and leave no room for the longer mixed-slot-length
+  // bracket games of recruiting divisions. This was the root cause of the
+  // 2028 division losing all its bracket games in JR's May 6 draft.
+  //
+  // Within each pass, divisions are ordered: recruitable divisions first,
+  // larger pool counts before smaller. Recruitable divisions tend to have
+  // the longest slot lengths and the most teams, so they get first dibs on
+  // bracket-eligible time on the recruiting fields.
+  const divsByPriority = divs.slice().sort((a,b)=>{
+    // Recruitable first
+    if((b.recruitable?1:0) !== (a.recruitable?1:0))
+      return (b.recruitable?1:0) - (a.recruitable?1:0);
+    // Then larger pool count first (bigger brackets need more space)
+    const npA = (pools[a.id]||[]).length;
+    const npB = (pools[b.id]||[]).length;
+    return npB - npA;
+  });
+
+  // State stashed between passes — keyed by division id.
+  // Holds nonAdv (teams not advancing), qfLosers, sfMax, qfMax, etc., needed
+  // for the consolation pass.
+  const phaseState = new Map();
+
+  // Process one division's bracket OR consolation. `phase` is 'bracket' or 'consolation'.
+  const processDivision = (d, phase) => {
     const dp=pools[d.id]||[];
     const np=dp.length;
     const played2=new Set(window._played||[]);
+    // Hydrate stashed state (consolation phase)
+    const stash = phaseState.get(d.id) || {};
 
     // ── CONSOLATION HELPER ────────────────────────────────────────────────
     // Same-region matchups are allowed on Day 2 — no fallback flag, no warnings.
@@ -4125,6 +4359,37 @@ function genD2(){
         });
       });
     };
+    // Wrap schedG to skip calls that don't match the current phase. Bracket
+    // and champ games run only in 'bracket' phase; consolation runs only
+    // in 'consolation' phase.
+    //
+    // CRITICAL: bracket/champ scheduled slots are CACHED under (divId, label)
+    // so that on the consolation pass, code like
+    //   const sfMax = Math.max(s1?s2m(s1):0, s2?s2m(s2):0) + ...
+    // still gets the real s1/s2 values from the bracket pass. Without this,
+    // sfMax would compute from null and consolation games would try to
+    // schedule before the bracket completes.
+    if(!stash.bracketSlots) stash.bracketSlots = {};
+    const bracketSlots = stash.bracketSlots;
+    const cacheKey = (type, label) => `${type}|${label}`;
+    const schedG_phased = (t1, t2, type, label, prefChamp, minSlotM, isFallback) => {
+      const isBracketType = (type==='bracket' || type==='champ');
+      if(phase==='bracket' && !isBracketType) return null;
+      if(phase==='consolation' && isBracketType) {
+        // Replay from cache so dependent timing math still works
+        return bracketSlots[cacheKey(type,label)] || null;
+      }
+      const slot = schedG(t1,t2,type,label,prefChamp,minSlotM,isFallback);
+      if(phase==='bracket' && isBracketType && slot) {
+        bracketSlots[cacheKey(type,label)] = slot;
+      }
+      return slot;
+    };
+    const schedConsolation_phased = (nonAdv, max) => {
+      if(phase==='consolation') schedConsolation(nonAdv, max);
+    };
+    // Persist stash so the consolation pass picks up the bracket slots.
+    phaseState.set(d.id, stash);
 
     // ── 1 POOL ────────────────────────────────────────────────────────────
     if(np===1){
@@ -4141,45 +4406,45 @@ function genD2(){
         if(poolSize===1) d2Warnings.push(`${d.name}: only 1 team — no Day 2 games scheduled`);
       } else if(poolSize===2){
         // Game 1 + Championship rematch — both teams play 2 games against each other
-        const g1=schedG(seeded[0],seeded[1],'bracket','Game 1',d.recruitable,0,false);
+        const g1=schedG_phased(seeded[0],seeded[1],'bracket','Game 1',d.recruitable,0,false);
         const g1Max=(g1?s2m(g1):0)+divSlotM(d)+rdbuf;
-        schedG(seeded[0],seeded[1],'champ','Championship',d.recruitable,g1Max,false);
+        schedG_phased(seeded[0],seeded[1],'champ','Championship',d.recruitable,g1Max,false);
       } else if(poolSize===3){
         // Round-robin: every team plays every other team. Each plays 2 games.
         // Final standings determined by Day 2 results.
-        schedG(seeded[0],seeded[1],'bracket','RR Game 1: 1st vs 2nd',d.recruitable,0,false);
-        schedG(seeded[1],seeded[2],'bracket','RR Game 2: 2nd vs 3rd',d.recruitable,0,false);
-        schedG(seeded[0],seeded[2],'champ','RR Game 3: 1st vs 3rd',d.recruitable,0,false);
+        schedG_phased(seeded[0],seeded[1],'bracket','RR Game 1: 1st vs 2nd',d.recruitable,0,false);
+        schedG_phased(seeded[1],seeded[2],'bracket','RR Game 2: 2nd vs 3rd',d.recruitable,0,false);
+        schedG_phased(seeded[0],seeded[2],'champ','RR Game 3: 1st vs 3rd',d.recruitable,0,false);
       } else if(poolSize===4){
-        const s1=schedG(seeded[0],seeded[3],'bracket','SF1: 1st vs 4th',d.recruitable,0,false);
-        const s2=schedG(seeded[1],seeded[2],'bracket','SF2: 2nd vs 3rd',d.recruitable,0,false);
+        const s1=schedG_phased(seeded[0],seeded[3],'bracket','SF1: 1st vs 4th',d.recruitable,0,false);
+        const s2=schedG_phased(seeded[1],seeded[2],'bracket','SF2: 2nd vs 3rd',d.recruitable,0,false);
         const sfMax=Math.max(s1?s2m(s1):0,s2?s2m(s2):0)+divSlotM(d)+rdbuf;
-        schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
-        schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+        schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+        schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
       } else if(poolSize===5){
         // Top 4 run a standard bracket. 5th seed enters a 3-team consolation RR
         // with the two SF losers — every team plays at least 2 games. SF losers
         // pick up a 3rd Day 2 game so the 5th seed can play someone twice.
-        const s1=schedG(seeded[0],seeded[3],'bracket','SF1: 1st vs 4th',d.recruitable,0,false);
-        const s2=schedG(seeded[1],seeded[2],'bracket','SF2: 2nd vs 3rd',d.recruitable,0,false);
+        const s1=schedG_phased(seeded[0],seeded[3],'bracket','SF1: 1st vs 4th',d.recruitable,0,false);
+        const s2=schedG_phased(seeded[1],seeded[2],'bracket','SF2: 2nd vs 3rd',d.recruitable,0,false);
         const sfMax=Math.max(s1?s2m(s1):0,s2?s2m(s2):0)+divSlotM(d)+rdbuf;
-        schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+        schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
         // 3-team consolation RR: L SF1, L SF2, 5th seed (each plays the other two)
         // L SF1 vs L SF2 doubles as the "3rd place" match (highest-finishing wins 3rd)
-        schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place / RR',false,sfMax,false);
+        schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place / RR',false,sfMax,false);
         const fifth={...seeded[4],divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender};
-        schedG(fifth,mkSeed('L SF1',d),'consolation','Consolation: 5th vs L SF1',false,sfMax,false);
-        schedG(fifth,mkSeed('L SF2',d),'consolation','Consolation: 5th vs L SF2',false,sfMax,false);
+        schedG_phased(fifth,mkSeed('L SF1',d),'consolation','Consolation: 5th vs L SF1',false,sfMax,false);
+        schedG_phased(fifth,mkSeed('L SF2',d),'consolation','Consolation: 5th vs L SF2',false,sfMax,false);
       } else {
         // 6+ team pool: top 4 SF, rest get 2 consolation games
         const adv=seeded.slice(0,4);
         const nonAdv=seeded.slice(4).map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
-        const s1=schedG(adv[0],adv[3],'bracket','SF1: 1st vs 4th',d.recruitable,0,false);
-        const s2=schedG(adv[1],adv[2],'bracket','SF2: 2nd vs 3rd',d.recruitable,0,false);
+        const s1=schedG_phased(adv[0],adv[3],'bracket','SF1: 1st vs 4th',d.recruitable,0,false);
+        const s2=schedG_phased(adv[1],adv[2],'bracket','SF2: 2nd vs 3rd',d.recruitable,0,false);
         const sfMax=Math.max(s1?s2m(s1):0,s2?s2m(s2):0)+divSlotM(d)+rdbuf;
-        schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
-        schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
-        schedConsolation(nonAdv,2);
+        schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+        schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+        schedConsolation_phased(nonAdv,2);
       }
     }
 
@@ -4189,12 +4454,12 @@ function genD2(){
       const adv=[sA[0],sA[1],sB[0],sB[1]].filter(Boolean);
       const nonAdv=[...sA.slice(2),...sB.slice(2)].map(t=>({...t,divId:d.id,divName:d.name,rec:d.recruitable,gen:d.gender}));
       let s1=null,s2=null;
-      if(adv[0]&&adv[3])s1=schedG(adv[0],adv[3],'bracket','SF: 1st A vs 2nd B',d.recruitable,0,false);
-      if(adv[2]&&adv[1])s2=schedG(adv[2],adv[1],'bracket','SF: 1st B vs 2nd A',d.recruitable,0,false);
+      if(adv[0]&&adv[3])s1=schedG_phased(adv[0],adv[3],'bracket','SF: 1st A vs 2nd B',d.recruitable,0,false);
+      if(adv[2]&&adv[1])s2=schedG_phased(adv[2],adv[1],'bracket','SF: 1st B vs 2nd A',d.recruitable,0,false);
       const sfMax=Math.max(s1?s2m(s1):0,s2?s2m(s2):0)+divSlotM(d)+rdbuf;
-      schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
-      schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
-      schedConsolation(nonAdv,2);
+      schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+      schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+      schedConsolation_phased(nonAdv,2);
     }
 
     // ── 3 POOLS ───────────────────────────────────────────────────────────
@@ -4307,7 +4572,7 @@ function genD2(){
         const t1=top4[i],t2=bot4[pairing[i]];
         if(!t1||!t2){qfSlots.push(null);continue;}
         const lbl=`QF${i+1}: #${i+1} vs #${pairing[i]+5}`;
-        const s=schedG(t1,t2,'bracket',lbl,d.recruitable,0,false);
+        const s=schedG_phased(t1,t2,'bracket',lbl,d.recruitable,0,false);
         qfSlots.push(s);
       }
       const qfMax=qfSlots.filter(Boolean).length
@@ -4316,14 +4581,14 @@ function genD2(){
 
       // Semifinals: standard W-QF1 vs W-QF4, W-QF2 vs W-QF3 (so the #1 seed's
       // bracket stays separate from the #2 seed's until the final).
-      const sf1=schedG(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
-      const sf2=schedG(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
+      const sf1=schedG_phased(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
+      const sf2=schedG_phased(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
       const sfMax=Math.max(sf1?s2m(sf1):0,sf2?s2m(sf2):0)+divSlotM(d)+rdbuf;
-      schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
-      schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+      schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+      schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
 
       // Consolation games for non-advancers
-      schedConsolation(nonAdv,2);
+      schedConsolation_phased(nonAdv,2);
     }
 
     // ── 4 POOLS ───────────────────────────────────────────────────────────
@@ -4341,16 +4606,16 @@ function genD2(){
         [p2[0],p1[1],'QF3: 1st C vs 2nd B'],
         [p3[0],p0[1],'QF4: 1st D vs 2nd A'],
       ].filter(([a,b])=>a&&b);
-      const qfSlots=qfPairs.map(([t1,t2,lbl])=>schedG(t1,t2,'bracket',lbl,d.recruitable,0,false));
+      const qfSlots=qfPairs.map(([t1,t2,lbl])=>schedG_phased(t1,t2,'bracket',lbl,d.recruitable,0,false));
       const qfMax=Math.max(...qfSlots.filter(Boolean).map(s=>s2m(s)))+divSlotM(d)+rdbuf;
       // SF: winners of QF1 vs QF4, QF2 vs QF3
-      const sf1=schedG(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
-      const sf2=schedG(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
+      const sf1=schedG_phased(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
+      const sf2=schedG_phased(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
       const sfMax=Math.max(sf1?s2m(sf1):0,sf2?s2m(sf2):0)+divSlotM(d)+rdbuf;
-      schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
-      schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+      schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+      schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
       // QF losers get 1 more consolation game
-      schedConsolation(nonAdv,2);
+      schedConsolation_phased(nonAdv,2);
       // QF losers (4 teams) get consolation
       // QF losers: already played 1 game (QF), so 1 more consolation = 2 total
       const qfLosers=[
@@ -4358,7 +4623,7 @@ function genD2(){
       ];
       qfLosers.forEach(t=>tS2[t.id]=[]);
       const qfLPairs=[[qfLosers[0],qfLosers[3],'Consolation (QF losers)'],[qfLosers[1],qfLosers[2],'Consolation (QF losers)']];
-      qfLPairs.forEach(([t1,t2,lbl])=>schedG(t1,t2,'consolation',lbl,false,qfMax,false));
+      qfLPairs.forEach(([t1,t2,lbl])=>schedG_phased(t1,t2,'consolation',lbl,false,qfMax,false));
     }
 
     // ── 5-6 POOLS ─────────────────────────────────────────────────────────
@@ -4457,25 +4722,30 @@ function genD2(){
         const t1=top4[i],t2=bot4[pairing[i]];
         if(!t1||!t2){qfSlots.push(null);continue;}
         const lbl=`QF${i+1}: #${i+1} vs #${pairing[i]+5}`;
-        const s=schedG(t1,t2,'bracket',lbl,d.recruitable,0,false);
+        const s=schedG_phased(t1,t2,'bracket',lbl,d.recruitable,0,false);
         qfSlots.push(s);
       }
       const qfMax=qfSlots.filter(Boolean).length
         ? Math.max(...qfSlots.filter(Boolean).map(s=>s2m(s)))+divSlotM(d)+rdbuf
         : 0;
-      const sf1=schedG(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
-      const sf2=schedG(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
+      const sf1=schedG_phased(mkSeed('W QF1',d),mkSeed('W QF4',d),'bracket','SF1',d.recruitable,qfMax,false);
+      const sf2=schedG_phased(mkSeed('W QF2',d),mkSeed('W QF3',d),'bracket','SF2',d.recruitable,qfMax,false);
       const sfMax=Math.max(sf1?s2m(sf1):0,sf2?s2m(sf2):0)+divSlotM(d)+rdbuf;
-      schedG(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
-      schedG(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
+      schedG_phased(mkSeed('W SF1',d),mkSeed('W SF2',d),'champ','Championship',d.recruitable,sfMax,false);
+      schedG_phased(mkSeed('L SF1',d),mkSeed('L SF2',d),'consolation','3rd Place',false,sfMax,false);
       // QF losers consolation
       const qfLosers=[mkSeed('L QF1',d),mkSeed('L QF2',d),mkSeed('L QF3',d),mkSeed('L QF4',d)];
       qfLosers.forEach(t=>tS2[t.id]=[]);
       [[qfLosers[0],qfLosers[3],'Consolation (QF losers)'],[qfLosers[1],qfLosers[2],'Consolation (QF losers)']]
-        .forEach(([t1,t2,lbl])=>schedG(t1,t2,'consolation',lbl,false,qfMax,false));
-      schedConsolation(nonAdv,2);
+        .forEach(([t1,t2,lbl])=>schedG_phased(t1,t2,'consolation',lbl,false,qfMax,false));
+      schedConsolation_phased(nonAdv,2);
     }
-  });
+  };  // end processDivision
+
+  // PASS 1 — every division schedules its bracket games. Recruitable + larger pools first.
+  divsByPriority.forEach(d => processDivision(d, 'bracket'));
+  // PASS 2 — every division schedules its consolation games into whatever's left.
+  divsByPriority.forEach(d => processDivision(d, 'consolation'));
 }
 
 
