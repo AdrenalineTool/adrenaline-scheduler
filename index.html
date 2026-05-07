@@ -486,6 +486,14 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div class="fg"><label>Round buffer Day 2 (min)</label><input type="number" id="rdbuf" value="30" min="0" max="60" step="15"></div>
     <div class="fg"><label>Min rest between games</label><select id="minrest"><option value="1" selected>1 slot</option><option value="2">2 slots</option></select></div>
   </div>
+  <div class="form-row" style="margin-top:6px">
+    <div class="fg" style="flex:3">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="use-pool-interleave" checked style="width:14px;height:14px;cursor:pointer;margin:0">
+        <span>Use rest-optimized scheduler <span style="color:var(--dark-gray);font-size:10px;font-weight:400">(new — interleaves pools to give every team 1-2 slot rest between games)</span></span>
+      </label>
+    </div>
+  </div>
   <div id="div-slot-overrides-block" style="display:none;margin-top:6px;padding:10px 12px;background:var(--lt-gray);border-radius:6px;border:.5px solid var(--mid-gray)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <div style="font-size:12px;font-weight:600;color:var(--navy)">Per-division slot overrides <span style="font-weight:400;color:var(--dark-gray);font-size:10px">(optional — leave blank to use defaults above)</span></div>
@@ -582,6 +590,7 @@ td { padding: 2px 3px; border: .5px solid #e8e6de; vertical-align: top; }
     <div id="met-row" class="metrics"></div>
   </div>
   <div id="sched-report"></div>
+  <div id="rest-gap-panel"></div>
   <div id="util-panel"></div>
   <div class="conflict-bar">
     <span style="font-size:11px;font-weight:500">Manual adjust:</span>
@@ -3129,7 +3138,7 @@ function generate(){
   if(document.getElementById('three-day').checked)genD3();
   computePractice();
   renderAll();
-  renderUtil();
+  renderUtil();renderRestGapStats();
   updateConflicts();
   checkParkingConflicts();
   renderTrafficChart();
@@ -3519,6 +3528,195 @@ function genD1(){
     divLunchSlot[d.id]=rlSlotForDiv(d);
   });
 
+  // ── PHASE 0: POOL SLOT-PATTERN INTERLEAVE (NEW, MAY 2026) ─────────────────
+  // Addresses JR's complaint that teams waited 5-7 slots between games on
+  // packed schedules. The greedy slot-by-slot scheduler couldn't simultaneously
+  // minimize rest gaps AND guarantee every team hits gpt — they're competing
+  // goals. Phase 0 resolves this by assigning each POOL a slot pattern up front,
+  // so every team in the pool plays at the same 3 slots with 1-2 slot rest
+  // between games (60-120 min — matching JR's manual scheduling target).
+  //
+  // Algorithm:
+  //   1. For each division, generate candidate patterns (sets of `gpt` slots
+  //      with consecutive-slot separation >= minRest+1).
+  //   2. For each pool, try patterns in order of max-gap (1-slot-rest patterns
+  //      first), reserving pod fields globally so cross-division demand doesn't
+  //      oversubscribe shared fields.
+  //   3. If no pattern works at max-gap=1, relax to max-gap=2, then 3.
+  //   4. If still infeasible (rare — happens when pod is too small for team count),
+  //      that division falls back to Phase 1's existing logic (no pattern constraint).
+  //
+  // Phase 1 then places matchups using ONLY each pool's assigned pattern slots.
+  // poolPatterns[divId][poolLabel] = array of slot strings, OR division falls back.
+  const usePoolInterleave = (function(){
+    const cb = document.getElementById('use-pool-interleave');
+    return cb ? cb.checked : true; // default ON
+  })();
+  const poolPatterns = {}; // divId -> { poolLabel -> [slot, slot, slot] }, only filled for divs that succeeded
+  const phase0Stats = {  // exposed on window for stats panel
+    feasibleDivs: [],
+    infeasibleDivs: [],
+    perDivResults: [], // [{divId, divName, pools: [{label, slots, maxGap, teamCount}]}]
+  };
+
+  if(usePoolInterleave){
+    // Generate candidate patterns for a division (limited by maxGapLimit)
+    const generatePatterns = (d, maxGapLimit) => {
+      const grid = getSlotsForDiv(d, sh, eh);
+      const lunch = d.recruitable ? rlSlotForDiv(d) : null;
+      const validSlots = grid.filter(s => s !== lunch);
+      const dSlot = divSlotM(d);
+      const minSepMin = (minRest + 1) * dSlot;
+      // Generate combinations of `gpt` slots
+      const out = [];
+      const combo = [];
+      const gen = (start) => {
+        if(combo.length === gpt){
+          // Validate
+          const sorted = combo.slice().sort((a,b) => s2m(a) - s2m(b));
+          let valid = true, maxGap = 0;
+          for(let i = 1; i < sorted.length; i++){
+            const sep = s2m(sorted[i]) - s2m(sorted[i-1]);
+            if(sep < minSepMin){ valid = false; break; }
+            const sw = Math.round((sep - dSlot) / dSlot);
+            if(sw > maxGap) maxGap = sw;
+          }
+          if(valid && maxGap <= maxGapLimit){
+            out.push({slots: sorted, maxGap, span: s2m(sorted[sorted.length-1]) - s2m(sorted[0])});
+          }
+          return;
+        }
+        for(let i = start; i < validSlots.length; i++){
+          combo.push(validSlots[i]);
+          gen(i + 1);
+          combo.pop();
+        }
+      };
+      gen(0);
+      out.sort((a,b) => a.maxGap - b.maxGap || a.span - b.span);
+      return out;
+    };
+
+    // Global field tracker — interval-based per field
+    const fieldIntervals = {}; // fid -> [[start, end], ...]
+    fields.forEach(f => { fieldIntervals[f.id] = []; });
+    const canFit = (slot, fid, slotMin) => {
+      const start = s2m(slot), end = start + slotMin;
+      const ivs = fieldIntervals[fid] || [];
+      for(const [s_, e_] of ivs){
+        if(start < e_ && end > s_) return false;
+      }
+      return true;
+    };
+    const reserve = (slot, fid, slotMin) => {
+      const start = s2m(slot);
+      if(!fieldIntervals[fid]) fieldIntervals[fid] = [];
+      fieldIntervals[fid].push([start, start + slotMin]);
+    };
+    const release = (slot, fid, slotMin) => {
+      const start = s2m(slot), end = start + slotMin;
+      if(!fieldIntervals[fid]) return;
+      const idx = fieldIntervals[fid].findIndex(iv => iv[0] === start && iv[1] === end);
+      if(idx >= 0) fieldIntervals[fid].splice(idx, 1);
+    };
+
+    // Helper to compute pool metrics
+    const teamsPerPool = pool => (pool.teams || []).length;
+    const gamesForPool = (n) => (n * gpt) % 2 === 0 ? (n * gpt) / 2 : (n * gpt + 1) / 2;
+    const fieldsPerSlot = (nGames) => Math.ceil(nGames / gpt);
+
+    // Process each division — recruitable first, then by team count desc
+    const divOrder = divs.slice().sort((a,b) => {
+      if((b.recruitable?1:0) !== (a.recruitable?1:0)) return (b.recruitable?1:0) - (a.recruitable?1:0);
+      return b.teams.length - a.teams.length;
+    });
+
+    for(const d of divOrder){
+      const dPools = pools[d.id] || [];
+      if(!dPools.length) continue;
+      const podFields = dpod[d.id] || [];
+      if(!podFields.length){ phase0Stats.infeasibleDivs.push({divId: d.id, divName: d.name, reason: 'no pod'}); continue; }
+      const dSlotM_ = divSlotM(d);
+      const sortedPools = dPools.slice().sort((a,b) => teamsPerPool(b) - teamsPerPool(a));
+
+      // Recursive search with pattern preferences
+      let chosen = null; // {label -> {pat, fields: [(slot,fid)...]}}
+      const search = (idx, current, patternsByPool) => {
+        if(idx >= sortedPools.length){ return current; }
+        const pool = sortedPools[idx];
+        const label = pool.label;
+        const nGames = gamesForPool(teamsPerPool(pool));
+        const demand = fieldsPerSlot(nGames);
+        const candidates = patternsByPool[label] || [];
+        for(const pat of candidates){
+          // Can we reserve `demand` pod fields at every slot in pat?
+          const slotFields = {};
+          let ok = true;
+          for(const slot of pat.slots){
+            const free = podFields.filter(f => f.gender === d.gender && canFit(slot, f.id, dSlotM_));
+            if(free.length < demand){ ok = false; break; }
+            slotFields[slot] = free.slice(0, demand);
+          }
+          if(!ok) continue;
+          // Reserve
+          const reservedHere = [];
+          for(const slot in slotFields){
+            for(const f of slotFields[slot]){
+              reserve(slot, f.id, dSlotM_);
+              reservedHere.push([slot, f.id]);
+            }
+          }
+          current[label] = {pat, fields: reservedHere};
+          const result = search(idx + 1, current, patternsByPool);
+          if(result) return result;
+          // Undo
+          for(const [slot, fid] of reservedHere) release(slot, fid, dSlotM_);
+          delete current[label];
+        }
+        return null;
+      };
+
+      // Try max-gap=1, then 2, then 3
+      let result = null;
+      for(const limit of [1, 2, 3]){
+        const patterns = generatePatterns(d, limit);
+        if(!patterns.length) continue;
+        const patternsByPool = {};
+        sortedPools.forEach(p => { patternsByPool[p.label] = patterns; });
+        result = search(0, {}, patternsByPool);
+        if(result) break;
+      }
+
+      if(result){
+        chosen = result;
+        poolPatterns[d.id] = {};
+        const divResult = {divId: d.id, divName: d.name, pools: []};
+        for(const pool of dPools){
+          const ent = chosen[pool.label];
+          if(ent){
+            poolPatterns[d.id][pool.label] = ent.pat.slots.slice();
+            divResult.pools.push({
+              label: pool.label,
+              slots: ent.pat.slots.slice(),
+              maxGap: ent.pat.maxGap,
+              teamCount: teamsPerPool(pool),
+            });
+          }
+        }
+        phase0Stats.feasibleDivs.push(d.id);
+        phase0Stats.perDivResults.push(divResult);
+      } else {
+        phase0Stats.infeasibleDivs.push({divId: d.id, divName: d.name, reason: 'no pattern fits field budget'});
+      }
+    }
+    if(phase0Stats.feasibleDivs.length > 0){
+      console.log('Phase 0 — pool interleave assigned for ' + phase0Stats.feasibleDivs.length + ' divisions, ' +
+                  phase0Stats.infeasibleDivs.length + ' fell back.');
+    }
+  } // end usePoolInterleave
+  window._phase0Stats = phase0Stats;
+  window._poolPatterns = poolPatterns;
+
   // Process each slot, fill across all divisions in round-robin fashion.
   // Each round through schedOrder, every division tries to place 1 game on its pod.
   // We loop rounds until no division can place any more games this slot.
@@ -3538,6 +3736,18 @@ function genD1(){
         if(d.recruitable&&s===divLunchSlot[d.id])return;
         const podFields=dpod[d.id]||[];
         if(!podFields.length)return;
+        // POOL-INTERLEAVE GATE: if Phase 0 assigned slot patterns to pools in
+        // this division, only consider matchups from pools whose pattern
+        // includes the current slot. This is what gives every team in a pool
+        // a 1-2 slot rest between games — they all play at the same set of
+        // slots, with the pool's pattern determining when those slots are.
+        // Divisions where Phase 0 didn't succeed (no entry in poolPatterns)
+        // fall through to the original starvation-based placement.
+        const dPatterns = poolPatterns[d.id]; // may be undefined if fallback
+        const allowedPools = dPatterns
+          ? new Set(Object.keys(dPatterns).filter(label => dPatterns[label].indexOf(s) >= 0))
+          : null;
+        if(allowedPools && allowedPools.size === 0) return; // no pool plays this slot
         // Use fieldFreeAt to detect overlapping games — when divisions have
         // different slot lengths, two games at "different" slot strings can
         // still occupy the same physical field at the same time.
@@ -3575,6 +3785,10 @@ function genD1(){
         const queue=matchQueues[d.id];
         for(let qi=0;qi<queue.length;qi++){
           const [t1,t2,poolLabel,bonusOpts]=queue[qi];
+          // POOL-INTERLEAVE FILTER: skip matchups whose pool isn't scheduled
+          // to play at slot s. (Bonus matchups have null/empty poolLabel —
+          // those flow through under the original deficit-based rules.)
+          if(allowedPools && poolLabel && !allowedPools.has(poolLabel)) continue;
           // Per-team game cap (gpt for regular teams, gpt+1 for bonus opponents)
           if(tG[t1.id]>=gameCap[t1.id]||tG[t2.id]>=gameCap[t2.id]){queue.splice(qi,1);qi--;continue;}
           const te1=t1.travelWaitlist?'local':t1.travelTier,te2=t2.travelWaitlist?'local':t2.travelTier;
@@ -5313,7 +5527,176 @@ function printDay2Brackets(){
 }
 
 // ============================================================
-// UTILIZATION PANEL
+// REST-GAP STATS PANEL (Day 1)
+// ============================================================
+// Surfaces the actual rest-gap distribution to JR after schedule generation.
+// Shows: how many teams play at each "slot wait" interval (1 slot = 60 min,
+// 2 slots = 120 min, etc.) — JR's manual schedule target is 1-2 slots.
+// Also surfaces Phase 0 success/fallback per division.
+function renderRestGapStats(){
+  const panel=document.getElementById('rest-gap-panel');
+  if(!panel) return;
+  if(!sched1 || !Object.keys(sched1).length){ panel.innerHTML=''; return; }
+
+  // Build per-team play list and compute gaps in "slots waited"
+  const teamSlots={};
+  divs.forEach(d=>d.teams.forEach(t=>{teamSlots[t.id]={ts:[], divId:d.id, name:t.name, divName:d.name};}));
+  Object.keys(sched1).forEach(s=>{
+    const row=sched1[s]||{};
+    Object.values(row).forEach(g=>{
+      if(g && g.t1 && g.t2 && teamSlots[g.t1] && teamSlots[g.t2]){
+        teamSlots[g.t1].ts.push(s);
+        teamSlots[g.t2].ts.push(s);
+      }
+    });
+  });
+
+  const dist={}; // slotsWaited -> count of team-experiences
+  const teamGaps=[]; // [{name, divName, times, gaps, maxGap}]
+  const slotMByDiv={};
+  divs.forEach(d=>{slotMByDiv[d.id]=divSlotM(d);});
+  Object.keys(teamSlots).forEach(tid=>{
+    const obj=teamSlots[tid];
+    if(obj.ts.length<2) return;
+    obj.ts.sort((a,b)=>sH(a)-sH(b));
+    const dSlot=slotMByDiv[obj.divId]||slotM();
+    const gaps=[];
+    let mx=0;
+    for(let i=1;i<obj.ts.length;i++){
+      const gapMin=s2m(obj.ts[i])-s2m(obj.ts[i-1]);
+      const sw=Math.round((gapMin-dSlot)/dSlot);
+      gaps.push(sw);
+      dist[sw]=(dist[sw]||0)+1;
+      if(sw>mx) mx=sw;
+    }
+    teamGaps.push({tid, name:obj.name, divName:obj.divName, times:obj.ts.slice(), gaps, maxGap:mx});
+  });
+
+  const total=Object.values(dist).reduce((a,b)=>a+b,0);
+  if(total===0){ panel.innerHTML=''; return; }
+
+  // Distribution rows
+  const sortedKeys=Object.keys(dist).map(k=>+k).sort((a,b)=>a-b);
+  const colorFor=k=>{
+    if(k<=1) return 'var(--adrln-green-dk)';
+    if(k===2) return 'var(--amber)';
+    if(k===3) return '#D88A2E';
+    return 'var(--red)';
+  };
+  const labelFor=k=>{
+    // Use 50-min slot as a typical reference but actual minute conversion varies by division.
+    // The "slots waited" is the consistent metric across divisions.
+    const restLabel = k===0 ? 'back-to-back' : k===1 ? '~1 hour' : k===2 ? '~2 hours' : k===3 ? '~3 hours' : `~${k} hours`;
+    return `${k} slot${k!==1?'s':''} waited <span style="color:var(--dark-gray);font-weight:400">(${restLabel})</span>`;
+  };
+  let bars='';
+  const maxCount=Math.max(...Object.values(dist));
+  sortedKeys.forEach(k=>{
+    const ct=dist[k];
+    const pct=Math.round(ct/total*100);
+    const barW=Math.round(ct/maxCount*100);
+    const c=colorFor(k);
+    bars+=`<div style="display:flex;align-items:center;gap:10px;padding:4px 0;font-size:12px">
+      <div style="flex:0 0 180px;color:var(--navy);font-weight:600">${labelFor(k)}</div>
+      <div style="flex:1;background:var(--lt-gray);border-radius:4px;height:18px;overflow:hidden;position:relative">
+        <div style="background:${c};height:100%;width:${barW}%;border-radius:4px;transition:width 0.3s"></div>
+      </div>
+      <div style="flex:0 0 90px;text-align:right;color:var(--dark-gray)"><b style="color:${c}">${ct}</b> teams · ${pct}%</div>
+    </div>`;
+  });
+
+  // Phase 0 status
+  const stats=window._phase0Stats||{feasibleDivs:[], infeasibleDivs:[], perDivResults:[]};
+  const useInterleave = (function(){const cb=document.getElementById('use-pool-interleave'); return cb ? cb.checked : false;})();
+  let phase0Html='';
+  if(useInterleave){
+    if(stats.feasibleDivs.length===0 && stats.infeasibleDivs.length===0){
+      phase0Html=`<div style="font-size:11px;color:var(--dark-gray);margin-top:8px">Pool interleave was not used (legacy mode or no pools).</div>`;
+    } else {
+      phase0Html=`<div style="margin-top:10px;padding:8px 10px;background:var(--lt-adrln-green);border-radius:6px;font-size:11px;color:var(--navy)">
+        <b>Pool interleave</b> applied to <b>${stats.feasibleDivs.length}</b> division${stats.feasibleDivs.length!==1?'s':''}`;
+      if(stats.infeasibleDivs.length){
+        phase0Html+=`. Fell back to legacy scheduler for: <b>${stats.infeasibleDivs.map(d=>d.divName).join(', ')}</b> <span style="color:var(--dark-gray)">(field count too tight to guarantee 1-2 slot rest)</span>`;
+      } else {
+        phase0Html+='.';
+      }
+      phase0Html+=`</div>`;
+    }
+  } else {
+    phase0Html=`<div style="font-size:11px;color:var(--dark-gray);margin-top:8px">Rest-optimized scheduler is OFF — using legacy logic.</div>`;
+  }
+
+  // Per-division pool patterns
+  let perDivHtml='';
+  if(stats.perDivResults && stats.perDivResults.length){
+    perDivHtml=`<div style="margin-top:8px;font-size:11px;color:var(--navy)">
+      <div style="font-weight:600;margin-bottom:4px">Pool play windows</div>`;
+    stats.perDivResults.forEach(divr=>{
+      perDivHtml+=`<div style="margin-bottom:3px">
+        <span style="font-weight:600">${divr.divName}:</span> ${divr.pools.map(p=>{
+          const c = p.maxGap<=1 ? 'var(--adrln-green-dk)' : p.maxGap===2 ? 'var(--amber)' : 'var(--red)';
+          return `<span style="color:${c}">${p.label} ${p.slots.join('→')}</span>`;
+        }).join(' &nbsp;·&nbsp; ')}
+      </div>`;
+    });
+    perDivHtml+=`</div>`;
+  }
+
+  // Worst-case teams (>2 slot wait)
+  const worst=teamGaps.filter(t=>t.maxGap>2).sort((a,b)=>b.maxGap-a.maxGap).slice(0,8);
+  let worstHtml='';
+  if(worst.length){
+    worstHtml=`<div style="margin-top:10px;padding:8px 10px;background:var(--lt-amber);border-radius:6px;font-size:11px;color:var(--navy)">
+      <div style="font-weight:600;margin-bottom:4px">Teams with longest waits (top ${worst.length}):</div>`;
+    worst.forEach(t=>{
+      worstHtml+=`<div style="font-size:11px;color:var(--dark-text)">
+        <span style="font-weight:600">${t.name}</span> <span style="color:var(--dark-gray)">(${t.divName})</span> — plays ${t.times.join(', ')}, max wait <b style="color:var(--red)">${t.maxGap} slot${t.maxGap!==1?'s':''}</b>
+      </div>`;
+    });
+    worstHtml+=`</div>`;
+  }
+
+  // Headline number: % of team-gaps within target (1-2 slots)
+  const onTarget=(dist[1]||0)+(dist[2]||0);
+  const onTargetPct=Math.round(onTarget/total*100);
+  const headlineColor=onTargetPct>=90?'var(--adrln-green-dk)':onTargetPct>=75?'var(--amber)':'var(--red)';
+
+  panel.innerHTML=`<div class="util-panel" style="margin-bottom:12px">
+    <div class="util-hdr" onclick="toggleRestGap()" style="cursor:pointer">
+      <div>
+        <div class="util-hdr-title">Rest-gap distribution</div>
+        <div class="util-hdr-meta">${onTargetPct}% of team waits at 1-2 slots (60-120 min) — JR's manual target</div>
+      </div>
+      <span id="restgap-chev" style="font-size:11px;color:var(--dark-gray)">▼ expand</span>
+    </div>
+    <div class="util-body" id="restgap-body">
+      <div class="metrics" style="margin-bottom:10px">
+        <div class="met"><div class="met-v" style="color:${headlineColor}">${onTargetPct}%</div><div class="met-l">On target<br/>(1-2 slot wait)</div></div>
+        <div class="met"><div class="met-v">${total}</div><div class="met-l">Team-gaps<br/>analyzed</div></div>
+        <div class="met"><div class="met-v">${(dist[1]||0)}</div><div class="met-l">Tight rest<br/>(1 slot)</div></div>
+        <div class="met"><div class="met-v" style="color:var(--red)">${total-onTarget}</div><div class="met-l">Beyond<br/>target</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--dark-gray);margin-bottom:6px">
+        Each team plays ${gptVal()} games on Day 1 — that's ${gptVal()-1} rest gap${gptVal()-1!==1?'s':''} per team.
+        "1 slot waited" means a team's next game starts immediately after the minimum rest period.
+      </div>
+      ${bars}
+      ${phase0Html}
+      ${perDivHtml}
+      ${worstHtml}
+    </div>
+  </div>`;
+}
+function gptVal(){ return +document.getElementById('gpt').value || 3; }
+function toggleRestGap(){
+  const b=document.getElementById('restgap-body');
+  const c=document.getElementById('restgap-chev');
+  if(!b) return;
+  if(b.style.display==='none'){ b.style.display=''; c.textContent='▼ expand'; }
+  else { b.style.display='none'; c.textContent='▶ collapse'; }
+}
+
+
 // ============================================================
 function renderUtil(){
   const sh=+document.getElementById('dstart').value,eh=+document.getElementById('dend').value;
@@ -5616,7 +5999,7 @@ function dropGame(ev,toSlot,toFid,day){
   if(conf>0)showToast(`${conf} conflict(s) detected`,'warn');
   computePractice();
   renderGrid(day==='d1'?sched1:sched2,day==='d1'?'grid-d1':'grid-d2',day==='d1');
-  renderUtil();updateConflicts();
+  renderUtil();renderRestGapStats();updateConflicts();
 }
 
 // Team-level swap: drag a team name from one game and drop it on a team name in another game.
@@ -8635,7 +9018,7 @@ function applyWeatherDelay(){
   if(day===1){Object.assign(sched1,{});Object.assign(sched1,newSched);}
   else if(day===2){Object.assign(sched2,{});Object.assign(sched2,newSched);}
   
-  renderAll();renderUtil();updateConflicts();
+  renderAll();renderUtil();renderRestGapStats();updateConflicts();
   document.getElementById('wx-status').textContent=statusMsg;
   showToast(`Weather delay applied — Day ${day}`,`warn`);
 }
@@ -8644,7 +9027,7 @@ function clearWeatherDelay(){
   const day=parseInt(document.getElementById('wx-day').value);
   if(day===1&&wxBackup.d1){Object.assign(sched1,{});Object.assign(sched1,JSON.parse(JSON.stringify(wxBackup.d1)));wxBackup.d1=null;}
   else if(day===2&&wxBackup.d2){Object.assign(sched2,{});Object.assign(sched2,JSON.parse(JSON.stringify(wxBackup.d2)));wxBackup.d2=null;}
-  renderAll();renderUtil();updateConflicts();
+  renderAll();renderUtil();renderRestGapStats();updateConflicts();
   document.getElementById('wx-status').textContent='Schedule reset to original.';
   showToast('Weather delay cleared');
 }
